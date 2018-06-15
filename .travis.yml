@@ -6,7 +6,7 @@ rust:
 install:
   - rustup component add rustfmt-preview
 script:
-  - rustfmt --error-on-unformatted --write-mode diff src/lib.rs
+  - if [[ ${TRAVIS_RUST_VERSION} == "stable" ]]; then rustfmt --error-on-unformatted --write-mode diff src/lib.rs; fi
   - cargo test --verbose
 matrix:
   allow_failures:
