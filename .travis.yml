@@ -3,7 +3,10 @@ rust:
   - stable
   - beta
   - nightly
+install:
+  - rustup component add rustfmt-preview
 script:
+  - rustfmt --error-on-unformatted --write-mode diff src/lib.rs
   - cargo test --verbose
 matrix:
   allow_failures:
