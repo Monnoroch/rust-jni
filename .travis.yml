@@ -6,6 +6,7 @@ rust:
 install:
   - rustup component add rustfmt-preview
 script:
+  - echo $TRAVIS_RUST_VERSION
   - rustfmt --error-on-unformatted --write-mode diff src/lib.rs
   - cargo test --verbose
 matrix:
