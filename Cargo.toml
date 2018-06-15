@@ -6,3 +6,12 @@ authors = ["Monnoroch <monnoroch@gmail.com>"]
 [dependencies]
 cesu8 = "1.1.0"
 jni-sys = "0.3.0"
+
+[dev-dependencies]
+lazy_static = "1"
+
+[build-dependencies]
+walkdir = "2"
+
+[features]
+libjvm = []
