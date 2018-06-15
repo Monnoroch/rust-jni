@@ -5,3 +5,4 @@ authors = ["Monnoroch <monnoroch@gmail.com>"]
 
 [dependencies]
 cesu8 = "1.1.0"
+jni-sys = "0.3.0"
