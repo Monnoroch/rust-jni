@@ -9,7 +9,7 @@ use version::{self, JniVersion};
 
 /// Verbose options for starting a Java VM.
 ///
-/// [JNI documentation](https://docs.oracle.com/javase/9/docs/specs/jni/invocation.html#jni_createjavavm)
+/// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JvmVerboseOption {
     /// Verbose class option.
@@ -26,31 +26,29 @@ pub enum JvmVerboseOption {
     Jni,
 }
 
-impl JvmVerboseOption {
-    fn to_string(&self) -> &'static str {
-        match self {
-            JvmVerboseOption::Class => "class",
-            JvmVerboseOption::Gc => "gc",
-            JvmVerboseOption::Jni => "jni",
-        }
+fn verbose_option_to_string(option: &JvmVerboseOption) -> &'static str {
+    match option {
+        JvmVerboseOption::Class => "class",
+        JvmVerboseOption::Gc => "gc",
+        JvmVerboseOption::Jni => "jni",
     }
 }
 
 #[cfg(test)]
-mod jvm_verbose_option_test {
+mod verbose_option_to_string_tests {
     use super::*;
 
     #[test]
-    fn to_string() {
-        assert_eq!(JvmVerboseOption::Class.to_string(), "class");
-        assert_eq!(JvmVerboseOption::Gc.to_string(), "gc");
-        assert_eq!(JvmVerboseOption::Jni.to_string(), "jni");
+    fn test() {
+        assert_eq!(verbose_option_to_string(&JvmVerboseOption::Class), "class");
+        assert_eq!(verbose_option_to_string(&JvmVerboseOption::Gc), "gc");
+        assert_eq!(verbose_option_to_string(&JvmVerboseOption::Jni), "jni");
     }
 }
 
 /// Options for starting a Java VM.
 ///
-/// [JNI documentation](https://docs.oracle.com/javase/9/docs/specs/jni/invocation.html#jni_createjavavm)
+/// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
 // TODO(#13): support vfprintf, exit, abort options.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JvmOption {
@@ -96,19 +94,10 @@ impl JvmOption {
             option => JvmOption::Unknown(option.to_owned()),
         }
     }
-
-    fn to_string(&self) -> String {
-        match self {
-            JvmOption::CheckedJni => "-Xcheck:jni".to_owned(),
-            JvmOption::Verbose(option) => format!("-verbose:{}", option.to_string()),
-            JvmOption::SystemProperty(key, value) => format!("-D{}={}", key, value),
-            JvmOption::Unknown(value) => value.clone(),
-        }
-    }
 }
 
 #[cfg(test)]
-mod jvm_option_test {
+mod jvm_option_tests {
     use super::*;
 
     #[test]
@@ -195,30 +184,78 @@ mod jvm_option_test {
 
     #[test]
     fn to_string() {
-        assert_eq!(JvmOption::CheckedJni.to_string(), "-Xcheck:jni");
+        assert_eq!(option_to_string(&JvmOption::CheckedJni), "-Xcheck:jni");
         assert_eq!(
-            JvmOption::Verbose(JvmVerboseOption::Gc).to_string(),
+            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Gc)),
             "-verbose:gc"
         );
         assert_eq!(
-            JvmOption::Verbose(JvmVerboseOption::Jni).to_string(),
+            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Jni)),
             "-verbose:jni"
         );
         assert_eq!(
-            JvmOption::Verbose(JvmVerboseOption::Class).to_string(),
+            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Class)),
             "-verbose:class"
         );
         assert_eq!(
-            JvmOption::SystemProperty("key".to_owned(), "value".to_owned()).to_string(),
+            option_to_string(&JvmOption::SystemProperty(
+                "key".to_owned(),
+                "value".to_owned()
+            )),
             "-Dkey=value"
         );
-        assert_eq!(JvmOption::Unknown("qwer".to_owned()).to_string(), "qwer");
+        assert_eq!(
+            option_to_string(&JvmOption::Unknown("qwer".to_owned())),
+            "qwer"
+        );
+    }
+}
+
+fn option_to_string(option: &JvmOption) -> String {
+    match option {
+        JvmOption::CheckedJni => "-Xcheck:jni".to_owned(),
+        JvmOption::Verbose(option) => format!("-verbose:{}", verbose_option_to_string(option)),
+        JvmOption::SystemProperty(key, value) => format!("-D{}={}", key, value),
+        JvmOption::Unknown(value) => value.clone(),
+    }
+}
+
+#[cfg(test)]
+mod option_to_string_tests {
+    use super::*;
+
+    #[test]
+    fn test() {
+        assert_eq!(option_to_string(&JvmOption::CheckedJni), "-Xcheck:jni");
+        assert_eq!(
+            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Gc)),
+            "-verbose:gc"
+        );
+        assert_eq!(
+            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Jni)),
+            "-verbose:jni"
+        );
+        assert_eq!(
+            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Class)),
+            "-verbose:class"
+        );
+        assert_eq!(
+            option_to_string(&JvmOption::SystemProperty(
+                "key".to_owned(),
+                "value".to_owned()
+            )),
+            "-Dkey=value"
+        );
+        assert_eq!(
+            option_to_string(&JvmOption::Unknown("qwer".to_owned())),
+            "qwer"
+        );
     }
 }
 
 /// Arguments for creating a Java VM.
 ///
-/// [JNI documentation](https://docs.oracle.com/javase/9/docs/specs/jni/invocation.html#jni_createjavavm)
+/// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
 ///
 /// # Example
 /// ```
@@ -241,7 +278,7 @@ impl InitArguments {
     /// Get default Java VM init arguments for a JNI version.
     /// If the requested JNI version is not supported, returns None.
     ///
-    /// [JNI documentation](https://docs.oracle.com/javase/9/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
     pub fn get_default(version: JniVersion) -> Option<Self> {
         let arguments = Self::get_default_or_closest_supported(version);
         if arguments.version == version {
@@ -255,7 +292,7 @@ impl InitArguments {
     /// If the requested JNI version is not supported, returns default arguments for the closest supported JNI version.
     /// The new version can be obtained with the `InitArguments::version()` method.
     ///
-    /// [JNI documentation](https://docs.oracle.com/javase/9/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
     pub fn get_default_or_closest_supported(version: JniVersion) -> Self {
         let mut raw_arguments = jni_sys::JavaVMInitArgs {
             version: version::to_raw(version),
@@ -289,7 +326,7 @@ impl InitArguments {
 
     /// Get default init arguments for the latest supported JNI version.
     ///
-    /// [JNI documentation](https://docs.oracle.com/javase/9/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
     pub fn get_latest_default() -> Self {
         Self::get_default_or_closest_supported(JniVersion::V8)
     }
@@ -303,6 +340,8 @@ impl InitArguments {
     }
 
     /// Add an init option to the Java VM init arguments.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
     pub fn with_option(self, option: JvmOption) -> Self {
         self.with_options(&[option])
     }
@@ -328,12 +367,16 @@ impl InitArguments {
     }
 
     /// Request for JVM to ignore unrecognized options on startup.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
     pub fn ignoring_unrecognized_options(mut self) -> Self {
         self.ignore_unrecognized = true;
         self
     }
 
     /// Request for JVM to fail in presence of unrecognized options on startup.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
     pub fn failing_on_unrecognized_options(mut self) -> Self {
         self.ignore_unrecognized = false;
         self
@@ -371,7 +414,7 @@ pub fn to_raw<'a, 'b, 'c: 'a + 'b>(
         .map(|(option, ref mut buffer)| {
             // TODO(#14): support platform encodings other than UTF-8.
             let buffer: &mut CString = buffer;
-            *buffer = CString::new(option.to_string()).unwrap();
+            *buffer = CString::new(option_to_string(option)).unwrap();
             jni_sys::JavaVMOption {
                 optionString: buffer.as_ptr() as *mut i8,
                 extraInfo: ptr::null_mut(),
@@ -395,7 +438,7 @@ pub unsafe fn from_raw(raw_arguments: &jni_sys::JavaVMInitArgs) -> InitArguments
 }
 
 #[cfg(test)]
-pub mod init_arguments_tests {
+pub mod tests {
     use super::*;
 
     fn default_options() -> Vec<JvmOption> {
@@ -666,6 +709,7 @@ fn to_bool(value: jni_sys::jboolean) -> bool {
     }
 }
 
+// TODO: move to a separate library.
 fn from_bool(value: bool) -> jni_sys::jboolean {
     match value {
         true => jni_sys::JNI_TRUE,
