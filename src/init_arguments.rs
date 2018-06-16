@@ -438,6 +438,15 @@ pub unsafe fn from_raw(raw_arguments: &jni_sys::JavaVMInitArgs) -> InitArguments
 }
 
 #[cfg(test)]
+pub fn new(version: JniVersion) -> InitArguments {
+    InitArguments {
+        version: version,
+        options: vec![],
+        ignore_unrecognized: true,
+    }
+}
+
+#[cfg(test)]
 pub mod tests {
     use super::*;
 
@@ -701,7 +710,7 @@ pub mod tests {
 }
 
 // TODO: move to a separate library.
-fn to_bool(value: jni_sys::jboolean) -> bool {
+pub fn to_bool(value: jni_sys::jboolean) -> bool {
     match value {
         jni_sys::JNI_TRUE => true,
         jni_sys::JNI_FALSE => false,
