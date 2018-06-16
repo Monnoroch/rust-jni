@@ -348,7 +348,7 @@ impl InitArguments {
 /// A wrapper around `jni_sys::JavaVMInitArgs` with a lifetime to ensure
 /// there's no access to freed memory.
 pub struct RawInitArguments<'a> {
-    raw_arguments: jni_sys::JavaVMInitArgs,
+    pub raw_arguments: jni_sys::JavaVMInitArgs,
     _buffer: PhantomData<&'a Vec<CString>>,
 }
 
@@ -387,6 +387,11 @@ pub fn to_raw<'a, 'b, 'c: 'a + 'b>(
         },
         _buffer: PhantomData::<&'c Vec<CString>>,
     }
+}
+
+#[cfg(test)]
+pub unsafe fn from_raw(raw_arguments: &jni_sys::JavaVMInitArgs) -> InitArguments {
+    InitArguments::from_raw(raw_arguments)
 }
 
 #[cfg(test)]
