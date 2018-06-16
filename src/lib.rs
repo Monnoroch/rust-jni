@@ -14,5 +14,5 @@ mod version;
 
 pub use attach_arguments::AttachArguments;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
-pub use jni::{JavaVM, JniError};
+pub use jni::{Exception, JavaVM, JniEnv, JniError, JniResult, NoException};
 pub use version::JniVersion;
