@@ -1,17 +1,29 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
+#[cfg(test)]
+use init_arguments;
+use jni_sys;
+use std::os::raw::c_void;
+
 /// This is a module that wraps `jni_sys` in a way that allows mocking it's functions
 /// for unit testing. It defines two versions of each function: a prod one that is just
 /// a shallow proxy and a test one, that comes with global variables for
 /// mocking the result and the arguments. Tests should populate these variables and then
 /// execute the code that depends of these functions.
-use jni_sys;
-use std::os::raw::c_void;
 
 #[cfg(not(test))]
 pub unsafe fn JNI_GetDefaultJavaVMInitArgs(arguments: *mut c_void) -> jni_sys::jint {
     jni_sys::JNI_GetDefaultJavaVMInitArgs(arguments)
+}
+
+#[cfg(not(test))]
+pub unsafe fn JNI_CreateJavaVM(
+    java_vm: *mut *mut jni_sys::JavaVM,
+    jni_env: *mut *mut c_void,
+    arguments: *mut c_void,
+) -> jni_sys::jint {
+    jni_sys::JNI_CreateJavaVM(java_vm, jni_env, arguments)
 }
 
 #[cfg(test)]
@@ -70,7 +82,7 @@ lazy_static! {
 pub fn setup_get_default_java_vm_init_args_call(
     call: GetDefaultJavaVMInitArgsCall,
 ) -> MutexGuard<'static, bool> {
-    // Tests for code that calls JNI_GetDefaultJavaVMInitArgs  must be single-threaded
+    // Tests for code that calls `JNI_GetDefaultJavaVMInitArgs`  must be single-threaded
     // because global mock variables are not thread-safe.
     let lock = TEST_JNI_GetDefaultJavaVMInitArgs_Lock.lock().unwrap();
     *TEST_JNI_GetDefaultJavaVMInitArgs.lock().unwrap() = call;
@@ -104,4 +116,86 @@ pub unsafe fn JNI_GetDefaultJavaVMInitArgs(arguments: *mut c_void) -> jni_sys::j
         *arguments = *test_value;
     }
     TEST_JNI_GetDefaultJavaVMInitArgs.lock().unwrap().result
+}
+
+#[cfg(test)]
+pub struct CreateJavaVMCall {
+    input: Option<init_arguments::InitArguments>,
+    result: jni_sys::jint,
+    set_input: SendPtr<jni_sys::JavaVM>,
+}
+
+// Safe for single-threaded tests.
+#[cfg(test)]
+unsafe impl Send for CreateJavaVMCall {}
+
+#[cfg(test)]
+impl CreateJavaVMCall {
+    fn empty() -> Self {
+        CreateJavaVMCall {
+            input: None,
+            result: 17,
+            set_input: SendPtr(ptr::null_mut()),
+        }
+    }
+
+    pub fn new(result: jni_sys::jint, set_input: *mut jni_sys::JavaVM) -> Self {
+        CreateJavaVMCall {
+            input: None,
+            result,
+            set_input: SendPtr(set_input),
+        }
+    }
+}
+
+#[cfg(test)]
+lazy_static! {
+    static ref TEST_JNI_CreateJavaVM_Value: Mutex<CreateJavaVMCall> =
+        Mutex::new(CreateJavaVMCall::empty());
+    static ref TEST_JNI_CreateJavaVM_Lock: Mutex<bool> = Mutex::new(false);
+}
+
+#[cfg(test)]
+fn create_java_vm_lock() -> MutexGuard<'static, bool> {
+    match TEST_JNI_CreateJavaVM_Lock.lock() {
+        Ok(lock) => lock,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
+
+#[cfg(test)]
+/// Mock a call to the `JNI_CreateJavaVM` JNI function.
+/// Returns a `MutexGuard` which is used to make tests using this function sequential,
+/// which is required because of the use of global mutable variables.
+pub fn setup_create_java_vm_call(call: CreateJavaVMCall) -> MutexGuard<'static, bool> {
+    // Tests for code that calls `JNI_CreateJavaVM`  must be single-threaded
+    // because global mock variables are not thread-safe.
+    let lock = create_java_vm_lock();
+    *TEST_JNI_CreateJavaVM_Value.lock().unwrap() = call;
+    lock
+}
+
+#[cfg(test)]
+pub fn get_create_java_vm_call_input() -> init_arguments::InitArguments {
+    TEST_JNI_CreateJavaVM_Value
+        .lock()
+        .unwrap()
+        .input
+        .clone()
+        .unwrap()
+}
+
+#[cfg(test)]
+pub unsafe fn JNI_CreateJavaVM(
+    java_vm: *mut *mut jni_sys::JavaVM,
+    _jni_env: *mut *mut c_void,
+    arguments: *mut c_void,
+) -> jni_sys::jint {
+    let arguments = arguments as *mut jni_sys::JavaVMInitArgs;
+    TEST_JNI_CreateJavaVM_Value.lock().unwrap().input = Some(init_arguments::from_raw(&*arguments));
+    if TEST_JNI_CreateJavaVM_Value.lock().unwrap().set_input.0 != ptr::null_mut() {
+        let test_value = TEST_JNI_CreateJavaVM_Value.lock().unwrap().set_input.0;
+        *java_vm = test_value;
+    }
+    TEST_JNI_CreateJavaVM_Value.lock().unwrap().result
 }
