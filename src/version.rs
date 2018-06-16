@@ -4,7 +4,7 @@ use jni_sys;
 ///
 /// Maps to the `jni_sys::JNI_VERSION_1_*` constants.
 ///
-/// [JNI documentation](https://docs.oracle.com/javase/9/docs/specs/jni/functions.html#version-constants)
+/// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#version-constants)
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum JniVersion {
     /// JNI 1.1.

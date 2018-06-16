@@ -163,7 +163,7 @@ mod java_vm_tests {
     use testing::*;
 
     fn default_args() -> InitArguments {
-        init_arguments::init_arguments_tests::default_args()
+        init_arguments::tests::default_args()
     }
 
     #[test]
