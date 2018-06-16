@@ -3,7 +3,6 @@ use jni_sys;
 use raw::*;
 use std::os::raw::c_void;
 use std::ptr;
-use version::JniVersion;
 
 /// Errors returned by JNI_CreateJavaVM and JNI_GetCreatedJavaVMs.
 ///
@@ -33,6 +32,11 @@ pub enum JniError {
 /// unsafe {
 ///     assert_ne!(vm.raw_jvm(), ptr::null_mut());
 /// }
+///
+/// let vms = JavaVM::list().unwrap();
+/// unsafe {
+///     assert_eq!(vms[0].raw_jvm(), vm.raw_jvm());
+/// }
 /// ```
 /// `JavaVM` is `Send + Sync`. It means it can be shared between threads.
 /// ```
@@ -58,8 +62,8 @@ pub enum JniError {
 /// The main purpose of `JavaVM` is to attach threads by provisioning `JniEnv`-s.
 #[derive(Debug)]
 pub struct JavaVM {
-    version: JniVersion,
     java_vm: *mut jni_sys::JavaVM,
+    owned: bool,
 }
 
 impl JavaVM {
@@ -96,8 +100,8 @@ impl JavaVM {
                 unsafe { Self::detach(java_vm) };
 
                 Ok(Self {
-                    version: arguments.version(),
                     java_vm,
+                    owned: true,
                 })
             }
             jni_sys::JNI_EVERSION => panic!(
@@ -107,6 +111,51 @@ impl JavaVM {
             ),
             jni_sys::JNI_EDETACHED => {
                 panic!("Unexpected `EDETACHED` error when creating a Java VM.")
+            }
+            status => Err(JniError::Unknown(status)),
+        }
+    }
+
+    /// Get a list of created Java VMs.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/9/docs/specs/jni/invocation.html#jni_getcreatedjavavms)
+    pub fn list() -> Result<Vec<Self>, JniError> {
+        let mut vms_created: jni_sys::jsize = 0;
+        // Safe because arguments are correct.
+        let status = unsafe {
+            JNI_GetCreatedJavaVMs(
+                ::std::ptr::null_mut(),
+                0,
+                (&mut vms_created) as *mut jni_sys::jsize,
+            )
+        };
+        match status {
+            jni_sys::JNI_OK => {
+                let mut java_vms: Vec<*mut jni_sys::JavaVM> = vec![];
+                java_vms.resize(vms_created as usize, ::std::ptr::null_mut());
+                let mut tmp: jni_sys::jsize = 0;
+                // Safe because arguments are ensured to be correct.
+                let status = unsafe {
+                    JNI_GetCreatedJavaVMs(
+                        (java_vms.as_mut_ptr()) as *mut *mut jni_sys::JavaVM,
+                        vms_created,
+                        // Technically, a new VM could have been created since the previous call to
+                        // `JNI_GetCreatedJavaVMs`. But then we also technically should not return
+                        // any new ones, because they weren't there wneh this function was called.
+                        (&mut tmp) as *mut jni_sys::jsize,
+                    )
+                };
+                match status {
+                    jni_sys::JNI_OK => Ok(java_vms
+                        .iter()
+                        .cloned()
+                        .map(|java_vm| JavaVM {
+                            java_vm,
+                            owned: false,
+                        })
+                        .collect()),
+                    status => Err(JniError::Unknown(status)),
+                }
             }
             status => Err(JniError::Unknown(status)),
         }
@@ -137,6 +186,10 @@ impl JavaVM {
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#destroyjavavm)
 impl Drop for JavaVM {
     fn drop(&mut self) {
+        if !self.owned {
+            return;
+        }
+
         // Safe because the argument is ensured to be the correct by construction.
         let status = unsafe {
             let destroy_fn = (**self.java_vm).DestroyJavaVM.unwrap();
@@ -259,14 +312,40 @@ mod java_vm_tests {
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         {
             let _vm = JavaVM {
-                version: JniVersion::V8,
                 java_vm: raw_java_vm_ptr,
+                owned: true,
             };
             unsafe { assert_eq!(DESTROY_CALLS, 0) };
         }
         unsafe {
             assert_eq!(DESTROY_CALLS, 1);
             assert_eq!(DESTROY_ARGUMENT, raw_java_vm_ptr);
+        };
+    }
+
+    #[test]
+    fn drop_not_owned() {
+        static mut DESTROY_CALLS: i32 = 0;
+        static mut DESTROY_ARGUMENT: *mut jni_sys::JavaVM = ptr::null_mut();
+        unsafe extern "system" fn destroy_vm(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint {
+            DESTROY_CALLS += 1;
+            DESTROY_ARGUMENT = java_vm;
+            jni_sys::JNI_OK
+        }
+
+        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
+            DestroyJavaVM: Some(destroy_vm),
+            ..empty_raw_java_vm()
+        };
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        {
+            let _vm = JavaVM {
+                java_vm: raw_java_vm_ptr,
+                owned: false,
+            };
+        }
+        unsafe {
+            assert_eq!(DESTROY_CALLS, 0);
         };
     }
 
@@ -282,17 +361,62 @@ mod java_vm_tests {
         };
         let raw_java_vm = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         JavaVM {
-            version: JniVersion::V8,
             java_vm: raw_java_vm,
+            owned: true,
         };
+    }
+
+    #[test]
+    fn list() {
+        let raw_java_vm_ptr0 = 0x1234 as *mut jni_sys::JavaVM;
+        let raw_java_vm_ptr1 = 0x5678 as *mut jni_sys::JavaVM;
+        let mut java_vm_ptrs: [*mut jni_sys::JavaVM; 2] = [raw_java_vm_ptr0, raw_java_vm_ptr1];
+        let _locked = setup_get_created_java_vms_call(GetCreatedJavaVMsCall::new(
+            jni_sys::JNI_OK,
+            2,
+            java_vm_ptrs.as_mut_ptr(),
+        ));
+        let vms = JavaVM::list().unwrap();
+        assert_eq!(vms[0].java_vm, raw_java_vm_ptr0);
+        assert_eq!(vms[1].java_vm, raw_java_vm_ptr1);
+    }
+
+    #[test]
+    fn list_error_count() {
+        let _locked = setup_get_created_java_vms_call(GetCreatedJavaVMsCall::new(
+            jni_sys::JNI_ERR,
+            0,
+            ptr::null_mut(),
+        ));
+        assert_eq!(
+            JavaVM::list().unwrap_err(),
+            JniError::Unknown(jni_sys::JNI_ERR as i32)
+        );
+    }
+
+    #[test]
+    fn list_error_list() {
+        let raw_java_vm_ptr0 = 0x1234 as *mut jni_sys::JavaVM;
+        let raw_java_vm_ptr1 = 0x5678 as *mut jni_sys::JavaVM;
+        let mut java_vm_ptrs: [*mut jni_sys::JavaVM; 2] = [raw_java_vm_ptr0, raw_java_vm_ptr1];
+        let _locked = setup_get_created_java_vms_call(GetCreatedJavaVMsCall::new_twice(
+            jni_sys::JNI_OK,
+            jni_sys::JNI_ERR,
+            2,
+            java_vm_ptrs.as_mut_ptr(),
+        ));
+        assert_eq!(
+            JavaVM::list().unwrap_err(),
+            JniError::Unknown(jni_sys::JNI_ERR as i32)
+        );
     }
 
     #[test]
     fn raw_vm() {
         let raw_java_vm = 0x1234 as *mut jni_sys::JavaVM;
         let vm = JavaVM {
-            version: JniVersion::V8,
             java_vm: raw_java_vm,
+            owned: false,
         };
         unsafe {
             assert_eq!(vm.raw_jvm(), raw_java_vm);
