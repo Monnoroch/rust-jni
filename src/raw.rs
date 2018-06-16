@@ -5,6 +5,8 @@
 use init_arguments;
 use jni_sys;
 use std::os::raw::c_void;
+#[cfg(test)]
+use std::slice;
 
 /// This is a module that wraps `jni_sys` in a way that allows mocking it's functions
 /// for unit testing. It defines two versions of each function: a prod one that is just
@@ -24,6 +26,15 @@ pub unsafe fn JNI_CreateJavaVM(
     arguments: *mut c_void,
 ) -> jni_sys::jint {
     jni_sys::JNI_CreateJavaVM(java_vm, jni_env, arguments)
+}
+
+#[cfg(not(test))]
+pub unsafe fn JNI_GetCreatedJavaVMs(
+    java_vms: *mut *mut jni_sys::JavaVM,
+    buffer_size: jni_sys::jsize,
+    vms_count: *mut jni_sys::jsize,
+) -> jni_sys::jint {
+    jni_sys::JNI_GetCreatedJavaVMs(java_vms, buffer_size, vms_count)
 }
 
 #[cfg(test)]
@@ -198,4 +209,102 @@ pub unsafe fn JNI_CreateJavaVM(
         *java_vm = test_value;
     }
     TEST_JNI_CreateJavaVM_Value.lock().unwrap().result
+}
+
+#[cfg(test)]
+pub struct GetCreatedJavaVMsCall {
+    result_count: jni_sys::jint,
+    result_list: jni_sys::jint,
+    set_input_count: jni_sys::jsize,
+    set_input: SendPtr<*mut jni_sys::JavaVM>,
+}
+
+// Safe for single-threaded tests.
+#[cfg(test)]
+unsafe impl Send for GetCreatedJavaVMsCall {}
+
+#[cfg(test)]
+impl GetCreatedJavaVMsCall {
+    fn empty() -> Self {
+        GetCreatedJavaVMsCall {
+            result_count: 17,
+            result_list: 17,
+            set_input_count: 0,
+            set_input: SendPtr(ptr::null_mut()),
+        }
+    }
+
+    pub fn new(
+        result: jni_sys::jint,
+        set_input_count: jni_sys::jsize,
+        set_input: *mut *mut jni_sys::JavaVM,
+    ) -> Self {
+        GetCreatedJavaVMsCall {
+            result_count: result,
+            result_list: result,
+            set_input_count,
+            set_input: SendPtr(set_input),
+        }
+    }
+
+    pub fn new_twice(
+        result_count: jni_sys::jint,
+        result_list: jni_sys::jint,
+        set_input_count: jni_sys::jsize,
+        set_input: *mut *mut jni_sys::JavaVM,
+    ) -> Self {
+        GetCreatedJavaVMsCall {
+            result_count,
+            result_list,
+            set_input_count,
+            set_input: SendPtr(set_input),
+        }
+    }
+}
+
+#[cfg(test)]
+lazy_static! {
+    static ref TEST_JNI_GetCreatedJavaVMs: Mutex<GetCreatedJavaVMsCall> =
+        Mutex::new(GetCreatedJavaVMsCall::empty());
+    static ref TEST_JNI_GetCreatedJavaVMs_Lock: Mutex<bool> = Mutex::new(false);
+}
+
+#[cfg(test)]
+/// Mock a call to the `JNI_GetCreatedJavaVMs` JNI function.
+/// Returns a `MutexGuard` which is used to make tests using this function sequential,
+/// which is required because of the use of global mutable variables.
+pub fn setup_get_created_java_vms_call(call: GetCreatedJavaVMsCall) -> MutexGuard<'static, bool> {
+    // Tests for code that calls `JNI_GetCreatedJavaVMs`  must be single-threaded
+    // because global mock variables are not thread-safe.
+    let lock = TEST_JNI_GetCreatedJavaVMs_Lock.lock().unwrap();
+    *TEST_JNI_GetCreatedJavaVMs.lock().unwrap() = call;
+    lock
+}
+
+#[cfg(test)]
+fn copy_slice<T: Copy>(dst: &mut [T], src: &[T]) {
+    for (d, s) in dst.iter_mut().zip(src.iter()) {
+        *d = *s;
+    }
+}
+
+#[cfg(test)]
+pub unsafe fn JNI_GetCreatedJavaVMs(
+    java_vms: *mut *mut jni_sys::JavaVM,
+    buffer_size: jni_sys::jsize,
+    vms_count: *mut jni_sys::jsize,
+) -> jni_sys::jint {
+    if java_vms == ptr::null_mut() {
+        let lock = TEST_JNI_GetCreatedJavaVMs.lock().unwrap();
+        *vms_count = lock.set_input_count;
+        lock.result_count
+    } else {
+        let lock = TEST_JNI_GetCreatedJavaVMs.lock().unwrap();
+        let set_inputs: &mut [*mut jni_sys::JavaVM] =
+            slice::from_raw_parts_mut(lock.set_input.0, buffer_size as usize);
+        let inputs: &mut [*mut jni_sys::JavaVM] =
+            slice::from_raw_parts_mut(java_vms, buffer_size as usize);
+        copy_slice(inputs, set_inputs);
+        lock.result_list
+    }
 }
