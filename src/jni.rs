@@ -6,7 +6,6 @@ use jni_sys;
 use raw::*;
 use std::cell::RefCell;
 use std::marker::PhantomData;
-use std::mem;
 use std::os::raw::c_void;
 use std::ptr;
 use version::{self, JniVersion};
@@ -301,15 +300,21 @@ impl JavaVM {
                     jni_sys::JNI_OK => Ok(java_vms
                         .iter()
                         .cloned()
-                        .map(|java_vm| JavaVM {
-                            java_vm,
-                            owned: false,
-                        })
+                        // Safe because a correct pointer is passed.
+                        .map(|java_vm| unsafe { Self::from_ptr(java_vm) })
                         .collect()),
                     status => Err(JniError::Unknown(status)),
                 }
             }
             status => Err(JniError::Unknown(status)),
+        }
+    }
+
+    /// Unsafe because one can pass an invalid `java_vm` pointer.
+    unsafe fn from_ptr(java_vm: *mut jni_sys::JavaVM) -> JavaVM {
+        JavaVM {
+            java_vm,
+            owned: false,
         }
     }
 
@@ -379,17 +384,18 @@ impl JavaVM {
                 );
                 match status {
                     jni_sys::JNI_OK => {
-                        let env = JniEnv {
+                        let mut env = JniEnv {
                             version: arguments.version(),
                             vm: self,
                             jni_env,
                             has_token: RefCell::new(true),
+                            // We don't want to drop `JniEnv` with a pending exception.
+                            native_method_call: true,
                         };
                         if env.has_exception() {
-                            // We don't want to drop `JniEnv` with a pending exception.
-                            mem::forget(env);
                             panic!("Newly attached thread has a pending exception.");
                         }
+                        env.native_method_call = false;
                         Ok(env)
                     }
                     jni_sys::JNI_EVERSION => panic!(
@@ -429,6 +435,26 @@ impl JavaVM {
         // There is no way to recover from detach failure, except leak or fail.
         if status != jni_sys::JNI_OK {
             panic!("Could not detach the current thread. Status: {}", status)
+        }
+    }
+
+    /// Create a new `JavaVM` for a native method.
+    ///
+    /// SHOULD NOT BE CALLED MANUALLY.
+    ///
+    /// This method should only be used by generated code for native methods and is unsafe
+    /// because an incorrect pointer can be passed to it.
+    pub unsafe fn __for_native_method<'a>(
+        raw_env: *mut jni_sys::JNIEnv,
+    ) -> Result<JavaVM, JniError> {
+        let mut java_vm: *mut jni_sys::JavaVM = ptr::null_mut();
+        let get_java_vm_fn = ((**raw_env).GetJavaVM).unwrap();
+        let status = get_java_vm_fn(raw_env, (&mut java_vm) as *mut *mut jni_sys::JavaVM);
+        if status == jni_sys::JNI_OK {
+            // Safe because we pass a correct `java_vm` pointer.
+            Ok(JavaVM::from_ptr(java_vm))
+        } else {
+            Err(JniError::Unknown(status))
         }
     }
 }
@@ -492,6 +518,7 @@ mod java_vm_tests {
         let arguments = default_args();
         let vm = JavaVM::create(&arguments).unwrap();
         assert_eq!(vm.java_vm, raw_java_vm_ptr);
+        assert_eq!(vm.owned, true);
         assert_eq!(arguments, get_create_java_vm_call_input());
         unsafe {
             assert_eq!(DETACH_CALLS, 1);
@@ -759,6 +786,7 @@ mod java_vm_tests {
             assert_eq!(env.raw_env(), raw_jni_env);
         }
         assert_eq!(env.has_token, RefCell::new(true));
+        assert_eq!(env.native_method_call, false);
         // Don't want to drop a manually created `JniEnv`.
         mem::forget(env);
     }
@@ -1049,8 +1077,61 @@ mod java_vm_tests {
             assert_eq!(env.raw_env(), raw_jni_env);
         }
         assert_eq!(env.has_token, RefCell::new(true));
+        assert_eq!(env.native_method_call, false);
         // Don't want to drop a manually created `JniEnv`.
         mem::forget(env);
+    }
+
+    #[test]
+    fn for_native_method() {
+        static mut GET_JAVA_VM_CALLS: i32 = 0;
+        static mut GET_JAVA_VM_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut GET_JAVA_VM_VM_ARGUMENT: *mut jni_sys::JavaVM = ptr::null_mut();
+        unsafe extern "system" fn get_java_vm(
+            jni_env: *mut jni_sys::JNIEnv,
+            java_vm: *mut *mut jni_sys::JavaVM,
+        ) -> jni_sys::jint {
+            GET_JAVA_VM_CALLS += 1;
+            GET_JAVA_VM_ARGUMENT = jni_env;
+            *java_vm = GET_JAVA_VM_VM_ARGUMENT;
+            jni_sys::JNI_OK
+        }
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            GetJavaVM: Some(get_java_vm),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let raw_java_vm_ptr = 0x1234 as *mut jni_sys::JavaVM;
+        unsafe {
+            GET_JAVA_VM_VM_ARGUMENT = raw_java_vm_ptr;
+            let vm = JavaVM::__for_native_method(raw_jni_env).unwrap();
+            assert_eq!(vm.java_vm, raw_java_vm_ptr);
+            assert_eq!(vm.owned, false);
+            assert_eq!(GET_JAVA_VM_CALLS, 1);
+            assert_eq!(GET_JAVA_VM_ARGUMENT, raw_jni_env);
+        }
+    }
+
+    #[test]
+    fn for_native_method_error() {
+        static mut GET_JAVA_VM_CALLS: i32 = 0;
+        unsafe extern "system" fn get_java_vm(
+            _: *mut jni_sys::JNIEnv,
+            _: *mut *mut jni_sys::JavaVM,
+        ) -> jni_sys::jint {
+            GET_JAVA_VM_CALLS += 1;
+            jni_sys::JNI_ERR
+        }
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            GetJavaVM: Some(get_java_vm),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        unsafe {
+            let error = JavaVM::__for_native_method(raw_jni_env).unwrap_err();
+            assert_eq!(error, JniError::Unknown(jni_sys::JNI_ERR));
+            assert_eq!(GET_JAVA_VM_CALLS, 1);
+        }
     }
 }
 
@@ -1137,6 +1218,7 @@ pub struct JniEnv<'vm> {
     vm: &'vm JavaVM,
     jni_env: *mut jni_sys::JNIEnv,
     has_token: RefCell<bool>,
+    native_method_call: bool,
 }
 
 // JniEnv can't be passed between threads.
@@ -1194,6 +1276,37 @@ impl<'vm> JniEnv<'vm> {
         }
     }
 
+    /// Get JNI version.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getversion)
+    pub fn version(&self) -> JniVersion {
+        self.version
+    }
+
+    /// Create a new `JniEnv` for a native method.
+    ///
+    /// SHOULD NOT BE CALLED MANUALLY.
+    ///
+    /// This method should only be used by generated code for native methods and is unsafe
+    /// because an incorrect pointer can be passed to it.
+    pub unsafe fn __for_native_method<'a>(
+        vm: &'a JavaVM,
+        raw_env: *mut jni_sys::JNIEnv,
+    ) -> JniEnv<'a> {
+        let get_version_fn = ((**raw_env).GetVersion).unwrap();
+        let env = JniEnv {
+            version: version::from_raw(get_version_fn(raw_env)), // TODO
+            vm,
+            jni_env: raw_env,
+            has_token: RefCell::new(true),
+            native_method_call: true,
+        };
+        if env.has_exception() {
+            panic!("Native method called from a thread with a pending exception.");
+        }
+        env
+    }
+
     fn has_exception(&self) -> bool {
         // Safe because the argument is ensured to be the correct by construction.
         let value = unsafe { call_jni_method!(self, ExceptionCheck) };
@@ -1208,6 +1321,14 @@ impl<'vm> JniEnv<'vm> {
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#detachcurrentthread)
 impl<'vm> Drop for JniEnv<'vm> {
     fn drop(&mut self) {
+        // In native calls `JniEnv` is build from a raw pointer, without attaching the current
+        // thread, and thus the thread doesn't need to be detached. A native method can return
+        // with a pending exception to propagate it to Java code, so no need to panic on pending
+        // exceptions either.
+        if self.native_method_call {
+            return;
+        }
+
         if self.has_exception() {
             // Safe because the argument is ensured to be the correct by construction.
             unsafe { call_jni_method!(self, ExceptionDescribe) };
@@ -1224,7 +1345,6 @@ impl<'vm> Drop for JniEnv<'vm> {
 #[cfg(test)]
 mod jni_env_tests {
     use super::*;
-    use std::mem;
     use testing::*;
 
     fn empty_vm() -> JavaVM {
@@ -1242,12 +1362,11 @@ mod jni_env_tests {
             vm: &vm,
             jni_env: ptr::null_mut(),
             has_token: RefCell::new(true),
+            native_method_call: true,
         };
         unsafe {
             assert_eq!(env.raw_jvm(), vm.raw_jvm());
         }
-        // Don't want to drop a manually created `JniEnv`.
-        mem::forget(env);
     }
 
     #[test]
@@ -1259,12 +1378,25 @@ mod jni_env_tests {
             vm: &vm,
             jni_env,
             has_token: RefCell::new(true),
+            native_method_call: true,
         };
         unsafe {
             assert_eq!(env.raw_env(), jni_env);
         }
-        // Don't want to drop a manually created `JniEnv`.
-        mem::forget(env);
+    }
+
+    #[test]
+    fn version() {
+        let vm = empty_vm();
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = JniEnv {
+            version: JniVersion::V8,
+            vm: &vm,
+            jni_env,
+            has_token: RefCell::new(true),
+            native_method_call: true,
+        };
+        assert_eq!(env.version(), JniVersion::V8);
     }
 
     #[test]
@@ -1305,6 +1437,7 @@ mod jni_env_tests {
                 vm: &vm,
                 jni_env: raw_jni_env,
                 has_token: RefCell::new(true),
+                native_method_call: false,
             };
             unsafe {
                 assert_eq!(DETACH_CALLS, 0);
@@ -1316,6 +1449,22 @@ mod jni_env_tests {
             assert_eq!(EXCEPTION_CHECK_CALLS, 1);
             assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
         }
+    }
+
+    #[test]
+    fn drop_native_method() {
+        let vm = JavaVM {
+            java_vm: ptr::null_mut(),
+            owned: false,
+        };
+        JniEnv {
+            version: JniVersion::V8,
+            vm: &vm,
+            jni_env: ptr::null_mut(),
+            has_token: RefCell::new(true),
+            native_method_call: true,
+        };
+        // This test would fail if any JNI methods were called by the `JniEnv::drop` method.
     }
 
     #[test]
@@ -1372,6 +1521,7 @@ mod jni_env_tests {
             vm: &vm,
             jni_env: raw_jni_env,
             has_token: RefCell::new(true),
+            native_method_call: false,
         };
     }
 
@@ -1402,6 +1552,7 @@ mod jni_env_tests {
             vm: &vm,
             jni_env: &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv,
             has_token: RefCell::new(true),
+            native_method_call: false,
         };
     }
 
@@ -1432,6 +1583,7 @@ mod jni_env_tests {
             vm: &vm,
             jni_env: raw_jni_env,
             has_token: RefCell::new(true),
+            native_method_call: true,
         };
         env.token();
         unsafe {
@@ -1439,8 +1591,6 @@ mod jni_env_tests {
             assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
         }
         assert_eq!(env.has_token, RefCell::new(false));
-        // Don't want to drop a manually created `JniEnv`.
-        mem::forget(env);
     }
 
     #[test]
@@ -1471,6 +1621,7 @@ mod jni_env_tests {
             vm: &vm,
             jni_env: raw_jni_env,
             has_token: RefCell::new(false),
+            native_method_call: true,
         };
         env.token();
     }
@@ -1511,7 +1662,67 @@ mod jni_env_tests {
             vm: &vm,
             jni_env: raw_jni_env,
             has_token: RefCell::new(true),
+            native_method_call: true,
         };
         env.token();
+    }
+
+    #[test]
+    fn for_native_method() {
+        static mut GET_VERSION_CALLS: i32 = 0;
+        static mut GET_VERSION_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn get_version(jni_env: *mut jni_sys::JNIEnv) -> jni_sys::jint {
+            GET_VERSION_CALLS += 1;
+            GET_VERSION_ARGUMENT = jni_env;
+            jni_sys::JNI_VERSION_1_4
+        }
+        static mut EXCEPTION_CHECK_CALLS: i32 = 0;
+        static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_check(
+            jni_env: *mut jni_sys::JNIEnv,
+        ) -> jni_sys::jboolean {
+            EXCEPTION_CHECK_CALLS += 1;
+            EXCEPTION_CHECK_ARGUMENT = jni_env;
+            jni_sys::JNI_FALSE
+        }
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            GetVersion: Some(get_version),
+            ExceptionCheck: Some(exception_check),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let raw_java_vm_ptr = 0x1234 as *mut jni_sys::JavaVM;
+        unsafe {
+            let vm = JavaVM::from_ptr(raw_java_vm_ptr);
+            let env = JniEnv::__for_native_method(&vm, raw_jni_env);
+            assert_eq!(env.raw_jvm(), raw_java_vm_ptr);
+            assert_eq!(env.native_method_call, true);
+            assert_eq!(env.version, JniVersion::V4);
+            assert_eq!(GET_VERSION_CALLS, 1);
+            assert_eq!(GET_VERSION_ARGUMENT, raw_jni_env);
+            assert_eq!(EXCEPTION_CHECK_CALLS, 1);
+            assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Native method called from a thread with a pending exception")]
+    fn for_native_method_exception() {
+        unsafe extern "system" fn get_version(_: *mut jni_sys::JNIEnv) -> jni_sys::jint {
+            jni_sys::JNI_VERSION_1_4
+        }
+        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
+            jni_sys::JNI_TRUE
+        }
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            GetVersion: Some(get_version),
+            ExceptionCheck: Some(exception_check),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        unsafe {
+            let vm = JavaVM::from_ptr(ptr::null_mut());
+            JniEnv::__for_native_method(&vm, raw_jni_env);
+        }
     }
 }
