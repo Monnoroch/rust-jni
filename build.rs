@@ -14,7 +14,7 @@ fn main() {
     }
 }
 
-fn find_libjvm<S: AsRef<Path>>(path: S) -> Option<PathBuf> {
+fn find_libjvm(path: impl AsRef<Path>) -> Option<PathBuf> {
     walkdir::WalkDir::new(path)
         .follow_links(true)
         .into_iter()

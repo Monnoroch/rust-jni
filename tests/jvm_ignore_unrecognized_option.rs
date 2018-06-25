@@ -10,7 +10,7 @@ mod create_jvm {
         let vm = JavaVM::create(&InitArguments::get_default(JniVersion::V8)
             .unwrap()
             .with_option(JvmOption::Unknown("utest".to_owned()))
-            .ignoring_unrecognized_options())
+            .ignore_unrecognized_options())
             .unwrap();
         unsafe { assert_ne!(vm.raw_jvm(), ptr::null_mut()) };
     }

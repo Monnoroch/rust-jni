@@ -12,7 +12,7 @@ mod create_jvm {
             JavaVM::create(&InitArguments::get_default(JniVersion::V8)
                 .unwrap()
                 .with_option(JvmOption::Unknown("utest".to_owned()))
-                .failing_on_unrecognized_options())
+                .fail_on_unrecognized_options())
                 .unwrap_err(),
             JniError::Unknown(jni_sys::JNI_ERR)
         );
