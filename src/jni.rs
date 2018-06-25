@@ -607,10 +607,7 @@ mod java_vm_tests {
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         {
-            let _vm = JavaVM {
-                java_vm: raw_java_vm_ptr,
-                owned: false,
-            };
+            let _vm = test_vm(raw_java_vm_ptr);
         }
         unsafe {
             assert_eq!(DESTROY_CALLS, 0);
@@ -682,10 +679,7 @@ mod java_vm_tests {
     #[test]
     fn raw_vm() {
         let raw_java_vm = 0x1234 as *mut jni_sys::JavaVM;
-        let vm = JavaVM {
-            java_vm: raw_java_vm,
-            owned: false,
-        };
+        let vm = test_vm(raw_java_vm);
         unsafe {
             assert_eq!(vm.raw_jvm(), raw_java_vm);
         }
@@ -745,10 +739,7 @@ mod java_vm_tests {
             ..empty_raw_java_vm()
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = JavaVM {
-            java_vm: raw_java_vm_ptr,
-            owned: false,
-        };
+        let vm = test_vm(raw_java_vm_ptr);
         let init_arguments = init_arguments::new(JniVersion::V8);
         unsafe {
             ATTACH_ENV_ARGUMENT = raw_jni_env as *mut c_void;
@@ -802,10 +793,7 @@ mod java_vm_tests {
             ..empty_raw_java_vm()
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = JavaVM {
-            java_vm: raw_java_vm_ptr,
-            owned: false,
-        };
+        let vm = test_vm(raw_java_vm_ptr);
         vm.attach(&AttachArguments::new(&init_arguments::new(JniVersion::V8)))
             .unwrap();
     }
@@ -833,10 +821,7 @@ mod java_vm_tests {
             ..empty_raw_java_vm()
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = JavaVM {
-            java_vm: raw_java_vm_ptr,
-            owned: false,
-        };
+        let vm = test_vm(raw_java_vm_ptr);
         vm.attach(&AttachArguments::new(&init_arguments::new(JniVersion::V8)))
             .unwrap();
     }
@@ -864,10 +849,7 @@ mod java_vm_tests {
             ..empty_raw_java_vm()
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = JavaVM {
-            java_vm: raw_java_vm_ptr,
-            owned: false,
-        };
+        let vm = test_vm(raw_java_vm_ptr);
         vm.attach(&AttachArguments::new(&init_arguments::new(JniVersion::V8)))
             .unwrap();
     }
@@ -895,10 +877,7 @@ mod java_vm_tests {
             ..empty_raw_java_vm()
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = JavaVM {
-            java_vm: raw_java_vm_ptr,
-            owned: false,
-        };
+        let vm = test_vm(raw_java_vm_ptr);
         vm.attach(&AttachArguments::new(&init_arguments::new(JniVersion::V8)))
             .unwrap();
     }
@@ -925,10 +904,7 @@ mod java_vm_tests {
             ..empty_raw_java_vm()
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = JavaVM {
-            java_vm: raw_java_vm_ptr,
-            owned: false,
-        };
+        let vm = test_vm(raw_java_vm_ptr);
         assert_eq!(
             vm.attach(&AttachArguments::new(&init_arguments::new(JniVersion::V8)))
                 .unwrap_err(),
@@ -972,10 +948,7 @@ mod java_vm_tests {
             ..empty_raw_java_vm()
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = JavaVM {
-            java_vm: raw_java_vm_ptr,
-            owned: false,
-        };
+        let vm = test_vm(raw_java_vm_ptr);
         unsafe {
             ATTACH_ENV_ARGUMENT = raw_jni_env as *mut c_void;
         }
@@ -1036,10 +1009,7 @@ mod java_vm_tests {
             ..empty_raw_java_vm()
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = JavaVM {
-            java_vm: raw_java_vm_ptr,
-            owned: false,
-        };
+        let vm = test_vm(raw_java_vm_ptr);
         let init_arguments = init_arguments::new(JniVersion::V8);
         unsafe {
             ATTACH_ENV_ARGUMENT = raw_jni_env as *mut c_void;
@@ -1226,7 +1196,8 @@ impl<'vm> JniEnv<'vm> {
     fn has_exception(&self) -> bool {
         // Safe because the argument is ensured to be the correct by construction.
         let value = unsafe { call_jni_method!(self, ExceptionCheck) };
-        init_arguments::to_bool(value)
+        // Safe because `bool` conversion is safe internally.
+        unsafe { bool::__from_jni(self, value) }
     }
 }
 
@@ -1259,27 +1230,33 @@ impl<'vm> Drop for JniEnv<'vm> {
 }
 
 #[cfg(test)]
+fn test_vm(ptr: *mut jni_sys::JavaVM) -> JavaVM {
+    JavaVM {
+        java_vm: ptr,
+        owned: false,
+    }
+}
+
+#[cfg(test)]
+fn test_env<'vm>(vm: &'vm JavaVM, ptr: *mut jni_sys::JNIEnv) -> JniEnv<'vm> {
+    JniEnv {
+        version: JniVersion::V8,
+        vm: &vm,
+        jni_env: ptr,
+        has_token: RefCell::new(true),
+        native_method_call: true,
+    }
+}
+
+#[cfg(test)]
 mod jni_env_tests {
     use super::*;
     use testing::*;
 
-    fn empty_vm() -> JavaVM {
-        JavaVM {
-            java_vm: 0x1234 as *mut jni_sys::JavaVM,
-            owned: false,
-        }
-    }
-
     #[test]
     fn raw_jvm() {
-        let vm = empty_vm();
-        let env = JniEnv {
-            version: JniVersion::V8,
-            vm: &vm,
-            jni_env: ptr::null_mut(),
-            has_token: RefCell::new(true),
-            native_method_call: true,
-        };
+        let vm = test_vm(0x1234 as *mut jni_sys::JavaVM);
+        let env = test_env(&vm, ptr::null_mut());
         unsafe {
             assert_eq!(env.raw_jvm(), vm.raw_jvm());
         }
@@ -1287,15 +1264,9 @@ mod jni_env_tests {
 
     #[test]
     fn raw_env() {
-        let vm = empty_vm();
+        let vm = test_vm(ptr::null_mut());
         let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = JniEnv {
-            version: JniVersion::V8,
-            vm: &vm,
-            jni_env,
-            has_token: RefCell::new(true),
-            native_method_call: true,
-        };
+        let env = test_env(&vm, jni_env);
         unsafe {
             assert_eq!(env.raw_env(), jni_env);
         }
@@ -1303,15 +1274,8 @@ mod jni_env_tests {
 
     #[test]
     fn version() {
-        let vm = empty_vm();
-        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = JniEnv {
-            version: JniVersion::V8,
-            vm: &vm,
-            jni_env,
-            has_token: RefCell::new(true),
-            native_method_call: true,
-        };
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, ptr::null_mut());
         assert_eq!(env.version(), JniVersion::V8);
     }
 
@@ -1328,11 +1292,7 @@ mod jni_env_tests {
             DetachCurrentThread: Some(detach),
             ..empty_raw_java_vm()
         };
-        let vm = JavaVM {
-            java_vm: &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM,
-            owned: false,
-        };
-
+        let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
         static mut EXCEPTION_CHECK_CALLS: i32 = 0;
         static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
         unsafe extern "system" fn exception_check(
@@ -1369,17 +1329,8 @@ mod jni_env_tests {
 
     #[test]
     fn drop_native_method() {
-        let vm = JavaVM {
-            java_vm: ptr::null_mut(),
-            owned: false,
-        };
-        JniEnv {
-            version: JniVersion::V8,
-            vm: &vm,
-            jni_env: ptr::null_mut(),
-            has_token: RefCell::new(true),
-            native_method_call: true,
-        };
+        let vm = test_vm(ptr::null_mut());
+        test_env(&vm, ptr::null_mut());
         // This test would fail if any JNI methods were called by the `JniEnv::drop` method.
     }
 
@@ -1397,11 +1348,7 @@ mod jni_env_tests {
             DetachCurrentThread: Some(detach),
             ..empty_raw_java_vm()
         };
-        let vm = JavaVM {
-            java_vm: &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM,
-            owned: false,
-        };
-
+        let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
         unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
             jni_sys::JNI_TRUE
         }
@@ -1451,11 +1398,7 @@ mod jni_env_tests {
             DetachCurrentThread: Some(detach),
             ..empty_raw_java_vm()
         };
-        let vm = JavaVM {
-            java_vm: &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM,
-            owned: false,
-        };
-
+        let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
         unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
             jni_sys::JNI_FALSE
         }
@@ -1490,17 +1433,8 @@ mod jni_env_tests {
         let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
 
         let raw_java_vm_ptr = 0x1234 as *mut jni_sys::JavaVM;
-        let vm = JavaVM {
-            java_vm: raw_java_vm_ptr,
-            owned: false,
-        };
-        let env = JniEnv {
-            version: JniVersion::V8,
-            vm: &vm,
-            jni_env: raw_jni_env,
-            has_token: RefCell::new(true),
-            native_method_call: true,
-        };
+        let vm = test_vm(raw_java_vm_ptr);
+        let env = test_env(&vm, raw_jni_env);
         env.token();
         unsafe {
             assert_eq!(EXCEPTION_CHECK_CALLS, 1);
@@ -1528,10 +1462,7 @@ mod jni_env_tests {
             DetachCurrentThread: Some(detach),
             ..empty_raw_java_vm()
         };
-        let vm = JavaVM {
-            java_vm: &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM,
-            owned: false,
-        };
+        let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
         let env = JniEnv {
             version: JniVersion::V8,
             vm: &vm,
@@ -1569,17 +1500,128 @@ mod jni_env_tests {
             DetachCurrentThread: Some(detach),
             ..empty_raw_java_vm()
         };
-        let vm = JavaVM {
-            java_vm: &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM,
-            owned: false,
-        };
-        let env = JniEnv {
-            version: JniVersion::V8,
-            vm: &vm,
-            jni_env: raw_jni_env,
-            has_token: RefCell::new(true),
-            native_method_call: true,
-        };
+        let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
+        let env = test_env(&vm, raw_jni_env);
         env.token();
+    }
+}
+
+/// A trait that represents a JNI type. It's implemented for all JNI primitive types
+/// and [`jni_sys::jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+///
+/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+///
+/// This trait should only be implemented for classes by generated code.
+#[doc(hidden)]
+pub trait JniType {}
+
+/// A macro for generating [`JniType`](trait.JniType.html) implementation for primitive types.
+macro_rules! jni_type_trait {
+    ($type:ty) => {
+        impl JniType for $type {}
+    };
+}
+
+jni_type_trait!(jni_sys::jboolean);
+
+/// A trait that represents Rust types that are mappable to JNI types.
+/// This trait has to be implemented for all types that need to be passed as arguments
+/// to or returned from Java functions.
+///
+/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+///
+/// This trait should only be implemented and used by generated code.
+pub trait JavaType {
+    /// The corresponding JNI type.
+    ///
+    /// Should only be implemented and used by generated code.
+    #[doc(hidden)]
+    type __JniType: JniType;
+}
+
+/// A trait for mapping types to their JNI types.
+/// This trait has to be implemented for all types that need to be passed as arguments
+/// to Java functions.
+///
+/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+///
+/// This trait should only be implemented and used by generated code.
+#[doc(hidden)]
+pub trait ToJni: JavaType {
+    /// Map the value to a JNI type value.
+    ///
+    /// THIS METHOD SHOULD NOT BE CALLED MANUALLY.
+    ///
+    /// Should only be implemented and used by generated code.
+    unsafe fn __to_jni(&self) -> Self::__JniType;
+}
+
+/// A trait for constructing types from their JNI types and [`JniEnv`](struct.JniEnv.html)
+/// references. This trait has to be implemented for all types that the user wants to pass
+/// return from Java functions.
+///
+/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+///
+/// This trait should only be implemented and used by generated code.
+#[doc(hidden)]
+pub trait FromJni<'env>: JavaType {
+    /// Construct a value from a JNI type value.
+    ///
+    /// THIS METHOD SHOULD NOT BE CALLED MANUALLY.
+    ///
+    /// Should only be implemented and used by generated code.
+    unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self;
+}
+
+/// Make [`bool`](https://doc.rust-lang.org/std/primitive.bool.html) mappable to
+/// [`jni_sys::jboolean`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jboolean.html).
+impl JavaType for bool {
+    #[doc(hidden)]
+    type __JniType = jni_sys::jboolean;
+}
+
+/// Make [`bool`](https://doc.rust-lang.org/std/primitive.bool.html) convertable to
+/// [`jni_sys::jboolean`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jboolean.html).
+impl ToJni for bool {
+    unsafe fn __to_jni(&self) -> Self::__JniType {
+        match self {
+            true => jni_sys::JNI_TRUE,
+            false => jni_sys::JNI_FALSE,
+        }
+    }
+}
+
+/// Make [`bool`](https://doc.rust-lang.org/std/primitive.bool.html) convertable from
+/// [`jni_sys::jboolean`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jboolean.html).
+impl<'env> FromJni<'env> for bool {
+    unsafe fn __from_jni(_: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
+        match value {
+            jni_sys::JNI_TRUE => true,
+            jni_sys::JNI_FALSE => false,
+            value => panic!("Unexpected jboolean value {:?}", value),
+        }
+    }
+}
+
+#[cfg(test)]
+mod bool_tests {
+    use super::*;
+
+    #[test]
+    fn to_jni() {
+        unsafe {
+            assert_eq!(true.__to_jni(), jni_sys::JNI_TRUE);
+            assert_eq!(false.__to_jni(), jni_sys::JNI_FALSE);
+        }
+    }
+
+    #[test]
+    fn from_jni() {
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, ptr::null_mut());
+        unsafe {
+            assert_eq!(bool::__from_jni(&env, jni_sys::JNI_TRUE), true);
+            assert_eq!(bool::__from_jni(&env, jni_sys::JNI_FALSE), false);
+        }
     }
 }
