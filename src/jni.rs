@@ -10,7 +10,7 @@ use std::os::raw::c_void;
 use std::ptr;
 use version::{self, JniVersion};
 
-/// Errors returned by JNI_CreateJavaVM and JNI_GetCreatedJavaVMs.
+/// Errors returned by JNI function.
 ///
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#return-codes)
 // TODO(#17): add error codes.
@@ -32,12 +32,12 @@ pub enum JniError {
 ///
 /// # Exception tokens
 ///
-/// `rust-jni` tries to push as many programming errors as possible from run-time to compile-time.
-/// To not allow caller to call JNI methods when there is a pending exception, these methods
-/// will require the caller to provide a `NoException` token. The caller can obtain the token
-/// after attaching the thread to the Java VM:
+/// [`rust-jni`](index.html) tries to push as many programming errors as possible from run-time to compile-time.
+/// To not allow a caller to call JNI methods when there is a pending exception, these methods
+/// will require the caller to provide a [`NoException`](struct.NoException.html) token.
+/// The caller can obtain the token after attaching the thread to the Java VM:
 /// ```
-/// use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
+/// use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion};
 ///
 /// let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// let vm = JavaVM::create(&init_arguments).unwrap();
@@ -46,7 +46,7 @@ pub enum JniError {
 /// ```
 /// A token can not be obtained twice from a `JniEnv` value:
 /// ```should_panic
-/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
+/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion};
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
@@ -66,15 +66,15 @@ pub enum JniError {
 /// ```
 /// // TODO: example for a token-consuming method.
 /// ```
-/// Methods that consume the token will always return a `JniResult` value which will either
-/// have a value and a new `NoException` token that can be used to call more JNI methods or
-/// an `Exception` token:
+/// Methods that consume the token will always return a [`JniResult`](type.JniResult.html)
+/// value which will either have a value and a new [`NoException`](struct.NoException.html) token
+/// that can be used to call more JNI methods or an [`Exception`](struct.Exception.html) token:
 /// ```
 /// // TODO: example of a token-consuming method returning a new token.
 /// ```
-/// The token is bound to the `JniEnv` object, so it can't outlive it:
+/// The token is bound to the [`JniEnv`](struct.JniEnv.html) object, so it can't outlive it:
 /// ```compile_fail
-/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
+/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion};
 ///
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
@@ -82,25 +82,31 @@ pub enum JniError {
 ///     let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
 ///     let token = env.token();
 ///     token
-/// };
+/// }; // doesn't compile!
 /// ```
-/// Tokens that are returned from other methods as part of a `JniResult` are also bound to
-/// the `JniEnv` object and can't outlive it:
+/// Tokens that are returned from other methods as part of a [`JniResult`](type.JniResult.html)
+/// are also bound to the [`JniEnv`](struct.JniEnv.html) object and can't outlive it:
 /// ```
 /// // TODO: a compile_fail example with a token, returned from a JNI method.
 /// ```
-/// If an `Exception` token was returned, it does not in fact mean, that there is
-/// a pending exception, but it means that the `rust-jni` library can not prove that there
+/// If an [`Exception`](struct.Exception.html) token was returned, it does not in fact mean, that
+/// there is a pending exception, but it means that [`rust-jni`](index.html) can not prove that there
 /// isn't one without explicitly calling the `ExceptionCheck` JNI method. Thus, the
-/// `Exception` token can be `unwrap`-ped into a new `NoException` token and an optional
-/// `Throwable` value, if there was, in fact, a pending exception. Unwrapping
-/// the `Exception` token will clear the pending exception, so it is again safe to call JNI
-/// methods:
+/// [`Exception`](struct.Exception.html) token can be
+/// [`unwrap`](https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap)-ped into a new
+/// [`NoException`](struct.NoException.html) token and an optional
+/// [`Throwable`](struct.Throwable.html) value, if there was, in fact, a pending exception.
+/// Unwrapping the [`Exception`](struct.Exception.html) token will clear the pending exception,
+/// so it is again safe to call JNI methods:
 /// ```
 /// // TODO: an example for `Exception::unwrap`.
 /// ```
-/// Because the `Exception` token doesn't mean that there is definitely a pending exception,
-/// `unwrap`-ping it can, in fact, return a `None` instead of a `Some(Throwable)`:
+/// Because the [`Exception`](struct.Exception.html) token doesn't mean that there is definitely a
+/// pending exception,
+/// [`unwrap`](https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap)-ping it can,
+/// in fact, return a [`None`](https://doc.rust-lang.org/std/option/enum.Option.html#variant.None)
+/// instead of a
+/// [`Some(Throwable)`](https://doc.rust-lang.org/std/option/enum.Option.html#variant.Some):
 /// ```
 /// // TODO: example of `NewLocalRef` returning `null` for a garbage collected local reference.
 /// // but no exception occuring.
@@ -108,11 +114,12 @@ pub enum JniError {
 ///
 /// # Error handling in Java method calls
 ///
-/// Calling methods on Java objects is slightly different. To follow the Java semantics,
-/// that a method either returns a result or throws an exception, all Java methods return
-/// a `JavaResult` value, which is either an actual result or a `Throwable` value representing
-/// the exception. Java methods never leave a pending exception, so they never consume the
-/// `NoException` token, but they always require it to be presented:
+/// Calling methods on Java objects is slightly different. [`rust-jni`](index.html) follows Java
+/// semantics, whre a method either returns a result or throws an exception. All Java methods
+/// return a [`JavaResult`](type.JavaResult.html) value, which is either an actual result or a
+/// [`Throwable`](struct.Throwable.html) value representing the exception. Java methods never
+/// leave a pending exception, so they never consume the
+/// [`NoException`](struct.NoException.html) token, but they always require it to be presented:
 /// ```
 /// // TODO: an example of a non throwing Java method call.
 /// ```
@@ -143,21 +150,22 @@ impl<'env> NoException<'env> {
     }
 }
 
-/// `NoException` can't be passed between threads.
+// [`NoException`](struct.NoException.html) can't be passed between threads.
 // TODO(https://github.com/rust-lang/rust/issues/13231): enable when !Send is stable.
 // impl<'env> !Send for NoException<'env> {}
 // impl<'env> !Sync for NoException<'env> {}
 
-/// A dual token to `NoException` that represents that there might be a pending exception in Java.
+/// A dual token to [`NoException`](struct.NoException.html) that represents that there
+/// might be a pending exception in Java.
 ///
-/// Read more about tokens in `NoException` documentation.
+/// Read more about exception tokens in [`NoException`](struct.NoException.html) documentation.
 #[derive(Debug)]
 pub struct Exception<'env> {
     _token: (),
     _env: PhantomData<JniEnv<'env>>,
 }
 
-/// `Exception` can't be passed between threads.
+// [`Exception`](struct.Exception.html) can't be passed between threads.
 // TODO(https://github.com/rust-lang/rust/issues/13231): enable when !Send is stable.
 // impl<'env> !Send for NoException<'env> {}
 // impl<'env> !Sync for NoException<'env> {}
@@ -210,7 +218,8 @@ pub type JniResult<'env, T> = Result<(T, NoException<'env>), Exception<'env>>;
 /// }
 /// ```
 ///
-/// The main purpose of `JavaVM` is to attach threads by provisioning `JniEnv`-s.
+/// The main purpose of [`JavaVM`](struct.JavaVM.html) is to attach threads by provisioning
+/// [`JniEnv`](struct.JniEnv.html)-s.
 #[derive(Debug)]
 pub struct JavaVM {
     java_vm: *mut jni_sys::JavaVM,
@@ -318,7 +327,7 @@ impl JavaVM {
         }
     }
 
-    /// Get the raw JavaVM pointer.
+    /// Get the raw Java VM pointer.
     ///
     /// This function provides low-level access to all of JNI and thus is unsafe.
     pub unsafe fn raw_jvm(&self) -> *mut jni_sys::JavaVM {
@@ -326,9 +335,7 @@ impl JavaVM {
     }
 
     /// Attach the current thread to the Java VM with a specific thread name.
-    /// Returns a `JniEnv` instance and a `NoException` token that can be used to call JNI methods.
-    ///
-    /// Read more about tokens in docs for `NoException`.
+    /// Returns a [`JniEnv`](struct.JniEnv.html) instance for this thread.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
     pub fn attach(&self, arguments: &AttachArguments) -> Result<JniEnv, JniError> {
@@ -337,11 +344,9 @@ impl JavaVM {
     }
 
     /// Attach the current thread to the Java VM as a daemon with a specific thread name.
-    /// Returns a `JniEnv` instance and a `NoException` token that can be used to call JNI methods.
+    /// Returns a [`JniEnv`](struct.JniEnv.html) instance for this thread.
     ///
-    /// Read more about tokens in docs for `NoException`.
-    ///
-    /// [JNI documentation](https://docs.oracle.com/javase/9/docs/specs/jni/invocation.html#attachcurrentthreadasdaemon)
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthreadasdaemon)
     pub fn attach_daemon(&self, arguments: &AttachArguments) -> Result<JniEnv, JniError> {
         // Safe because the argument is ensured to be the correct method.
         unsafe {
@@ -459,7 +464,7 @@ impl JavaVM {
     }
 }
 
-/// Make `JavaVM` be destroyed when the value is dropped.
+/// Make [`JavaVM`](struct.JavaVM.html) be destroyed when the value is dropped.
 ///
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#destroyjavavm)
 impl Drop for JavaVM {
@@ -480,10 +485,11 @@ impl Drop for JavaVM {
     }
 }
 
-/// Make `JavaVM` sendable between threads. Guaranteed to be safe by JNI.
+/// Make [`JavaVM`](struct.JavaVM.html) sendable between threads. Guaranteed to be safe by JNI.
 unsafe impl Send for JavaVM {}
 
-/// Make `JavaVM` shareable by multiple threads. Guaranteed to be safe by JNI.
+/// Make [`JavaVM`](struct.JavaVM.html) shareable by multiple threads. Guaranteed to be safe
+/// by JNI.
 unsafe impl Sync for JavaVM {}
 
 #[cfg(test)]
@@ -1135,10 +1141,10 @@ mod java_vm_tests {
     }
 }
 
-/// The interface for interacting with JNI.
+/// The interface for interacting with Java.
 /// All calls to Java are performed through this interface.
 /// JNI methods can only be called from threads, explicitly attached to the Java VM.
-/// `JniEnv` represents such a thread.
+/// [`JniEnv`](struct.JniEnv.html) represents such a thread.
 ///
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#interface-function-table)
 ///
@@ -1154,7 +1160,9 @@ mod java_vm_tests {
 ///     assert_ne!(env.raw_env(), ptr::null_mut());
 /// }
 /// ```
-/// `JniEnv` is `!Send`. It means it can't be passed between threads:
+/// [`JniEnv`](struct.JniEnv.html) is
+/// [`!Send`](https://doc.rust-lang.org/std/marker/trait.Send.html). It means it can't be passed
+/// between threads:
 /// ```compile_fail
 /// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
 /// #
@@ -1189,9 +1197,10 @@ mod java_vm_tests {
 ///     assert_ne!(env.raw_env(), ptr::null_mut());
 /// }
 /// ```
-/// The thread is automatically detached once the `JniEnv` is dropped.
+/// The thread is automatically detached once the [`JniEnv`](struct.JniEnv.html) is dropped.
 ///
-/// `JniEnv` can't outlive the parent `JavaVM`. This code is not allowed:
+/// [`JniEnv`](struct.JniEnv.html) can't outlive the parent [`JavaVM`](struct.JavaVM.html).
+/// This code is not allowed:
 /// ```compile_fail
 /// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
 /// #
@@ -1201,8 +1210,9 @@ mod java_vm_tests {
 ///     vm.attach(&AttachArguments::new(&init_arguments)).unwrap() // doesn't compile!
 /// };
 /// ```
-/// `JniEnv` represents a thread, attached to the Java VM. Thus there can't be two `JniEnv`-s
-/// per thread. `JavaVM::attach` will panic if you attempt to do so:
+/// [`JniEnv`](struct.JniEnv.html) represents a thread, attached to the Java VM. Thus there
+/// can't be two [`JniEnv`](struct.JniEnv.html)-s per thread.
+/// [`JavaVM::attach`](struct.JavaVM.html#methods.attach) will panic if you attempt to do so:
 /// ```should_panic
 /// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
 /// #
@@ -1221,7 +1231,7 @@ pub struct JniEnv<'vm> {
     native_method_call: bool,
 }
 
-// JniEnv can't be passed between threads.
+// [`JniEnv`](struct.JniEnv.html) can't be passed between threads.
 // TODO(https://github.com/rust-lang/rust/issues/13231): enable when !Send is stable.
 // impl<'vm> !Send for JniEnv<'vm> {}
 // impl<'vm> !Sync for JniEnv<'vm> {}
@@ -1244,24 +1254,24 @@ macro_rules! call_jni_method {
 }
 
 impl<'vm> JniEnv<'vm> {
-    /// Get the raw JavaVM pointer.
+    /// Get the raw Java VM pointer.
     ///
     /// This function provides low-level access to all of JNI and thus is unsafe.
     pub unsafe fn raw_jvm(&self) -> *mut jni_sys::JavaVM {
         self.vm.raw_jvm()
     }
 
-    /// Get the raw JNI Env pointer.
+    /// Get the raw JNI environment pointer.
     ///
     /// This function provides low-level access to all of JNI and thus is unsafe.
     pub unsafe fn raw_env(&self) -> *mut jni_sys::JNIEnv {
         self.jni_env
     }
 
-    /// Get a `NoException` token indicating that there is no pending exception
-    /// in this thread.
+    /// Get a [`NoException`](struct.NoException.html) token indicating that there is no pending
+    /// exception in this thread.
     ///
-    /// Read more about tokens in `NoException` documentation.
+    /// Read more about tokens in [`NoException`](struct.NoException.html) documentation.
     // TODO(#22): Return a token with the env if possible:
     // https://stackoverflow.com/questions/50891977/can-i-return-a-value-and-a-reference-to-it-from-a-function.
     pub fn token(&self) -> NoException {

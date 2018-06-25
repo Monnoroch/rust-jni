@@ -9,7 +9,17 @@ use version::{self, JniVersion};
 /// Arguments for attaching a thread to the JVM.
 ///
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// # Example
+/// ```
+/// use rust_jni::{AttachArguments, InitArguments, JniVersion};
+///
+/// let options = InitArguments::get_default(JniVersion::V8).unwrap();
+/// let attach_arguments = AttachArguments::new(&options);
+///
+/// assert_eq!(attach_arguments.version(), JniVersion::V8);
+/// ```
+#[derive(Debug, PartialEq, Eq)]
 pub struct AttachArguments<'a> {
     version: JniVersion,
     thread_name: Option<&'a str>,
@@ -37,7 +47,9 @@ impl<'a> AttachArguments<'a> {
         }
     }
 
-    /// Return the JNI version this arguments will request when attaching a thread to a Java VM.
+    /// Return the JNI version these arguments will request when attaching a thread to a Java VM.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
     pub fn version(&self) -> JniVersion {
         self.version
     }

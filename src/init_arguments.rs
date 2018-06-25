@@ -52,7 +52,7 @@ mod verbose_option_to_string_tests {
 // TODO(#13): support vfprintf, exit, abort options.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JvmOption {
-    /// Verbose option string. Is a vector of verbose options.
+    /// Verbose option.
     ///
     /// Passed to the JVM as `-verbose:${verbose_option}`.
     Verbose(JvmVerboseOption),
@@ -66,10 +66,12 @@ pub enum JvmOption {
     CheckedJni,
     /// Unknown option.
     /// Needed for forward compability and to set custom options.
+    /// The string value is passed to the JVM without change.
     Unknown(String),
 }
 
 impl JvmOption {
+    /// Unsafe because one can pass a non-UTF-8 or non-null-terminated option string.
     unsafe fn from_raw(option: &jni_sys::JavaVMOption) -> Self {
         // TODO(#14): support platform encodings other than UTF-8.
         let option_string = CStr::from_ptr((*option).optionString).to_str().unwrap();
@@ -276,7 +278,8 @@ pub struct InitArguments {
 
 impl InitArguments {
     /// Get default Java VM init arguments for a JNI version.
-    /// If the requested JNI version is not supported, returns None.
+    /// If the requested JNI version is not supported, returns
+    /// [`None`](https://doc.rust-lang.org/std/option/enum.Option.html#variant.None).
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
     pub fn get_default(version: JniVersion) -> Option<Self> {
@@ -289,8 +292,9 @@ impl InitArguments {
     }
 
     /// Get default Java VM init arguments for a JNI version.
-    /// If the requested JNI version is not supported, returns default arguments for the closest supported JNI version.
-    /// The new version can be obtained with the `InitArguments::version()` method.
+    /// If the requested JNI version is not supported, returns default arguments for the closest
+    /// supported JNI version. The new version can be obtained with the
+    /// [`InitArguments::version()`](struct.InitArguments.html#method.version) method.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
     pub fn get_default_or_closest_supported(version: JniVersion) -> Self {
@@ -302,7 +306,8 @@ impl InitArguments {
         };
         // Safe because we pass a pointer to a correct data structure.
         unsafe {
-            // It is fine if the requested version is not supported, we'll just use a supported one.
+            // It is fine if the requested version is not supported, we'll just use
+            // a supported one.
             JNI_GetDefaultJavaVMInitArgs(
                 &mut raw_arguments as *mut jni_sys::JavaVMInitArgs as *mut c_void,
             );
@@ -312,6 +317,7 @@ impl InitArguments {
         unsafe { Self::from_raw(&raw_arguments).with_option(JvmOption::CheckedJni) }
     }
 
+    /// Unsafe because one can pass incorrect options.
     unsafe fn from_raw(raw_arguments: &jni_sys::JavaVMInitArgs) -> InitArguments {
         let options = slice::from_raw_parts(raw_arguments.options, raw_arguments.nOptions as usize)
             .iter()
@@ -369,7 +375,7 @@ impl InitArguments {
     /// Request for JVM to ignore unrecognized options on startup.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
-    pub fn ignoring_unrecognized_options(mut self) -> Self {
+    pub fn ignore_unrecognized_options(mut self) -> Self {
         self.ignore_unrecognized = true;
         self
     }
@@ -377,12 +383,14 @@ impl InitArguments {
     /// Request for JVM to fail in presence of unrecognized options on startup.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
-    pub fn failing_on_unrecognized_options(mut self) -> Self {
+    pub fn fail_on_unrecognized_options(mut self) -> Self {
         self.ignore_unrecognized = false;
         self
     }
 
-    /// Return the JNI version this arguments will request when creating a Java VM.
+    /// Return the JNI version these arguments will request when creating a Java VM.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
     pub fn version(&self) -> JniVersion {
         self.version
     }
@@ -665,14 +673,14 @@ pub mod tests {
     }
 
     #[test]
-    fn ignoring_unrecognized_options() {
+    fn ignore_unrecognized_options() {
         let arguments = InitArguments {
             version: JniVersion::V4,
             options: vec![],
             ignore_unrecognized: false,
         };
         assert_eq!(
-            arguments.ignoring_unrecognized_options(),
+            arguments.ignore_unrecognized_options(),
             InitArguments {
                 version: JniVersion::V4,
                 options: vec![],
@@ -682,14 +690,14 @@ pub mod tests {
     }
 
     #[test]
-    fn failing_on_unrecognized_options() {
+    fn fail_on_unrecognized_options() {
         let arguments = InitArguments {
             version: JniVersion::V4,
             options: vec![],
             ignore_unrecognized: true,
         };
         assert_eq!(
-            arguments.failing_on_unrecognized_options(),
+            arguments.fail_on_unrecognized_options(),
             InitArguments {
                 version: JniVersion::V4,
                 options: vec![],
