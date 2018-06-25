@@ -10,6 +10,7 @@ use std::iter;
 use std::marker::PhantomData;
 use std::os::raw::c_void;
 use std::ptr;
+use std::string;
 use version::{self, JniVersion};
 
 /// Errors returned by JNI function.
@@ -1536,6 +1537,22 @@ jni_type_trait!(jni_sys::jlong);
 jni_type_trait!(jni_sys::jfloat);
 jni_type_trait!(jni_sys::jdouble);
 
+/// A trait that represents JNI types that can be passed as arguments to JNI functions.
+///
+/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+#[doc(hidden)]
+pub trait JniArgumentType: JniType {}
+
+impl JniArgumentType for jni_sys::jboolean {}
+impl JniArgumentType for jni_sys::jchar {}
+impl JniArgumentType for jni_sys::jbyte {}
+impl JniArgumentType for jni_sys::jshort {}
+impl JniArgumentType for jni_sys::jint {}
+impl JniArgumentType for jni_sys::jlong {}
+impl JniArgumentType for jni_sys::jfloat {}
+impl JniArgumentType for jni_sys::jdouble {}
+impl JniArgumentType for jni_sys::jobject {}
+
 /// A trait that represents Rust types that are mappable to JNI types.
 /// This trait has to be implemented for all types that need to be passed as arguments
 /// to or returned from Java functions.
@@ -1549,6 +1566,14 @@ pub trait JavaType {
     /// Should only be implemented and used by generated code.
     #[doc(hidden)]
     type __JniType: JniType;
+
+    /// Compute the signature for this Java type.
+    ///
+    /// THIS METHOD SHOULD NOT BE CALLED MANUALLY.
+    ///
+    /// Should only be implemented and used by generated code.
+    #[doc(hidden)]
+    fn __signature() -> &'static str;
 }
 
 /// A trait for mapping types to their JNI types.
@@ -1592,6 +1617,11 @@ where
 {
     #[doc(hidden)]
     type __JniType = T::__JniType;
+
+    #[doc(hidden)]
+    fn __signature() -> &'static str {
+        T::__signature()
+    }
 }
 
 /// Make references mappable from JNI types of their referenced types.
@@ -1609,6 +1639,11 @@ where
 impl JavaType for bool {
     #[doc(hidden)]
     type __JniType = jni_sys::jboolean;
+
+    #[doc(hidden)]
+    fn __signature() -> &'static str {
+        "Z"
+    }
 }
 
 /// Make [`bool`](https://doc.rust-lang.org/std/primitive.bool.html) convertible to
@@ -1637,6 +1672,11 @@ impl<'env> FromJni<'env> for bool {
 #[cfg(test)]
 mod bool_tests {
     use super::*;
+
+    #[test]
+    fn signature() {
+        assert_eq!(bool::__signature(), "Z");
+    }
 
     #[test]
     fn to_jni() {
@@ -1688,6 +1728,11 @@ mod bool_tests {
 impl JavaType for char {
     #[doc(hidden)]
     type __JniType = jni_sys::jchar;
+
+    #[doc(hidden)]
+    fn __signature() -> &'static str {
+        "C"
+    }
 }
 
 /// Make [`char`](https://doc.rust-lang.org/std/primitive.char.html) convertible to
@@ -1724,6 +1769,11 @@ impl<'env> FromJni<'env> for char {
 #[cfg(test)]
 mod char_tests {
     use super::*;
+
+    #[test]
+    fn signature() {
+        assert_eq!(char::__signature(), "C");
+    }
 
     #[test]
     fn to_jni() {
@@ -1771,6 +1821,11 @@ macro_rules! jni_io_traits {
         impl JavaType for $type {
             #[doc(hidden)]
             type __JniType = $jni_type;
+
+            #[doc(hidden)]
+            fn __signature() -> &'static str {
+                $signature
+            }
         }
 
         /// Make type convertible to the JNI type of the same size.
@@ -1855,6 +1910,11 @@ mod void_tests {
     use super::*;
 
     #[test]
+    fn signature() {
+        assert_eq!(<()>::__signature(), "V");
+    }
+
+    #[test]
     fn to_jni() {
         unsafe {
             assert_eq!(().__to_jni(), ());
@@ -1892,6 +1952,11 @@ mod void_tests {
 #[cfg(test)]
 mod byte_tests {
     use super::*;
+
+    #[test]
+    fn signature() {
+        assert_eq!(u8::__signature(), "B");
+    }
 
     #[test]
     fn to_jni() {
@@ -1933,6 +1998,11 @@ mod byte_tests {
 
 #[cfg(test)]
 mod short_tests {
+
+    #[test]
+    fn signature() {
+        assert_eq!(i16::__signature(), "S");
+    }
     use super::*;
 
     #[test]
@@ -1975,6 +2045,11 @@ mod int_tests {
     use super::*;
 
     #[test]
+    fn signature() {
+        assert_eq!(i32::__signature(), "I");
+    }
+
+    #[test]
     fn to_jni() {
         unsafe {
             assert_eq!(217.__to_jni(), 217);
@@ -2012,6 +2087,11 @@ mod int_tests {
 #[cfg(test)]
 mod long_tests {
     use super::*;
+
+    #[test]
+    fn signature() {
+        assert_eq!(i64::__signature(), "J");
+    }
 
     #[test]
     fn to_jni() {
@@ -2053,6 +2133,11 @@ mod double_tests {
     use super::*;
 
     #[test]
+    fn signature() {
+        assert_eq!(f64::__signature(), "D");
+    }
+
+    #[test]
     fn to_jni() {
         unsafe {
             assert_eq!((217.).__to_jni(), 217.);
@@ -2084,5 +2169,93 @@ mod double_tests {
         unsafe {
             assert_eq!(f64::__from_jni(&env, 217.).__to_jni(), 217.);
         }
+    }
+}
+
+/// A trait that represents Rust function types that are mappable to Java function types.
+/// This trait is separate from `JavaType` because this one doesn't need to be exposed
+/// in the public crate API.
+///
+/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+// TODO: reimplement it in a way that it returns `&'static str`.
+// `concat!` doesn't acceps arbitrary expressions of type `&'static str`, so it can't be
+// implemented that way today.
+#[doc(hidden)]
+pub trait JavaMethodSignature<In: ?Sized, Out: ?Sized> {
+    /// Get the method's JNI signature.
+    ///
+    /// THIS METHOD SHOULD NOT BE CALLED MANUALLY.
+    fn __signature() -> string::String;
+}
+
+macro_rules! braces {
+    ($name:ident) => {
+        "{}"
+    };
+}
+
+macro_rules! peel_fn_impls {
+    () => ();
+    ($type:ident, $jni_type:ident, $($other:ident,)*) => (fn_impls! { $($other,)* });
+}
+
+/// A macro for generating method signatures.
+///
+/// Function arguments must be `ToJni` with `ToJni::__JniType: JniArgumentType`
+/// and the result must be `FromJni`.
+macro_rules! fn_impls {
+    ( $($type:ident, $jni_type:ident,)*) => (
+        impl<'a, $($type, $jni_type,)* Out, T> JavaMethodSignature<($($type,)*), Out> for T
+            where
+                $($type: ToJni<__JniType = $jni_type>,)*
+                $($jni_type: JniArgumentType,)*
+                Out: FromJni<'a>,
+                T: FnOnce($($type,)*) -> Out + ?Sized,
+        {
+            fn __signature() -> string::String {
+                format!(concat!("(", $(braces!($type), )* "){}"), $(<$type>::__signature(),)* Out::__signature())
+            }
+        }
+
+        peel_fn_impls! { $($type, $jni_type,)* }
+    );
+}
+
+fn_impls! {
+    T0, T0Jni,
+    T1, T1Jni,
+    T2, T2Jni,
+    T3, T3Jni,
+    T4, T4Jni,
+    T5, T5Jni,
+    T6, T6Jni,
+    T7, T7Jni,
+    T8, T8Jni,
+    T9, T9Jni,
+    T10, T10Jni,
+    T11, T11Jni,
+}
+
+#[cfg(test)]
+mod method_signature_tests {
+    use super::*;
+
+    #[test]
+    fn no_arguments() {
+        assert_eq!(<fn()>::__signature(), "()V");
+    }
+
+    #[test]
+    fn one_argument() {
+        assert_eq!(<fn(i32) -> i64>::__signature(), "(I)J");
+    }
+
+    #[test]
+    fn many_arguments() {
+        assert_eq!(
+            <fn(i32, f64, u8, f64, bool, i16, i64, i32, i32, i32, i32, char) -> bool>::__signature(
+            ),
+            "(IDBDZSJIIIIC)Z"
+        );
     }
 }
