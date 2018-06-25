@@ -170,8 +170,10 @@ pub struct Exception<'env> {
 // impl<'env> !Send for NoException<'env> {}
 // impl<'env> !Sync for NoException<'env> {}
 
-/// A result of a JNI function. Either a value and a `NoException` token, when the function
-/// didn't throw an exception or an `Exception` token when it did or it is unknown if it did.
+/// A result of a JNI function call. Either a value and a [`NoException`](struct.NoException.html)
+/// token, when the function didn't throw an exception or an [`Exception`](struct.Exception.html)
+/// token when it did or it is unknown if it did.
+/// All JNI methods that are not calls to methods of Java classes use this type as their result.
 pub type JniResult<'env, T> = Result<(T, NoException<'env>), Exception<'env>>;
 
 /// A struct for interacting with the Java VM.

@@ -1,3 +1,13 @@
+//! # A library for safe interoperation between Rust and Java
+//!
+//! `rust-jni`(index.html) provides tools to safely make calls from Rust to Java
+//! and from Java to Rust using
+//! [JNI](https://docs.oracle.com/javase/10/docs/specs/jni/index.html).
+//!
+//! The main philosofy of this library is to push as many errors to compile-time as possible
+//! and panic whenever it's impossible to have a compile error.
+// TODO: a complete example.
+
 extern crate cesu8;
 extern crate jni_sys;
 #[cfg(test)]
