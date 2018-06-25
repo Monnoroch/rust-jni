@@ -2259,3 +2259,210 @@ mod method_signature_tests {
         );
     }
 }
+
+/// A type representing the
+/// [`java.lang.Object`](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html) class
+/// -- the root class of Java's class hierarchy.
+///
+/// [`Object` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html)
+// TODO: examples.
+pub struct Object<'env> {
+    env: &'env JniEnv<'env>,
+    raw_object: jni_sys::jobject,
+}
+
+// [`Object`](struct.Object.html) can't be passed between threads.
+// TODO(https://github.com/rust-lang/rust/issues/13231): enable when !Send is stable.
+// impl<'env> !Send for Object<'env> {}
+// impl<'env> !Sync for Object<'env> {}
+
+impl<'env> Object<'env> {
+    /// Get the raw object pointer.
+    ///
+    /// This function provides low-level access to the Java object and thus is unsafe.
+    pub unsafe fn raw_object(&self) -> jni_sys::jobject {
+        self.raw_object
+    }
+
+    /// Get the [`JniEnv`](../../struct.JniEnv.html) this object is bound to.
+    pub fn env(&self) -> &'env JniEnv<'env> {
+        self.env
+    }
+
+    /// Construct from a raw pointer. Unsafe because an invalid pointer may be passed
+    /// as the argument.
+    unsafe fn from_raw(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Self {
+        Self { env, raw_object }
+    }
+}
+
+/// Make [`Object`](struct.Object.html) mappable to
+/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+impl<'a> JavaType for Object<'a> {
+    #[doc(hidden)]
+    type __JniType = jni_sys::jobject;
+
+    #[doc(hidden)]
+    fn __signature() -> &'static str {
+        concat!("L", "java/lang", "/", stringify!(Object), ";")
+    }
+}
+
+/// Make [`Object`](struct.Object.html) convertible to
+/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+impl<'a> ToJni for Object<'a> {
+    unsafe fn __to_jni(&self) -> Self::__JniType {
+        self.raw_object()
+    }
+}
+
+/// Make [`Object`](struct.Object.html) convertible from
+/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+impl<'env> FromJni<'env> for Object<'env> {
+    unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
+        Self::from_raw(env, value)
+    }
+}
+
+/// Make [`Object`](struct.Object.html)-s reference be deleted when the value is dropped.
+///
+/// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#deletelocalref)
+impl<'env> Drop for Object<'env> {
+    fn drop(&mut self) {
+        // Safe because the argument is ensured to be correct references by construction.
+        unsafe {
+            call_jni_method!(self.env, DeleteLocalRef, self.raw_object);
+        }
+    }
+}
+
+#[cfg(test)]
+mod object_tests {
+    use super::*;
+    use std::mem;
+    use testing::*;
+
+    fn test_object<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Object<'env> {
+        Object { env, raw_object }
+    }
+
+    #[test]
+    fn raw_object() {
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, ptr::null_mut());
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let object = test_object(&env, raw_object);
+        unsafe {
+            assert_eq!(object.raw_object(), raw_object);
+        }
+        mem::forget(object);
+    }
+
+    #[test]
+    fn env() {
+        let vm = test_vm(ptr::null_mut());
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let object = test_object(&env, raw_object);
+        unsafe {
+            assert_eq!(object.env().raw_env(), jni_env);
+        }
+        mem::forget(object);
+    }
+
+    #[test]
+    fn signature() {
+        assert_eq!(Object::__signature(), "Ljava/lang/Object;");
+    }
+
+    #[test]
+    fn to_jni() {
+        let vm = test_vm(ptr::null_mut());
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let object = test_object(&env, raw_object);
+        unsafe {
+            assert_eq!(object.__to_jni(), raw_object);
+        }
+        mem::forget(object);
+    }
+
+    #[test]
+    fn from_jni() {
+        let vm = test_vm(ptr::null_mut());
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        unsafe {
+            let object = Object::__from_jni(&env, raw_object);
+            assert_eq!(object.raw_object(), raw_object);
+            assert_eq!(object.env().raw_env(), jni_env);
+            mem::forget(object);
+        }
+    }
+
+    #[test]
+    fn to_and_from() {
+        let vm = test_vm(ptr::null_mut());
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let object = test_object(&env, raw_object);
+        unsafe {
+            let object = Object::__from_jni(&env, object.__to_jni());
+            assert_eq!(object.raw_object(), raw_object);
+            assert_eq!(object.env().raw_env(), jni_env);
+            mem::forget(object);
+        }
+        mem::forget(object);
+    }
+
+    #[test]
+    fn from_and_to() {
+        let vm = test_vm(ptr::null_mut());
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        unsafe {
+            let object = Object::__from_jni(&env, raw_object);
+            assert_eq!(object.__to_jni(), raw_object);
+            mem::forget(object);
+        }
+    }
+
+    #[test]
+    fn drop() {
+        static mut DELETE_LOCAL_REF_CALLS: i32 = 0;
+        static mut DELETE_LOCAL_REF_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut DELETE_LOCAL_REF_OBECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn delete_local_ref(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+        ) {
+            DELETE_LOCAL_REF_CALLS += 1;
+            DELETE_LOCAL_REF_ENV_ARGUMENT = env;
+            DELETE_LOCAL_REF_OBECT_ARGUMENT = object;
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            DeleteLocalRef: Some(delete_local_ref),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        {
+            let _object = test_object(&env, raw_object);
+            unsafe {
+                assert_eq!(DELETE_LOCAL_REF_CALLS, 0);
+            }
+        }
+        unsafe {
+            assert_eq!(DELETE_LOCAL_REF_CALLS, 1);
+            assert_eq!(DELETE_LOCAL_REF_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(DELETE_LOCAL_REF_OBECT_ARGUMENT, raw_object);
+        }
+    }
+}
