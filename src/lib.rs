@@ -1,6 +1,6 @@
 //! # A library for safe interoperation between Rust and Java
 //!
-//! `rust-jni`(index.html) provides tools to safely make calls from Rust to Java
+//! [`rust-jni`](index.html) provides tools to safely make calls from Rust to Java
 //! and from Java to Rust using
 //! [JNI](https://docs.oracle.com/javase/10/docs/specs/jni/index.html).
 //!
@@ -24,5 +24,5 @@ mod version;
 
 pub use attach_arguments::AttachArguments;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
-pub use jni::{Exception, JavaVM, JniEnv, JniError, JniResult, NoException};
+pub use jni::{Exception, JavaType, JavaVM, JniEnv, JniError, JniResult, NoException};
 pub use version::JniVersion;

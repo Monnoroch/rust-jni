@@ -1,3 +1,4 @@
+use jni::ToJni;
 use jni_sys;
 use raw::*;
 use std::ffi::{CStr, CString};
@@ -434,7 +435,8 @@ pub fn to_raw<'a, 'b, 'c: 'a + 'b>(
             version: version::to_raw(arguments.version),
             nOptions: options_buffer.len() as i32,
             options: options_buffer.as_mut_ptr(),
-            ignoreUnrecognized: from_bool(arguments.ignore_unrecognized),
+            // Safe because `bool` conversion is safe internally.
+            ignoreUnrecognized: unsafe { bool::__to_jni(&arguments.ignore_unrecognized) },
         },
         _buffer: PhantomData::<&'c Vec<CString>>,
     }
@@ -717,19 +719,10 @@ pub mod tests {
     }
 }
 
-// TODO: move to a separate library.
-pub fn to_bool(value: jni_sys::jboolean) -> bool {
+fn to_bool(value: jni_sys::jboolean) -> bool {
     match value {
         jni_sys::JNI_TRUE => true,
         jni_sys::JNI_FALSE => false,
         value => panic!("Unexpected jboolean value {}", value),
-    }
-}
-
-// TODO: move to a separate library.
-fn from_bool(value: bool) -> jni_sys::jboolean {
-    match value {
-        true => jni_sys::JNI_TRUE,
-        false => jni_sys::JNI_FALSE,
     }
 }
