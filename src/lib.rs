@@ -26,3 +26,9 @@ pub use attach_arguments::AttachArguments;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
 pub use jni::{Exception, JavaType, JavaVM, JniEnv, JniError, JniResult, NoException};
 pub use version::JniVersion;
+
+pub mod java {
+    pub mod lang {
+        pub use jni::Object;
+    }
+}
