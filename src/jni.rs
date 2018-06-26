@@ -168,6 +168,20 @@ pub struct Exception<'env> {
     _env: PhantomData<JniEnv<'env>>,
 }
 
+impl<'env> Exception<'env> {
+    /// Exchange a [`NoException`](struct.NoException.html) for an
+    /// [`Exception`](struct.Exception.html) token. This means that [`rust-jni`](index.html)
+    /// no onger can prove that there is no pending exception.
+    /// This action is safe as it doesn't allow the caller to call JNI methods that
+    /// mustn't be called when there is a pending exception.
+    fn new<'a>(_env: &'a JniEnv<'a>, _token: NoException) -> Exception<'a> {
+        Exception {
+            _token: (),
+            _env: PhantomData::<JniEnv>,
+        }
+    }
+}
+
 // [`Exception`](struct.Exception.html) can't be passed between threads.
 // TODO(https://github.com/rust-lang/rust/issues/13231): enable when !Send is stable.
 // impl<'env> !Send for NoException<'env> {}
@@ -2337,14 +2351,15 @@ impl<'env> Drop for Object<'env> {
 }
 
 #[cfg(test)]
+fn test_object<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Object<'env> {
+    Object { env, raw_object }
+}
+
+#[cfg(test)]
 mod object_tests {
     use super::*;
     use std::mem;
     use testing::*;
-
-    fn test_object<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Object<'env> {
-        Object { env, raw_object }
-    }
 
     #[test]
     fn raw_object() {
@@ -2464,5 +2479,263 @@ mod object_tests {
             assert_eq!(DELETE_LOCAL_REF_ENV_ARGUMENT, raw_jni_env);
             assert_eq!(DELETE_LOCAL_REF_OBECT_ARGUMENT, raw_object);
         }
+    }
+}
+
+/// A type representing a Java
+/// [`Throwable`](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html).
+// TODO: examples.
+pub struct Throwable<'env> {
+    object: Object<'env>,
+}
+
+impl<'env> Throwable<'env> {
+    /// Throw the exception. Transfers ownership of the object to Java.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#throw)
+    pub fn throw(self, token: NoException) -> Exception<'env> {
+        // Safe because the argument is ensured to be correct references by construction.
+        let status = unsafe {
+            call_jni_method!(self.env(), Throw, self.raw_object() as jni_sys::jthrowable)
+        };
+        // Can't really handle failing throwing an exception.
+        if status != jni_sys::JNI_OK {
+            panic!("Throwing an exception has failed with status {}.", status);
+        }
+        Exception::new(self.env(), token)
+    }
+}
+
+/// Make [`Throwable`](struct.Throwable.html) mappable to
+/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+impl<'a> JavaType for Throwable<'a> {
+    #[doc(hidden)]
+    type __JniType = jni_sys::jobject;
+
+    #[doc(hidden)]
+    fn __signature() -> &'static str {
+        concat!("L", "java/lang", "/", stringify!(Throwable), ";")
+    }
+}
+
+/// Make [`Throwable`](struct.Throwable.html) convertible to
+/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+impl<'a> ToJni for Throwable<'a> {
+    unsafe fn __to_jni(&self) -> Self::__JniType {
+        self.raw_object()
+    }
+}
+
+/// Make [`Throwable`](struct.Throwable.html) convertible from
+/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+impl<'env> FromJni<'env> for Throwable<'env> {
+    unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
+        Self {
+            object: Object::__from_jni(env, value),
+        }
+    }
+}
+
+/// Allow Java object to be used in place of its superclass.
+impl<'env> ::std::ops::Deref for Throwable<'env> {
+    type Target = Object<'env>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.object
+    }
+}
+
+#[cfg(test)]
+mod throwable_tests {
+    use super::*;
+    use std::mem;
+    use testing::*;
+
+    fn test_throwable<'env>(
+        env: &'env JniEnv<'env>,
+        raw_object: jni_sys::jobject,
+    ) -> Throwable<'env> {
+        Throwable {
+            object: test_object(env, raw_object),
+        }
+    }
+
+    #[test]
+    fn raw_object() {
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, ptr::null_mut());
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let object = test_throwable(&env, raw_object);
+        unsafe {
+            assert_eq!(object.raw_object(), raw_object);
+        }
+        mem::forget(object);
+    }
+
+    #[test]
+    fn env() {
+        let vm = test_vm(ptr::null_mut());
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let object = test_throwable(&env, raw_object);
+        unsafe {
+            assert_eq!(object.env().raw_env(), jni_env);
+        }
+        mem::forget(object);
+    }
+
+    #[test]
+    fn signature() {
+        assert_eq!(Throwable::__signature(), "Ljava/lang/Throwable;");
+    }
+
+    #[test]
+    fn to_jni() {
+        let vm = test_vm(ptr::null_mut());
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let object = test_throwable(&env, raw_object);
+        unsafe {
+            assert_eq!(object.__to_jni(), raw_object);
+        }
+        mem::forget(object);
+    }
+
+    #[test]
+    fn from_jni() {
+        let vm = test_vm(ptr::null_mut());
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        unsafe {
+            let object = Object::__from_jni(&env, raw_object);
+            assert_eq!(object.raw_object(), raw_object);
+            assert_eq!(object.env().raw_env(), jni_env);
+            mem::forget(object);
+        }
+    }
+
+    #[test]
+    fn to_and_from() {
+        let vm = test_vm(ptr::null_mut());
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let object = test_throwable(&env, raw_object);
+        unsafe {
+            let object = Throwable::__from_jni(&env, object.__to_jni());
+            assert_eq!(object.raw_object(), raw_object);
+            assert_eq!(object.env().raw_env(), jni_env);
+            mem::forget(object);
+        }
+        mem::forget(object);
+    }
+
+    #[test]
+    fn from_and_to() {
+        let vm = test_vm(ptr::null_mut());
+        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        unsafe {
+            let object = Throwable::__from_jni(&env, raw_object);
+            assert_eq!(object.__to_jni(), raw_object);
+            mem::forget(object);
+        }
+    }
+
+    #[test]
+    fn drop() {
+        static mut DELETE_LOCAL_REF_CALLS: i32 = 0;
+        static mut DELETE_LOCAL_REF_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut DELETE_LOCAL_REF_OBECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn delete_local_ref(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+        ) {
+            DELETE_LOCAL_REF_CALLS += 1;
+            DELETE_LOCAL_REF_ENV_ARGUMENT = env;
+            DELETE_LOCAL_REF_OBECT_ARGUMENT = object;
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            DeleteLocalRef: Some(delete_local_ref),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        {
+            let _object = test_throwable(&env, raw_object);
+            unsafe {
+                assert_eq!(DELETE_LOCAL_REF_CALLS, 0);
+            }
+        }
+        unsafe {
+            assert_eq!(DELETE_LOCAL_REF_CALLS, 1);
+            assert_eq!(DELETE_LOCAL_REF_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(DELETE_LOCAL_REF_OBECT_ARGUMENT, raw_object);
+        }
+    }
+
+    #[test]
+    fn throw() {
+        unsafe extern "system" fn delete_local_ref(_: *mut jni_sys::JNIEnv, _: jni_sys::jobject) {}
+        static mut THROW_CALLS: i32 = 0;
+        static mut THROW_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut THROW_OBECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn throw(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+        ) -> jni_sys::jint {
+            THROW_CALLS += 1;
+            THROW_ENV_ARGUMENT = env;
+            THROW_OBECT_ARGUMENT = object;
+            jni_sys::JNI_OK
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            DeleteLocalRef: Some(delete_local_ref),
+            // To not fail during the destructor call which is unavoidable in this test because
+            // the throwable is consumed by the `throw` method.
+            Throw: Some(throw),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let object = test_throwable(&env, raw_object);
+        object.throw(unsafe { NoException::new_raw() });
+        unsafe {
+            assert_eq!(THROW_CALLS, 1);
+            assert_eq!(THROW_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(THROW_OBECT_ARGUMENT, raw_object);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Throwing an exception has failed with status -1.")]
+    fn throw_failed() {
+        unsafe extern "system" fn delete_local_ref(_: *mut jni_sys::JNIEnv, _: jni_sys::jobject) {}
+        unsafe extern "system" fn throw(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jint {
+            jni_sys::JNI_ERR
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            DeleteLocalRef: Some(delete_local_ref),
+            // To not fail during the destructor call which is unavoidable in this test because
+            // the throwable is consumed by the `throw` method.
+            Throw: Some(throw),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object = test_throwable(&env, ptr::null_mut());
+        object.throw(unsafe { NoException::new_raw() });
     }
 }
