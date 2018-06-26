@@ -2448,8 +2448,7 @@ mod object_tests {
     #[test]
     fn to_jni() {
         let vm = test_vm(ptr::null_mut());
-        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, jni_env);
+        let env = test_env(&vm, ptr::null_mut());
         let raw_object = 0x91011 as jni_sys::jobject;
         let object = test_object(&env, raw_object);
         unsafe {
@@ -2491,8 +2490,7 @@ mod object_tests {
     #[test]
     fn from_and_to() {
         let vm = test_vm(ptr::null_mut());
-        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, jni_env);
+        let env = test_env(&vm, ptr::null_mut());
         let raw_object = 0x91011 as jni_sys::jobject;
         unsafe {
             let object = Object::__from_jni(&env, raw_object);
@@ -2666,6 +2664,7 @@ impl<'env> ::std::ops::Deref for Throwable<'env> {
 mod throwable_tests {
     use super::*;
     use std::mem;
+    use std::ops::Deref;
     use testing::*;
 
     fn test_throwable<'env>(
@@ -2678,27 +2677,12 @@ mod throwable_tests {
     }
 
     #[test]
-    fn raw_object() {
+    fn deref_super() {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
-        let raw_object = 0x91011 as jni_sys::jobject;
-        let object = test_throwable(&env, raw_object);
-        unsafe {
-            assert_eq!(object.raw_object(), raw_object);
-        }
-        mem::forget(object);
-    }
-
-    #[test]
-    fn env() {
-        let vm = test_vm(ptr::null_mut());
-        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        let object = test_throwable(&env, raw_object);
-        unsafe {
-            assert_eq!(object.env().raw_env(), jni_env);
-        }
+        let object = test_throwable(&env, ptr::null_mut());
+        // Will not compile if is not deref-able.
+        &object as &Deref<Target = Object>;
         mem::forget(object);
     }
 
@@ -2710,8 +2694,7 @@ mod throwable_tests {
     #[test]
     fn to_jni() {
         let vm = test_vm(ptr::null_mut());
-        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, jni_env);
+        let env = test_env(&vm, ptr::null_mut());
         let raw_object = 0x91011 as jni_sys::jobject;
         let object = test_throwable(&env, raw_object);
         unsafe {
@@ -2753,8 +2736,7 @@ mod throwable_tests {
     #[test]
     fn from_and_to() {
         let vm = test_vm(ptr::null_mut());
-        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, jni_env);
+        let env = test_env(&vm, ptr::null_mut());
         let raw_object = 0x91011 as jni_sys::jobject;
         unsafe {
             let object = Throwable::__from_jni(&env, raw_object);
@@ -2939,6 +2921,7 @@ mod class_tests {
     use super::*;
     use std::ffi::CStr;
     use std::mem;
+    use std::ops::Deref;
     use testing::*;
 
     fn test_class<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Class<'env> {
@@ -2948,27 +2931,12 @@ mod class_tests {
     }
 
     #[test]
-    fn raw_object() {
+    fn deref_super() {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
-        let raw_object = 0x91011 as jni_sys::jobject;
-        let object = test_class(&env, raw_object);
-        unsafe {
-            assert_eq!(object.raw_object(), raw_object);
-        }
-        mem::forget(object);
-    }
-
-    #[test]
-    fn env() {
-        let vm = test_vm(ptr::null_mut());
-        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        let object = test_class(&env, raw_object);
-        unsafe {
-            assert_eq!(object.env().raw_env(), jni_env);
-        }
+        let object = test_class(&env, ptr::null_mut());
+        // Will not compile if is not deref-able.
+        &object as &Deref<Target = Object>;
         mem::forget(object);
     }
 
@@ -2980,8 +2948,7 @@ mod class_tests {
     #[test]
     fn to_jni() {
         let vm = test_vm(ptr::null_mut());
-        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, jni_env);
+        let env = test_env(&vm, ptr::null_mut());
         let raw_object = 0x91011 as jni_sys::jobject;
         let object = test_class(&env, raw_object);
         unsafe {
@@ -3023,8 +2990,7 @@ mod class_tests {
     #[test]
     fn from_and_to() {
         let vm = test_vm(ptr::null_mut());
-        let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, jni_env);
+        let env = test_env(&vm, ptr::null_mut());
         let raw_object = 0x91011 as jni_sys::jobject;
         unsafe {
             let object = Class::__from_jni(&env, raw_object);
