@@ -4,8 +4,6 @@ use java_string::*;
 use jni_sys;
 use raw::*;
 use std::cell::RefCell;
-#[cfg(test)]
-use std::char;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_void};
 use std::ptr;
@@ -1677,76 +1675,55 @@ pub trait JavaMethodSignature<In: ?Sized, Out: ?Sized> {
     fn __signature() -> string::String;
 }
 
-macro_rules! braces {
-    ($name:ident) => {
-        "{}"
-    };
-}
+/// A macro for generating Java class boilerplate for Rust types, whcih is suitable for
+/// `Object` type.
+macro_rules! object_java_class {
+    ($class:ident, $doc:meta) => {
+        #[$doc]
+        impl<'a> JavaType for $class<'a> {
+            #[doc(hidden)]
+            type __JniType = jni_sys::jobject;
 
-macro_rules! peel_fn_impls {
-    () => ();
-    ($type:ident, $jni_type:ident, $($other:ident,)*) => (fn_impls! { $($other,)* });
-}
-
-/// A macro for generating method signatures.
-///
-/// Function arguments must be `ToJni` with `ToJni::__JniType: JniArgumentType`
-/// and the result must be `FromJni`.
-macro_rules! fn_impls {
-    ( $($type:ident, $jni_type:ident,)*) => (
-        impl<'a, $($type, $jni_type,)* Out, T> JavaMethodSignature<($($type,)*), Out> for T
-            where
-                $($type: ToJni<__JniType = $jni_type>,)*
-                $($jni_type: JniArgumentType,)*
-                Out: FromJni<'a>,
-                T: FnOnce($($type,)*) -> Out + ?Sized,
-        {
-            fn __signature() -> string::String {
-                format!(concat!("(", $(braces!($type), )* "){}"), $(<$type>::__signature(),)* Out::__signature())
+            #[doc(hidden)]
+            fn __signature() -> &'static str {
+                concat!("L", "java/lang", "/", stringify!($class), ";")
             }
         }
 
-        peel_fn_impls! { $($type, $jni_type,)* }
-    );
+        /// Make this class convertible to
+        /// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+        impl<'a> ToJni for $class<'a> {
+            unsafe fn __to_jni(&self) -> Self::__JniType {
+                self.raw_object()
+            }
+        }
+    };
 }
 
-fn_impls! {
-    T0, T0Jni,
-    T1, T1Jni,
-    T2, T2Jni,
-    T3, T3Jni,
-    T4, T4Jni,
-    T5, T5Jni,
-    T6, T6Jni,
-    T7, T7Jni,
-    T8, T8Jni,
-    T9, T9Jni,
-    T10, T10Jni,
-    T11, T11Jni,
-}
+/// A macro for generating Java class boilerplate for Rust types, except for the `Object` type.
+macro_rules! java_class {
+    ($class:ident, $doc:meta) => {
+        object_java_class!($class, $doc);
 
-#[cfg(test)]
-mod method_signature_tests {
-    use super::*;
+        /// Make this class convertible from
+        /// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+        impl<'env> FromJni<'env> for $class<'env> {
+            unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
+                Self {
+                    object: Object::__from_jni(env, value),
+                }
+            }
+        }
 
-    #[test]
-    fn no_arguments() {
-        assert_eq!(<fn()>::__signature(), "()V");
-    }
+        /// Allow Java object to be used in place of its superclass.
+        impl<'env> ::std::ops::Deref for $class<'env> {
+            type Target = Object<'env>;
 
-    #[test]
-    fn one_argument() {
-        assert_eq!(<fn(i32) -> i64>::__signature(), "(I)J");
-    }
-
-    #[test]
-    fn many_arguments() {
-        assert_eq!(
-            <fn(i32, f64, u8, f64, bool, i16, i64, i32, i32, i32, i32, char) -> bool>::__signature(
-            ),
-            "(IDBDZSJIIIIC)Z"
-        );
-    }
+            fn deref(&self) -> &Self::Target {
+                &self.object
+            }
+        }
+    };
 }
 
 /// A type representing the
@@ -1798,25 +1775,11 @@ impl<'env> Object<'env> {
     }
 }
 
-/// Make [`Object`](struct.Object.html) mappable to
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'a> JavaType for Object<'a> {
-    #[doc(hidden)]
-    type __JniType = jni_sys::jobject;
-
-    #[doc(hidden)]
-    fn __signature() -> &'static str {
-        concat!("L", "java/lang", "/", stringify!(Object), ";")
-    }
-}
-
-/// Make [`Object`](struct.Object.html) convertible to
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'a> ToJni for Object<'a> {
-    unsafe fn __to_jni(&self) -> Self::__JniType {
-        self.raw_object()
-    }
-}
+object_java_class!(
+    Object,
+    doc = "Make [`Object`](struct.Object.html) mappable to \
+           [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html)."
+);
 
 /// Make [`Object`](struct.Object.html) convertible from
 /// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
@@ -2055,44 +2018,11 @@ impl<'env> Throwable<'env> {
     }
 }
 
-/// Make [`Throwable`](struct.Throwable.html) mappable to
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'a> JavaType for Throwable<'a> {
-    #[doc(hidden)]
-    type __JniType = jni_sys::jobject;
-
-    #[doc(hidden)]
-    fn __signature() -> &'static str {
-        concat!("L", "java/lang", "/", stringify!(Throwable), ";")
-    }
-}
-
-/// Make [`Throwable`](struct.Throwable.html) convertible to
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'a> ToJni for Throwable<'a> {
-    unsafe fn __to_jni(&self) -> Self::__JniType {
-        self.raw_object()
-    }
-}
-
-/// Make [`Throwable`](struct.Throwable.html) convertible from
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'env> FromJni<'env> for Throwable<'env> {
-    unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
-        Self {
-            object: Object::__from_jni(env, value),
-        }
-    }
-}
-
-/// Allow Java object to be used in place of its superclass.
-impl<'env> ::std::ops::Deref for Throwable<'env> {
-    type Target = Object<'env>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.object
-    }
-}
+java_class!(
+    Throwable,
+    doc = "Make [`Throwable`](struct.Throwable.html) mappable to \
+           [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html)."
+);
 
 #[cfg(test)]
 mod throwable_tests {
@@ -2311,44 +2241,11 @@ impl<'env> Class<'env> {
     }
 }
 
-/// Make [`Class`](struct.Class.html) mappable to
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'a> JavaType for Class<'a> {
-    #[doc(hidden)]
-    type __JniType = jni_sys::jobject;
-
-    #[doc(hidden)]
-    fn __signature() -> &'static str {
-        concat!("L", "java/lang", "/", stringify!(Class), ";")
-    }
-}
-
-/// Make [`Class`](struct.Class.html) convertible to
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'a> ToJni for Class<'a> {
-    unsafe fn __to_jni(&self) -> Self::__JniType {
-        self.raw_object()
-    }
-}
-
-/// Make [`Class`](struct.Class.html) convertible from
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'env> FromJni<'env> for Class<'env> {
-    unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
-        Self {
-            object: Object::__from_jni(env, value),
-        }
-    }
-}
-
-/// Allow Java object to be used in place of its superclass.
-impl<'env> ::std::ops::Deref for Class<'env> {
-    type Target = Object<'env>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.object
-    }
-}
+java_class!(
+    Class,
+    doc = "Make [`Class`](struct.Class.html) mappable to \
+           [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html)."
+);
 
 #[cfg(test)]
 mod class_tests {
@@ -2533,44 +2430,11 @@ pub struct String<'env> {
     object: Object<'env>,
 }
 
-/// Make [`String`](struct.String.html) mappable to
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'a> JavaType for String<'a> {
-    #[doc(hidden)]
-    type __JniType = jni_sys::jobject;
-
-    #[doc(hidden)]
-    fn __signature() -> &'static str {
-        concat!("L", "java/lang", "/", stringify!(String), ";")
-    }
-}
-
-/// Make [`String`](struct.String.html) convertible to
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'a> ToJni for String<'a> {
-    unsafe fn __to_jni(&self) -> Self::__JniType {
-        self.raw_object()
-    }
-}
-
-/// Make [`String`](struct.String.html) convertible from
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'env> FromJni<'env> for String<'env> {
-    unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
-        Self {
-            object: Object::__from_jni(env, value),
-        }
-    }
-}
-
-/// Allow Java object to be used in place of its superclass.
-impl<'env> ::std::ops::Deref for String<'env> {
-    type Target = Object<'env>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.object
-    }
-}
+java_class!(
+    String,
+    doc = "Make [`String`](struct.String.html) mappable to \
+           [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html)."
+);
 
 #[cfg(test)]
 mod string_tests {
