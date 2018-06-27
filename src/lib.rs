@@ -31,6 +31,7 @@ pub mod java {
     pub mod lang {
         pub use jni::Class;
         pub use jni::Object;
+        pub use jni::String;
         pub use jni::Throwable;
     }
 }
