@@ -18,6 +18,7 @@ mod attach_arguments;
 mod init_arguments;
 mod java_string;
 mod jni;
+mod methods;
 mod primitives;
 mod raw;
 mod testing;
