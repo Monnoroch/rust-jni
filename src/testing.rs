@@ -21,6 +21,8 @@ pub fn empty_raw_java_vm() -> jni_sys::JNIInvokeInterface_ {
 
 #[cfg(test)]
 pub fn empty_raw_jni_env() -> jni_sys::JNINativeInterface_ {
+    unsafe extern "system" fn delete_local_ref(_: *mut jni_sys::JNIEnv, _: jni_sys::jobject) {}
+
     jni_sys::JNINativeInterface_ {
         reserved0: ptr::null_mut(),
         reserved1: ptr::null_mut(),
@@ -45,7 +47,8 @@ pub fn empty_raw_jni_env() -> jni_sys::JNINativeInterface_ {
         PopLocalFrame: None,
         NewGlobalRef: None,
         DeleteGlobalRef: None,
-        DeleteLocalRef: None,
+        // To not fail during the destructor call.
+        DeleteLocalRef: Some(delete_local_ref),
         IsSameObject: None,
         NewLocalRef: None,
         EnsureLocalCapacity: None,
