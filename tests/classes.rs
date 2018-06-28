@@ -12,6 +12,13 @@ mod classes {
         let token = env.token();
 
         let string_class = java::lang::Class::find(&env, "java/lang/String", &token).unwrap();
+        assert!(
+            string_class
+                .clone(&token)
+                .unwrap()
+                .is_same_as(&string_class, &token)
+        );
+
         let string_class_from_string = java::lang::String::new(&env, "test-string", &token)
             .unwrap()
             .class(&token);
