@@ -142,6 +142,12 @@ impl<'env> NoException<'env> {
     unsafe fn clone(&self) -> Self {
         Self::new_raw()
     }
+
+    #[cfg(test)]
+    fn test<'a>() -> NoException<'a> {
+        // Safe because only used for unit-testing.
+        unsafe { Self::new_raw() }
+    }
 }
 
 // [`NoException`](struct.NoException.html) can't be passed between threads.
@@ -1778,6 +1784,40 @@ impl<'env> Object<'env> {
         unsafe { Class::__from_jni(self.env, raw_java_class) }
     }
 
+    /// Compare with another Java object by reference.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#issameobject)
+    pub fn is_same_as(&self, other: &Object, _token: &NoException) -> bool {
+        // Safe because arguments are ensured to be correct references by construction.
+        let same = unsafe {
+            call_jni_method!(
+                self.env(),
+                IsSameObject,
+                self.raw_object(),
+                other.raw_object()
+            )
+        };
+        // Safe because `bool` conversion is safe internally.
+        unsafe { bool::__from_jni(self.env(), same) }
+    }
+
+    /// Check if the object is an instance of the class.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#isinstanceof)
+    pub fn is_instance_of(&self, class: &Class, _token: &NoException) -> bool {
+        // Safe because arguments are ensured to be correct references by construction.
+        let is_instance = unsafe {
+            call_jni_method!(
+                self.env(),
+                IsInstanceOf,
+                self.raw_object(),
+                class.raw_object()
+            )
+        };
+        // Safe because `bool` conversion is safe internally.
+        unsafe { bool::__from_jni(self.env(), is_instance) }
+    }
+
     /// Construct from a raw pointer. Unsafe because an invalid pointer may be passed
     /// as the argument.
     /// Unsafe because an incorrect object reference can be passed.
@@ -1969,7 +2009,7 @@ mod object_tests {
         unsafe {
             GET_OBJECT_CLASS_RESULT = raw_class;
         }
-        let class = object.class(&unsafe { NoException::new_raw() });
+        let class = object.class(&NoException::test());
         unsafe {
             assert_eq!(class.raw_object(), raw_class);
             assert_eq!(class.env().raw_env(), raw_jni_env);
@@ -1996,7 +2036,123 @@ mod object_tests {
         let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
         let env = test_env(&vm, raw_jni_env);
         let object = test_object(&env, ptr::null_mut());
-        object.class(&unsafe { NoException::new_raw() });
+        object.class(&NoException::test());
+    }
+
+    #[test]
+    fn is_same_as_same() {
+        static mut IS_SAME_AS_CALLS: i32 = 0;
+        static mut IS_SAME_AS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut IS_SAME_AS_OBJECT1_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut IS_SAME_AS_OBJECT2_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn is_same_object(
+            env: *mut jni_sys::JNIEnv,
+            object1: jni_sys::jobject,
+            object2: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            IS_SAME_AS_CALLS += 1;
+            IS_SAME_AS_ENV_ARGUMENT = env;
+            IS_SAME_AS_OBJECT1_ARGUMENT = object1;
+            IS_SAME_AS_OBJECT2_ARGUMENT = object2;
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            IsSameObject: Some(is_same_object),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object1 = 0x91011 as jni_sys::jobject;
+        let raw_object2 = 0x1234 as jni_sys::jobject;
+        let object1 = test_object(&env, raw_object1);
+        let object2 = test_object(&env, raw_object2);
+        assert!(object1.is_same_as(&object2, &NoException::test()));
+        unsafe {
+            assert_eq!(IS_SAME_AS_CALLS, 1);
+            assert_eq!(IS_SAME_AS_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(IS_SAME_AS_OBJECT1_ARGUMENT, raw_object1);
+            assert_eq!(IS_SAME_AS_OBJECT2_ARGUMENT, raw_object2);
+        }
+    }
+
+    #[test]
+    fn is_same_as_not_same() {
+        unsafe extern "system" fn is_same_object(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            IsSameObject: Some(is_same_object),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object1 = test_object(&env, ptr::null_mut());
+        let object2 = test_object(&env, ptr::null_mut());
+        assert!(!object1.is_same_as(&object2, &NoException::test()));
+    }
+
+    #[test]
+    fn is_instance_of() {
+        static mut IS_INSTANCE_OF_CALLS: i32 = 0;
+        static mut IS_INSTANCE_OF_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut IS_INSTANCE_OF_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut IS_INSTANCE_OF_CLASS_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn is_instance_of(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+            class: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            IS_INSTANCE_OF_CALLS += 1;
+            IS_INSTANCE_OF_ENV_ARGUMENT = env;
+            IS_INSTANCE_OF_OBJECT_ARGUMENT = object;
+            IS_INSTANCE_OF_CLASS_ARGUMENT = class;
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            IsInstanceOf: Some(is_instance_of),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let raw_class = 0x1234 as jni_sys::jobject;
+        let object = test_object(&env, raw_object);
+        let class = test_class(&env, raw_class);
+        assert!(object.is_instance_of(&class, &NoException::test()));
+        unsafe {
+            assert_eq!(IS_INSTANCE_OF_CALLS, 1);
+            assert_eq!(IS_INSTANCE_OF_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(IS_INSTANCE_OF_OBJECT_ARGUMENT, raw_object);
+            assert_eq!(IS_INSTANCE_OF_CLASS_ARGUMENT, raw_class);
+        }
+    }
+
+    #[test]
+    fn is_not_instance_of() {
+        unsafe extern "system" fn is_instance_of(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            IsInstanceOf: Some(is_instance_of),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object = test_object(&env, ptr::null_mut());
+        let class = test_class(&env, ptr::null_mut());
+        assert!(!object.is_instance_of(&class, &NoException::test()));
     }
 }
 
@@ -2175,7 +2331,7 @@ mod throwable_tests {
         let env = test_env(&vm, raw_jni_env);
         let raw_object = 0x91011 as jni_sys::jobject;
         let object = test_throwable(&env, raw_object);
-        object.throw(unsafe { NoException::new_raw() });
+        object.throw(NoException::test());
         unsafe {
             assert_eq!(THROW_CALLS, 1);
             assert_eq!(THROW_ENV_ARGUMENT, raw_jni_env);
@@ -2200,7 +2356,7 @@ mod throwable_tests {
         let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
         let env = test_env(&vm, raw_jni_env);
         let object = test_throwable(&env, ptr::null_mut());
-        object.throw(unsafe { NoException::new_raw() });
+        object.throw(NoException::test());
     }
 }
 
@@ -2254,18 +2410,19 @@ java_class!(
 );
 
 #[cfg(test)]
+fn test_class<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Class<'env> {
+    Class {
+        object: test_object(env, raw_object),
+    }
+}
+
+#[cfg(test)]
 mod class_tests {
     use super::*;
     use std::ffi::CStr;
     use std::mem;
     use std::ops::Deref;
     use testing::*;
-
-    fn test_class<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Class<'env> {
-        Class {
-            object: test_object(env, raw_object),
-        }
-    }
 
     #[test]
     fn deref_super() {
@@ -2399,7 +2556,7 @@ mod class_tests {
             FIND_CLASS_RESULT = raw_object;
         }
 
-        let class = Class::find(&env, "test-class", &unsafe { NoException::new_raw() }).unwrap();
+        let class = Class::find(&env, "test-class", &NoException::test()).unwrap();
         unsafe {
             assert_eq!(class.raw_object(), raw_object);
             assert_eq!(class.env().raw_env(), raw_jni_env);
@@ -2443,8 +2600,7 @@ mod class_tests {
         unsafe {
             EXCEPTION_OCCURED_RESULT = raw_exception;
         }
-        let exception =
-            Class::find(&env, "test-class", &unsafe { NoException::new_raw() }).unwrap_err();
+        let exception = Class::find(&env, "test-class", &NoException::test()).unwrap_err();
         unsafe {
             assert_eq!(exception.raw_object(), raw_exception);
             assert_eq!(exception.env().raw_env(), raw_jni_env);
@@ -2731,7 +2887,7 @@ mod string_tests {
             NEW_STRING_RESULT = raw_object;
         }
 
-        let string = String::empty(&env, &unsafe { NoException::new_raw() }).unwrap();
+        let string = String::empty(&env, &NoException::test()).unwrap();
         unsafe {
             assert_eq!(string.raw_object(), raw_object);
             assert_eq!(string.env().raw_env(), raw_jni_env);
@@ -2776,7 +2932,7 @@ mod string_tests {
         unsafe {
             EXCEPTION_OCCURED_RESULT = raw_exception;
         }
-        let exception = String::empty(&env, &unsafe { NoException::new_raw() }).unwrap_err();
+        let exception = String::empty(&env, &NoException::test()).unwrap_err();
         unsafe {
             assert_eq!(exception.raw_object(), raw_exception);
             assert_eq!(exception.env().raw_env(), raw_jni_env);
@@ -2815,7 +2971,7 @@ mod string_tests {
             NEW_STRING_RESULT = raw_object;
         }
 
-        let string = String::new(&env, "", &unsafe { NoException::new_raw() }).unwrap();
+        let string = String::new(&env, "", &NoException::test()).unwrap();
         unsafe {
             assert_eq!(string.raw_object(), raw_object);
             assert_eq!(string.env().raw_env(), raw_jni_env);
@@ -2860,7 +3016,7 @@ mod string_tests {
         unsafe {
             EXCEPTION_OCCURED_RESULT = raw_exception;
         }
-        let exception = String::new(&env, "", &unsafe { NoException::new_raw() }).unwrap_err();
+        let exception = String::new(&env, "", &NoException::test()).unwrap_err();
         unsafe {
             assert_eq!(exception.raw_object(), raw_exception);
             assert_eq!(exception.env().raw_env(), raw_jni_env);
@@ -2900,7 +3056,7 @@ mod string_tests {
             NEW_STRING_RESULT = raw_object;
         }
 
-        let string = String::new(&env, "test-string", &unsafe { NoException::new_raw() }).unwrap();
+        let string = String::new(&env, "test-string", &NoException::test()).unwrap();
         unsafe {
             assert_eq!(string.raw_object(), raw_object);
             assert_eq!(string.env().raw_env(), raw_jni_env);
@@ -2944,8 +3100,7 @@ mod string_tests {
         unsafe {
             EXCEPTION_OCCURED_RESULT = raw_exception;
         }
-        let exception =
-            String::new(&env, "test-string", &unsafe { NoException::new_raw() }).unwrap_err();
+        let exception = String::new(&env, "test-string", &NoException::test()).unwrap_err();
         unsafe {
             assert_eq!(exception.raw_object(), raw_exception);
             assert_eq!(exception.env().raw_env(), raw_jni_env);
@@ -2984,7 +3139,7 @@ mod string_tests {
         }
 
         let string = unsafe { String::from_raw(&env, raw_object) };
-        assert_eq!(string.len(&unsafe { NoException::new_raw() }), 17);
+        assert_eq!(string.len(&NoException::test()), 17);
         unsafe {
             assert_eq!(GET_STRING_LENGTH_CALLS, 1);
             assert_eq!(GET_STRING_LENGTH_ENV_ARGUMENT, raw_jni_env);
@@ -3020,7 +3175,7 @@ mod string_tests {
         }
 
         let string = unsafe { String::from_raw(&env, raw_object) };
-        assert_eq!(string.size(&unsafe { NoException::new_raw() }), 18);
+        assert_eq!(string.size(&NoException::test()), 18);
         unsafe {
             assert_eq!(GET_STRING_SIZE_CALLS, 1);
             assert_eq!(GET_STRING_SIZE_ENV_ARGUMENT, raw_jni_env);
@@ -3094,10 +3249,7 @@ mod string_tests {
         }
 
         let string = unsafe { String::from_raw(&env, raw_object) };
-        assert_eq!(
-            string.as_string(&unsafe { NoException::new_raw() }),
-            "test-string"
-        );
+        assert_eq!(string.as_string(&NoException::test()), "test-string");
         unsafe {
             assert_eq!(GET_STRING_LENGTH_CALLS, 1);
             assert_eq!(GET_STRING_LENGTH_ENV_ARGUMENT, raw_jni_env);
@@ -3153,7 +3305,7 @@ mod with_checked_exception_tests {
         };
         let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
         let env = test_env(&vm, raw_jni_env);
-        let result = with_checked_exception(&env, &unsafe { NoException::new_raw() }, |_| unsafe {
+        let result = with_checked_exception(&env, &NoException::test(), |_| unsafe {
             Ok((17, NoException::new_raw()))
         }).unwrap();
         assert_eq!(result, 17);
@@ -3187,11 +3339,9 @@ mod with_checked_exception_tests {
         unsafe {
             EXCEPTION_OCCURED_RESULT = raw_exception;
         }
-        let exception = with_checked_exception::<i32, _>(
-            &env,
-            &unsafe { NoException::new_raw() },
-            |_| unsafe { Err(Exception::new_raw()) },
-        ).unwrap_err();
+        let exception = with_checked_exception::<i32, _>(&env, &NoException::test(), |_| unsafe {
+            Err(Exception::new_raw())
+        }).unwrap_err();
         unsafe {
             assert_eq!(exception.raw_object(), raw_exception);
             assert_eq!(exception.env().raw_env(), raw_jni_env);
@@ -3215,7 +3365,7 @@ mod with_checked_exception_tests {
         };
         let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
         let env = test_env(&vm, raw_jni_env);
-        with_checked_exception::<i32, _>(&env, &unsafe { NoException::new_raw() }, |_| unsafe {
+        with_checked_exception::<i32, _>(&env, &NoException::test(), |_| unsafe {
             Err(Exception::new_raw())
         }).unwrap_err();
     }
