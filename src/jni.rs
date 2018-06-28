@@ -1692,8 +1692,10 @@ pub trait JavaMethodSignature<In: ?Sized, Out: ?Sized> {
 /// A macro for generating Java class boilerplate for Rust types, whcih is suitable for
 /// `Object` type.
 macro_rules! object_java_class {
-    ($class:ident, $doc:meta) => {
-        #[$doc]
+    ($class:ident, $link:expr) => {
+        /// Make
+        #[doc = $link]
+        /// mappable to [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
         impl<'a> JavaType for $class<'a> {
             #[doc(hidden)]
             type __JniType = jni_sys::jobject;
@@ -1704,8 +1706,9 @@ macro_rules! object_java_class {
             }
         }
 
-        /// Make this class convertible to
-        /// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+        /// Make
+        #[doc = $link]
+        /// convertible to [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
         impl<'a> ToJni for $class<'a> {
             unsafe fn __to_jni(&self) -> Self::__JniType {
                 self.raw_object()
@@ -1716,11 +1719,12 @@ macro_rules! object_java_class {
 
 /// A macro for generating Java class boilerplate for Rust types, except for the `Object` type.
 macro_rules! java_class {
-    ($class:ident, $doc:meta) => {
-        object_java_class!($class, $doc);
+    ($class:ident, $link:expr) => {
+        object_java_class!($class, $link);
 
-        /// Make this class convertible from
-        /// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+        /// Make
+        #[doc = $link]
+        /// convertible from [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
         impl<'env> FromJni<'env> for $class<'env> {
             unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
                 Self {
@@ -1729,7 +1733,9 @@ macro_rules! java_class {
             }
         }
 
-        /// Allow Java object to be used in place of its superclass.
+        /// Allow
+        #[doc = $link]
+        /// to be used in place of an [`Object`](struct.Object.html).
         impl<'env> ::std::ops::Deref for $class<'env> {
             type Target = Object<'env>;
 
@@ -1739,7 +1745,9 @@ macro_rules! java_class {
         }
 
         impl<'env> $class<'env> {
-            /// Clone the [`Object`](struct.Object.html). This is not a deep clone of the Java object,
+            /// Clone the
+            #[doc = $link]
+            ///. This is not a deep clone of the Java object,
             /// but a Rust-like clone of the value. Since Java objects are reference counted, this will
             /// increment the reference count.
             ///
@@ -1872,11 +1880,7 @@ impl<'env> Object<'env> {
     }
 }
 
-object_java_class!(
-    Object,
-    doc = "Make [`Object`](struct.Object.html) mappable to \
-           [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html)."
-);
+object_java_class!(Object, "[`Object`](struct.Object.html)");
 
 /// Make [`Object`](struct.Object.html) convertible from
 /// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
@@ -2314,11 +2318,7 @@ impl<'env> Throwable<'env> {
     }
 }
 
-java_class!(
-    Throwable,
-    doc = "Make [`Throwable`](struct.Throwable.html) mappable to \
-           [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html)."
-);
+java_class!(Throwable, "[`Throwable`](struct.Throwable.html)");
 
 #[cfg(test)]
 mod throwable_tests {
@@ -2657,11 +2657,7 @@ impl<'env> Class<'env> {
     }
 }
 
-java_class!(
-    Class,
-    doc = "Make [`Class`](struct.Class.html) mappable to \
-           [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html)."
-);
+java_class!(Class, "[`Class`](struct.Class.html)");
 
 #[cfg(test)]
 fn test_class<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Class<'env> {
@@ -3190,11 +3186,7 @@ impl<'env> String<'env> {
     }
 }
 
-java_class!(
-    String,
-    doc = "Make [`String`](struct.String.html) mappable to \
-           [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html)."
-);
+java_class!(String, "[`String`](struct.String.html)");
 
 #[cfg(test)]
 mod string_tests {
