@@ -17,11 +17,14 @@ mod strings {
                 .as_string(&token),
             ""
         );
-        assert_eq!(
-            java::lang::String::new(&env, "test-string", &token)
-                .unwrap()
-                .as_string(&token),
-            "test-string"
-        );
+
+        let string = java::lang::String::new(&env, "test-string", &token).unwrap();
+        assert_eq!(string.as_string(&token), "test-string");
+
+        assert!(string.clone(&token).unwrap().is_same_as(&string, &token));
+        assert!(string.class(&token).is_same_as(
+            &java::lang::Class::find(&env, "java/lang/String", &token).unwrap(),
+            &token
+        ));
     }
 }

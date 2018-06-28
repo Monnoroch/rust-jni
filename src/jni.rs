@@ -1737,6 +1737,27 @@ macro_rules! java_class {
                 &self.object
             }
         }
+
+        impl<'env> $class<'env> {
+            /// Clone the [`Object`](struct.Object.html). This is not a deep clone of the Java object,
+            /// but a Rust-like clone of the value. Since Java objects are reference counted, this will
+            /// increment the reference count.
+            ///
+            /// This method has a different signature from the one in the
+            /// [`Clone`](https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html) trait because
+            /// cloning a Java object is only safe when there is no pending exception and because
+            /// cloning a java object cat throw an exception.
+            ///
+            /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#newlocalref)
+            pub fn clone(&self, token: &NoException<'env>) -> JavaResult<'env, Self>
+            where
+                Self: Sized,
+            {
+                self.object
+                    .clone(token)
+                    .map(|object| Self { object })
+            }
+        }
     };
 }
 
@@ -1816,6 +1837,31 @@ impl<'env> Object<'env> {
         };
         // Safe because `bool` conversion is safe internally.
         unsafe { bool::__from_jni(self.env(), is_instance) }
+    }
+
+    /// Clone the [`Object`](struct.Object.html). This is not a deep clone of the Java object,
+    /// but a Rust-like clone of the value. Since Java objects are reference counted, this will
+    /// increment the reference count.
+    ///
+    /// This method has a different signature from the one in the
+    /// [`Clone`](https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html) trait because
+    /// cloning a Java object is only safe when there is no pending exception and because
+    /// cloning a java object cat throw an exception.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#newlocalref)
+    pub fn clone(&self, token: &NoException<'env>) -> JavaResult<'env, Object<'env>> {
+        with_checked_exception(self.env, token, |token| {
+            // Safe because the argument is ensured to be correct references by construction.
+            let raw_object = unsafe { call_jni_method!(self.env, NewLocalRef, self.raw_object) };
+            // Safe because `NewLocalRef` throws an exception before returning `null`.
+            unsafe { from_nullable(self.env, raw_object, token) }.map(|(raw_object, token)| {
+                (
+                    // Safe because the argument is a valid class reference.
+                    unsafe { Self::from_raw(self.env, raw_object) },
+                    token,
+                )
+            })
+        })
     }
 
     /// Construct from a raw pointer. Unsafe because an invalid pointer may be passed
@@ -2154,6 +2200,91 @@ mod object_tests {
         let class = test_class(&env, ptr::null_mut());
         assert!(!object.is_instance_of(&class, &NoException::test()));
     }
+
+    #[test]
+    fn clone() {
+        static mut NEW_LOCAL_REF_CALLS: i32 = 0;
+        static mut NEW_LOCAL_REF_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut NEW_LOCAL_REF_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut NEW_LOCAL_REF_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn new_local_ref(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+        ) -> jni_sys::jobject {
+            NEW_LOCAL_REF_CALLS += 1;
+            NEW_LOCAL_REF_ENV_ARGUMENT = env;
+            NEW_LOCAL_REF_OBJECT_ARGUMENT = object;
+            NEW_LOCAL_REF_RESULT
+        }
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            NewLocalRef: Some(new_local_ref),
+            ..empty_raw_jni_env()
+        };
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object1 = 0x91011 as jni_sys::jobject;
+        let raw_object2 = 0x1234 as jni_sys::jobject;
+        let object = test_object(&env, raw_object1);
+        unsafe {
+            NEW_LOCAL_REF_RESULT = raw_object2;
+        }
+        let clone = object.clone(&NoException::test()).unwrap();
+        unsafe {
+            assert_eq!(clone.raw_object(), raw_object2);
+            assert_eq!(clone.env().raw_env(), raw_jni_env);
+            assert_eq!(NEW_LOCAL_REF_CALLS, 1);
+            assert_eq!(NEW_LOCAL_REF_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(NEW_LOCAL_REF_OBJECT_ARGUMENT, raw_object1);
+        }
+    }
+
+    #[test]
+    fn clone_null() {
+        unsafe extern "system" fn new_local_ref(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jobject {
+            ptr::null_mut() as jni_sys::jobject
+        }
+        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
+        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
+            EXCEPTION_OCCURED_CALLS += 1;
+            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
+            EXCEPTION_OCCURED_RESULT
+        }
+        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
+        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
+            EXCEPTION_CLEAR_CALLS += 1;
+            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            NewLocalRef: Some(new_local_ref),
+            ExceptionOccurred: Some(exception_occured),
+            ExceptionClear: Some(exception_clear),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_exception = 0x1234 as jni_sys::jobject;
+        let object = test_object(&env, ptr::null_mut());
+        unsafe {
+            EXCEPTION_OCCURED_RESULT = raw_exception;
+        }
+        let exception = object.clone(&NoException::test()).unwrap_err();
+        unsafe {
+            assert_eq!(exception.raw_object(), raw_exception);
+            assert_eq!(exception.env().raw_env(), raw_jni_env);
+            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
+            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
+            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+        }
+    }
 }
 
 /// A type representing a Java
@@ -2357,6 +2488,91 @@ mod throwable_tests {
         let env = test_env(&vm, raw_jni_env);
         let object = test_throwable(&env, ptr::null_mut());
         object.throw(NoException::test());
+    }
+
+    #[test]
+    fn clone() {
+        static mut NEW_LOCAL_REF_CALLS: i32 = 0;
+        static mut NEW_LOCAL_REF_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut NEW_LOCAL_REF_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut NEW_LOCAL_REF_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn new_local_ref(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+        ) -> jni_sys::jobject {
+            NEW_LOCAL_REF_CALLS += 1;
+            NEW_LOCAL_REF_ENV_ARGUMENT = env;
+            NEW_LOCAL_REF_OBJECT_ARGUMENT = object;
+            NEW_LOCAL_REF_RESULT
+        }
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            NewLocalRef: Some(new_local_ref),
+            ..empty_raw_jni_env()
+        };
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object1 = 0x91011 as jni_sys::jobject;
+        let raw_object2 = 0x1234 as jni_sys::jobject;
+        let object = test_throwable(&env, raw_object1);
+        unsafe {
+            NEW_LOCAL_REF_RESULT = raw_object2;
+        }
+        let clone = object.clone(&NoException::test()).unwrap();
+        unsafe {
+            assert_eq!(clone.raw_object(), raw_object2);
+            assert_eq!(clone.env().raw_env(), raw_jni_env);
+            assert_eq!(NEW_LOCAL_REF_CALLS, 1);
+            assert_eq!(NEW_LOCAL_REF_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(NEW_LOCAL_REF_OBJECT_ARGUMENT, raw_object1);
+        }
+    }
+
+    #[test]
+    fn clone_null() {
+        unsafe extern "system" fn new_local_ref(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jobject {
+            ptr::null_mut() as jni_sys::jobject
+        }
+        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
+        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
+            EXCEPTION_OCCURED_CALLS += 1;
+            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
+            EXCEPTION_OCCURED_RESULT
+        }
+        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
+        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
+            EXCEPTION_CLEAR_CALLS += 1;
+            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            NewLocalRef: Some(new_local_ref),
+            ExceptionOccurred: Some(exception_occured),
+            ExceptionClear: Some(exception_clear),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_exception = 0x1234 as jni_sys::jobject;
+        let object = test_throwable(&env, ptr::null_mut());
+        unsafe {
+            EXCEPTION_OCCURED_RESULT = raw_exception;
+        }
+        let exception = object.clone(&NoException::test()).unwrap_err();
+        unsafe {
+            assert_eq!(exception.raw_object(), raw_exception);
+            assert_eq!(exception.env().raw_env(), raw_jni_env);
+            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
+            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
+            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+        }
     }
 }
 
@@ -2762,6 +2978,91 @@ mod class_tests {
         let env = test_env(&vm, raw_jni_env);
         let class = test_class(&env, ptr::null_mut());
         assert!(class.parent(&NoException::test()).is_none());
+    }
+
+    #[test]
+    fn clone() {
+        static mut NEW_LOCAL_REF_CALLS: i32 = 0;
+        static mut NEW_LOCAL_REF_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut NEW_LOCAL_REF_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut NEW_LOCAL_REF_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn new_local_ref(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+        ) -> jni_sys::jobject {
+            NEW_LOCAL_REF_CALLS += 1;
+            NEW_LOCAL_REF_ENV_ARGUMENT = env;
+            NEW_LOCAL_REF_OBJECT_ARGUMENT = object;
+            NEW_LOCAL_REF_RESULT
+        }
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            NewLocalRef: Some(new_local_ref),
+            ..empty_raw_jni_env()
+        };
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object1 = 0x91011 as jni_sys::jobject;
+        let raw_object2 = 0x1234 as jni_sys::jobject;
+        let object = test_class(&env, raw_object1);
+        unsafe {
+            NEW_LOCAL_REF_RESULT = raw_object2;
+        }
+        let clone = object.clone(&NoException::test()).unwrap();
+        unsafe {
+            assert_eq!(clone.raw_object(), raw_object2);
+            assert_eq!(clone.env().raw_env(), raw_jni_env);
+            assert_eq!(NEW_LOCAL_REF_CALLS, 1);
+            assert_eq!(NEW_LOCAL_REF_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(NEW_LOCAL_REF_OBJECT_ARGUMENT, raw_object1);
+        }
+    }
+
+    #[test]
+    fn clone_null() {
+        unsafe extern "system" fn new_local_ref(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jobject {
+            ptr::null_mut() as jni_sys::jobject
+        }
+        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
+        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
+            EXCEPTION_OCCURED_CALLS += 1;
+            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
+            EXCEPTION_OCCURED_RESULT
+        }
+        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
+        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
+            EXCEPTION_CLEAR_CALLS += 1;
+            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            NewLocalRef: Some(new_local_ref),
+            ExceptionOccurred: Some(exception_occured),
+            ExceptionClear: Some(exception_clear),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_exception = 0x1234 as jni_sys::jobject;
+        let object = test_class(&env, ptr::null_mut());
+        unsafe {
+            EXCEPTION_OCCURED_RESULT = raw_exception;
+        }
+        let exception = object.clone(&NoException::test()).unwrap_err();
+        unsafe {
+            assert_eq!(exception.raw_object(), raw_exception);
+            assert_eq!(exception.env().raw_env(), raw_jni_env);
+            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
+            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
+            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+        }
     }
 }
 
@@ -3434,6 +3735,91 @@ mod string_tests {
         let env = test_env(&vm, raw_jni_env);
         let string = unsafe { String::from_raw(&env, ptr::null_mut()) };
         assert_eq!(string.as_string(&NoException::test()), "");
+    }
+
+    #[test]
+    fn clone() {
+        static mut NEW_LOCAL_REF_CALLS: i32 = 0;
+        static mut NEW_LOCAL_REF_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut NEW_LOCAL_REF_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut NEW_LOCAL_REF_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn new_local_ref(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+        ) -> jni_sys::jobject {
+            NEW_LOCAL_REF_CALLS += 1;
+            NEW_LOCAL_REF_ENV_ARGUMENT = env;
+            NEW_LOCAL_REF_OBJECT_ARGUMENT = object;
+            NEW_LOCAL_REF_RESULT
+        }
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            NewLocalRef: Some(new_local_ref),
+            ..empty_raw_jni_env()
+        };
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object1 = 0x91011 as jni_sys::jobject;
+        let raw_object2 = 0x1234 as jni_sys::jobject;
+        let object = test_string(&env, raw_object1);
+        unsafe {
+            NEW_LOCAL_REF_RESULT = raw_object2;
+        }
+        let clone = object.clone(&NoException::test()).unwrap();
+        unsafe {
+            assert_eq!(clone.raw_object(), raw_object2);
+            assert_eq!(clone.env().raw_env(), raw_jni_env);
+            assert_eq!(NEW_LOCAL_REF_CALLS, 1);
+            assert_eq!(NEW_LOCAL_REF_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(NEW_LOCAL_REF_OBJECT_ARGUMENT, raw_object1);
+        }
+    }
+
+    #[test]
+    fn clone_null() {
+        unsafe extern "system" fn new_local_ref(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jobject {
+            ptr::null_mut() as jni_sys::jobject
+        }
+        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
+        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
+            EXCEPTION_OCCURED_CALLS += 1;
+            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
+            EXCEPTION_OCCURED_RESULT
+        }
+        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
+        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
+            EXCEPTION_CLEAR_CALLS += 1;
+            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            NewLocalRef: Some(new_local_ref),
+            ExceptionOccurred: Some(exception_occured),
+            ExceptionClear: Some(exception_clear),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_exception = 0x1234 as jni_sys::jobject;
+        let object = test_string(&env, ptr::null_mut());
+        unsafe {
+            EXCEPTION_OCCURED_RESULT = raw_exception;
+        }
+        let exception = object.clone(&NoException::test()).unwrap_err();
+        unsafe {
+            assert_eq!(exception.raw_object(), raw_exception);
+            assert_eq!(exception.env().raw_env(), raw_jni_env);
+            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
+            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
+            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+        }
     }
 }
 
