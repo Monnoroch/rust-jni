@@ -1714,6 +1714,15 @@ macro_rules! object_java_class {
                 self.raw_object()
             }
         }
+
+        /// Make
+        #[doc = $link]
+        /// castable to itself.
+        impl<'env> Cast<'env, $class<'env>> for $class<'env> {
+            fn cast<'a>(&'a self) -> &'a $class<'env> {
+                self
+            }
+        }
     };
 }
 
@@ -1744,6 +1753,15 @@ macro_rules! java_class {
             }
         }
 
+        /// Make
+        #[doc = $link]
+        /// castable to [`Object`](struct.Object.html).
+        impl<'env> Cast<'env, Object<'env>> for $class<'env> {
+            fn cast<'a>(&'a self) -> &'a Object<'env> {
+                self
+            }
+        }
+
         impl<'env> $class<'env> {
             /// Clone the
             #[doc = $link]
@@ -1767,6 +1785,17 @@ macro_rules! java_class {
             }
         }
     };
+}
+
+/// A trait for casting Java object types to their superclasses.
+pub trait Cast<'env, As: Cast<'env, Object<'env>>>:
+    JavaType<__JniType = jni_sys::jobject> + ToJni + FromJni<'env>
+{
+    /// Cast the object to itself or one of it's superclasses.
+    ///
+    /// Doesn't actually convert anything, the result is just the same object
+    /// interpreted as one of it's superclasses.
+    fn cast<'a>(&'a self) -> &'a As;
 }
 
 /// A type representing the
@@ -2289,6 +2318,15 @@ mod object_tests {
             assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
         }
     }
+
+    #[test]
+    fn cast() {
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, ptr::null_mut());
+        let object = test_object(&env, ptr::null_mut());
+        assert_eq!(&object as *const _, object.cast() as *const _);
+        mem::forget(object);
+    }
 }
 
 /// A type representing a Java
@@ -2573,6 +2611,16 @@ mod throwable_tests {
             assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
             assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
         }
+    }
+
+    #[test]
+    fn cast() {
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, ptr::null_mut());
+        let object = test_throwable(&env, ptr::null_mut());
+        assert_eq!(&object as *const _, object.cast() as *const _);
+        assert_eq!(&object.object as *const _, object.cast() as *const _);
+        mem::forget(object);
     }
 }
 
@@ -3059,6 +3107,16 @@ mod class_tests {
             assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
             assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
         }
+    }
+
+    #[test]
+    fn cast() {
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, ptr::null_mut());
+        let object = test_class(&env, ptr::null_mut());
+        assert_eq!(&object as *const _, object.cast() as *const _);
+        assert_eq!(&object.object as *const _, object.cast() as *const _);
+        mem::forget(object);
     }
 }
 
@@ -3812,6 +3870,16 @@ mod string_tests {
             assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
             assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
         }
+    }
+
+    #[test]
+    fn cast() {
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, ptr::null_mut());
+        let object = test_string(&env, ptr::null_mut());
+        assert_eq!(&object as *const _, object.cast() as *const _);
+        assert_eq!(&object.object as *const _, object.cast() as *const _);
+        mem::forget(object);
     }
 }
 
