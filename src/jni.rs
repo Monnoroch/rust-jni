@@ -3416,6 +3416,25 @@ mod string_tests {
             assert_eq!(GET_STRING_UTF_REGION_LENGTH_ARGUMENT, 17);
         }
     }
+
+    #[test]
+    fn as_string_empty() {
+        unsafe extern "system" fn get_string_length(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jsize {
+            0
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            GetStringLength: Some(get_string_length),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let string = unsafe { String::from_raw(&env, ptr::null_mut()) };
+        assert_eq!(string.as_string(&NoException::test()), "");
+    }
 }
 
 /// Take a function that produces a [`JniResult`](type.JniResult.html), call it and produce
