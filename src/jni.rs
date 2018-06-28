@@ -2395,6 +2395,44 @@ impl<'env> Class<'env> {
         })
     }
 
+    /// Get the parent class of this class. Will return
+    /// [`None`](https://doc.rust-lang.org/std/option/enum.Option.html#variant.None) for the
+    /// [`Object`](struct.Object.html) class or any interface.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getsuperclass)
+    pub fn parent(&self, _token: &NoException) -> Option<Class<'env>> {
+        // Safe because the argument is ensured to be correct references by construction.
+        let raw_java_class =
+            unsafe { call_jni_method!(self.env(), GetSuperclass, self.raw_object()) };
+        if raw_java_class == ptr::null_mut() {
+            None
+        } else {
+            // Safe because the argument is ensured to be a correct reference.
+            Some(unsafe { Self::__from_jni(self.env(), raw_java_class) })
+        }
+    }
+
+    /// Check if this class is a subtype of the other class.
+    ///
+    /// In Java a class is a subtype of the other class if that other class is a direct or
+    /// an indirect parent of this class or an interface this class or any it's parent is
+    /// implementing.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#isassignablefrom)
+    pub fn is_subtype_of(&self, class: &Class, _token: &NoException) -> bool {
+        // Safe because arguments are ensured to be the correct by construction.
+        let assignable = unsafe {
+            call_jni_method!(
+                self.env(),
+                IsAssignableFrom,
+                self.raw_object() as jni_sys::jclass,
+                class.raw_object() as jni_sys::jclass
+            )
+        };
+        // Safe because `bool` conversion is safe internally.
+        unsafe { bool::__from_jni(self.env(), assignable) }
+    }
+
     /// Unsafe because the argument mught not be a valid class reference.
     unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, raw_class: jni_sys::jclass) -> Class<'a> {
         Class {
@@ -2609,6 +2647,121 @@ mod class_tests {
             assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
             assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
         }
+    }
+
+    #[test]
+    fn is_subtype_of() {
+        static mut IS_ASSIGNABLE_FROM_CALLS: i32 = 0;
+        static mut IS_ASSIGNABLE_FROM_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut IS_ASSIGNABLE_FROM_CLASS1_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut IS_ASSIGNABLE_FROM_CLASS2_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn is_assignable_from(
+            env: *mut jni_sys::JNIEnv,
+            class1: jni_sys::jobject,
+            class2: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            IS_ASSIGNABLE_FROM_CALLS += 1;
+            IS_ASSIGNABLE_FROM_ENV_ARGUMENT = env;
+            IS_ASSIGNABLE_FROM_CLASS1_ARGUMENT = class1;
+            IS_ASSIGNABLE_FROM_CLASS2_ARGUMENT = class2;
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            IsAssignableFrom: Some(is_assignable_from),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_class1 = 0x91011 as jni_sys::jobject;
+        let raw_class2 = 0x1234 as jni_sys::jobject;
+        let class1 = test_class(&env, raw_class1);
+        let class2 = test_class(&env, raw_class2);
+        assert!(class1.is_subtype_of(&class2, &NoException::test()));
+        unsafe {
+            assert_eq!(IS_ASSIGNABLE_FROM_CALLS, 1);
+            assert_eq!(IS_ASSIGNABLE_FROM_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(IS_ASSIGNABLE_FROM_CLASS1_ARGUMENT, raw_class1);
+            assert_eq!(IS_ASSIGNABLE_FROM_CLASS2_ARGUMENT, raw_class2);
+        }
+    }
+
+    #[test]
+    fn is_not_subtype_of() {
+        unsafe extern "system" fn is_assignable_from(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            IsAssignableFrom: Some(is_assignable_from),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let class1 = test_class(&env, ptr::null_mut());
+        let class2 = test_class(&env, ptr::null_mut());
+        assert!(!class1.is_subtype_of(&class2, &NoException::test()));
+    }
+
+    #[test]
+    fn parent() {
+        static mut GET_SUPERCLASS_CALLS: i32 = 0;
+        static mut GET_SUPERCLASS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut GET_SUPERCLASS_CLASS_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut GET_SUPERCLASS_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn get_superclass(
+            env: *mut jni_sys::JNIEnv,
+            class: jni_sys::jobject,
+        ) -> jni_sys::jobject {
+            GET_SUPERCLASS_CALLS += 1;
+            GET_SUPERCLASS_ENV_ARGUMENT = env;
+            GET_SUPERCLASS_CLASS_ARGUMENT = class;
+            GET_SUPERCLASS_RESULT
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            GetSuperclass: Some(get_superclass),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_class1 = 0x91011 as jni_sys::jobject;
+        let raw_class2 = 0x1234 as jni_sys::jobject;
+        let class = test_class(&env, raw_class1);
+        unsafe {
+            GET_SUPERCLASS_RESULT = raw_class2;
+        }
+        let parent = class.parent(&NoException::test()).unwrap();
+        unsafe {
+            assert_eq!(parent.raw_object(), raw_class2);
+            assert_eq!(parent.env().raw_env(), raw_jni_env);
+            assert_eq!(GET_SUPERCLASS_CALLS, 1);
+            assert_eq!(GET_SUPERCLASS_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(GET_SUPERCLASS_CLASS_ARGUMENT, raw_class1);
+        }
+    }
+
+    #[test]
+    fn no_parent() {
+        unsafe extern "system" fn get_superclass(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jobject {
+            ptr::null_mut()
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            GetSuperclass: Some(get_superclass),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let class = test_class(&env, ptr::null_mut());
+        assert!(class.parent(&NoException::test()).is_none());
     }
 }
 

@@ -20,6 +20,20 @@ mod classes {
         let class_class = java::lang::Class::find(&env, "java/lang/Class", &token).unwrap();
         assert!(string_class.is_instance_of(&class_class, &token));
 
+        let throwable_class = java::lang::Class::find(&env, "java/lang/Throwable", &token).unwrap();
+        let exception_class =
+            java::lang::Class::find(&env, "java/lang/RuntimeException", &token).unwrap();
+        assert!(exception_class.is_subtype_of(&throwable_class, &token));
+        assert!(!throwable_class.is_subtype_of(&exception_class, &token));
+        assert!(
+            exception_class
+                .parent(&token)
+                .unwrap()
+                .parent(&token)
+                .unwrap()
+                .is_same_as(&throwable_class, &token)
+        );
+
         // TODO: check the message.
         let _exception = java::lang::Class::find(&env, "java/lang/Invalid", &token).unwrap_err();
     }
