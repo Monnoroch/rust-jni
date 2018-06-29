@@ -7,21 +7,398 @@ use std::ptr;
 
 /// A macro for generating [`JniType`](trait.JniType.html) implementation for primitive types.
 macro_rules! jni_type_trait {
-    ($type:ty) => {
-        impl JniType for $type {}
+    ($type:ty, $method:ident) => {
+        impl JniType for $type {
+            unsafe fn call_method<In: ToJniTuple>(
+                object: &Object,
+                method_id: jni_sys::jmethodID,
+                arguments: In,
+            ) -> Self {
+                In::$method(object, method_id, arguments)
+            }
+        }
     };
 }
 
-jni_type_trait!(jni_sys::jobject);
-jni_type_trait!(());
-jni_type_trait!(jni_sys::jboolean);
-jni_type_trait!(jni_sys::jchar);
-jni_type_trait!(jni_sys::jbyte);
-jni_type_trait!(jni_sys::jshort);
-jni_type_trait!(jni_sys::jint);
-jni_type_trait!(jni_sys::jlong);
-jni_type_trait!(jni_sys::jfloat);
-jni_type_trait!(jni_sys::jdouble);
+jni_type_trait!(jni_sys::jobject, call_object_method);
+jni_type_trait!((), call_void_method);
+jni_type_trait!(jni_sys::jboolean, call_boolean_method);
+jni_type_trait!(jni_sys::jchar, call_char_method);
+jni_type_trait!(jni_sys::jbyte, call_byte_method);
+jni_type_trait!(jni_sys::jshort, call_short_method);
+jni_type_trait!(jni_sys::jint, call_int_method);
+jni_type_trait!(jni_sys::jlong, call_long_method);
+jni_type_trait!(jni_sys::jfloat, call_float_method);
+jni_type_trait!(jni_sys::jdouble, call_double_method);
+
+macro_rules! generate_jni_type_tests {
+    ($module:ident, $jni_type:ty, $default:expr, $result:expr, $jni_method:ident,) => {
+        #[cfg(test)]
+        mod $module {
+            use super::*;
+            use std::mem;
+            use testing::*;
+
+            #[test]
+            fn call_method() {
+                static mut METHOD_CALLS: i32 = 0;
+                static mut METHOD_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+                static mut METHOD_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+                static mut METHOD_METHOD_ARGUMENT: jni_sys::jmethodID = ptr::null_mut();
+                static mut METHOD_ARGUMENT0: jni_sys::jint = 0;
+                static mut METHOD_ARGUMENT1: jni_sys::jdouble = 0.;
+                static mut METHOD_RESULT: $jni_type = $default;
+                type VariadicFn = unsafe extern "C" fn(
+                    env: *mut jni_sys::JNIEnv,
+                    object: jni_sys::jobject,
+                    method_id: jni_sys::jmethodID,
+                    ...
+                ) -> $jni_type;
+                type TestFn = unsafe extern "C" fn(
+                    env: *mut jni_sys::JNIEnv,
+                    object: jni_sys::jobject,
+                    method_id: jni_sys::jmethodID,
+                    argument0: jni_sys::jint,
+                    argument1: jni_sys::jdouble,
+                ) -> $jni_type;
+                unsafe extern "C" fn method(
+                    env: *mut jni_sys::JNIEnv,
+                    object: jni_sys::jobject,
+                    method_id: jni_sys::jmethodID,
+                    argument0: jni_sys::jint,
+                    argument1: jni_sys::jdouble,
+                ) -> $jni_type {
+                    METHOD_CALLS += 1;
+                    METHOD_ENV_ARGUMENT = env;
+                    METHOD_OBJECT_ARGUMENT = object;
+                    METHOD_METHOD_ARGUMENT = method_id;
+                    METHOD_ARGUMENT0 = argument0;
+                    METHOD_ARGUMENT1 = argument1;
+                    METHOD_RESULT
+                }
+                let vm = test_vm(ptr::null_mut());
+                let raw_jni_env = jni_sys::JNINativeInterface_ {
+                    $jni_method: Some(unsafe { mem::transmute::<TestFn, VariadicFn>(method) }),
+                    ..empty_raw_jni_env()
+                };
+                let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+                let env = test_env(&vm, raw_jni_env);
+                let raw_object = 0x91011 as jni_sys::jobject;
+                let object = test_object(&env, raw_object);
+                let method_id = 0x7654 as jni_sys::jmethodID;
+                let arguments = (17 as i32, 19. as f64);
+                let result = $result;
+                unsafe {
+                    METHOD_RESULT = result;
+                    assert_eq!(
+                        <$jni_type>::call_method(&object, method_id, arguments),
+                        result
+                    );
+                    assert_eq!(METHOD_CALLS, 1);
+                    assert_eq!(METHOD_ENV_ARGUMENT, raw_jni_env);
+                    assert_eq!(METHOD_OBJECT_ARGUMENT, raw_object);
+                    assert_eq!(METHOD_METHOD_ARGUMENT, method_id);
+                    assert_eq!(METHOD_ARGUMENT0, arguments.0);
+                    assert_eq!(METHOD_ARGUMENT1, arguments.1);
+                }
+            }
+        }
+    };
+}
+
+generate_jni_type_tests!(jni_type_void_tests, (), (), (), CallVoidMethod,);
+
+generate_jni_type_tests!(
+    jni_type_boolean_tests,
+    jni_sys::jboolean,
+    jni_sys::JNI_FALSE,
+    jni_sys::JNI_TRUE,
+    CallBooleanMethod,
+);
+
+generate_jni_type_tests!(jni_type_char_tests, jni_sys::jchar, 0, 42, CallCharMethod,);
+
+generate_jni_type_tests!(jni_type_byte_tests, jni_sys::jbyte, 0, 42, CallByteMethod,);
+
+generate_jni_type_tests!(
+    jni_type_short_tests,
+    jni_sys::jshort,
+    0,
+    42,
+    CallShortMethod,
+);
+
+generate_jni_type_tests!(jni_type_int_tests, jni_sys::jint, 0, 42, CallIntMethod,);
+
+generate_jni_type_tests!(jni_type_long_tests, jni_sys::jlong, 0, 42, CallLongMethod,);
+
+generate_jni_type_tests!(
+    jni_type_float_tests,
+    jni_sys::jfloat,
+    0.,
+    42.,
+    CallFloatMethod,
+);
+
+generate_jni_type_tests!(
+    jni_type_double_tests,
+    jni_sys::jdouble,
+    0.,
+    42.,
+    CallDoubleMethod,
+);
+
+/// A trait that implements calling JNI variadic functions using a macro to generate
+/// it's instances for tuples of different sizes.
+/// This is essentially the "[`JniType`](trait.JniType.html) for packed argument tuples".
+///
+/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+// TODO: reimplement once Rust has variadic functions or variadic templates.
+#[doc(hidden)]
+pub trait ToJniTuple {
+    unsafe fn call_object_method(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> jni_sys::jobject;
+
+    unsafe fn call_void_method(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> ();
+
+    unsafe fn call_boolean_method(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> jni_sys::jboolean;
+
+    unsafe fn call_char_method(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> jni_sys::jchar;
+
+    unsafe fn call_byte_method(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> jni_sys::jbyte;
+
+    unsafe fn call_short_method(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> jni_sys::jshort;
+
+    unsafe fn call_int_method(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> jni_sys::jint;
+
+    unsafe fn call_long_method(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> jni_sys::jlong;
+
+    unsafe fn call_float_method(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> jni_sys::jfloat;
+
+    unsafe fn call_double_method(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> jni_sys::jdouble;
+}
+
+macro_rules! call_jni_method {
+    ($env:expr, $method:ident, $($argument:expr),*) => {
+        {
+            let raw_env = $env.raw_env();
+            let jni_fn = ((**raw_env).$method).unwrap();
+            jni_fn(raw_env, $($argument),*)
+        }
+    };
+}
+
+macro_rules! jni_method_call {
+    ($name:ident, $type:ty, $method:ident, $return_type:ty, $($argument:ident,)*) => {
+        unsafe fn $name(
+            object: &$type,
+            method_id: jni_sys::jmethodID,
+            arguments: Self
+        ) -> $return_type {
+            #[allow(non_snake_case)]
+            let ($($argument,)*) = arguments;
+            call_jni_method!(
+                object.env(),
+                $method,
+                object.raw_object(),
+                method_id
+                $(,ToJni::__to_jni(&$argument))*
+            )
+        }
+    }
+}
+
+macro_rules! peel_input_tuple_impls {
+    () => ();
+    ($type:ident, $jni_type:ident, $($other:ident,)*) => (input_tuple_impls! { $($other,)* });
+}
+
+macro_rules! input_tuple_impls {
+    ( $($type:ident, $jni_type:ident,)*) => (
+        impl<'a, $($type, $jni_type),*> ToJniTuple for ($($type,)*)
+        where
+            $($type: ToJni<__JniType = $jni_type>,)*
+            $($jni_type: JniArgumentType),*
+        {
+            jni_method_call!(call_object_method, Object, CallObjectMethod, jni_sys::jobject, $($type,)*);
+            jni_method_call!(call_void_method, Object, CallVoidMethod, (), $($type,)*);
+            jni_method_call!(call_boolean_method, Object, CallBooleanMethod, jni_sys::jboolean, $($type,)*);
+            jni_method_call!(call_char_method, Object, CallCharMethod, jni_sys::jchar, $($type,)*);
+            jni_method_call!(call_byte_method, Object, CallByteMethod, jni_sys::jbyte, $($type,)*);
+            jni_method_call!(call_short_method, Object, CallShortMethod, jni_sys::jshort, $($type,)*);
+            jni_method_call!(call_int_method, Object, CallIntMethod, jni_sys::jint, $($type,)*);
+            jni_method_call!(call_long_method, Object, CallLongMethod, jni_sys::jlong, $($type,)*);
+            jni_method_call!(call_float_method, Object, CallFloatMethod, jni_sys::jfloat, $($type,)*);
+            jni_method_call!(call_double_method, Object, CallDoubleMethod, jni_sys::jdouble, $($type,)*);
+        }
+        peel_input_tuple_impls! { $($type, $jni_type,)* }
+    );
+}
+
+input_tuple_impls! {
+    T0, T0Jni,
+    T1, T1Jni,
+    T2, T2Jni,
+    T3, T3Jni,
+    T4, T4Jni,
+    T5, T5Jni,
+    T6, T6Jni,
+    T7, T7Jni,
+    T8, T8Jni,
+    T9, T9Jni,
+    T10, T10Jni,
+    T11, T11Jni,
+}
+
+#[cfg(test)]
+macro_rules! generate_to_jni_tuple_tests {
+    ($jni_type:ty, $default:expr, $result:expr, $method:ident, $jni_method:ident,) => {
+        #[test]
+        fn $method() {
+            static mut METHOD_CALLS: i32 = 0;
+            static mut METHOD_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+            static mut METHOD_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+            static mut METHOD_METHOD_ARGUMENT: jni_sys::jmethodID = ptr::null_mut();
+            static mut METHOD_ARGUMENT0: jni_sys::jint = 0;
+            static mut METHOD_ARGUMENT1: jni_sys::jdouble = 0.;
+            static mut METHOD_RESULT: $jni_type = $default;
+            type VariadicFn = unsafe extern "C" fn(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+                ...
+            ) -> $jni_type;
+            type TestFn = unsafe extern "C" fn(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+                argument0: jni_sys::jint,
+                argument1: jni_sys::jdouble,
+            ) -> $jni_type;
+            unsafe extern "C" fn method(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+                argument0: jni_sys::jint,
+                argument1: jni_sys::jdouble,
+            ) -> $jni_type {
+                METHOD_CALLS += 1;
+                METHOD_ENV_ARGUMENT = env;
+                METHOD_OBJECT_ARGUMENT = object;
+                METHOD_METHOD_ARGUMENT = method_id;
+                METHOD_ARGUMENT0 = argument0;
+                METHOD_ARGUMENT1 = argument1;
+                METHOD_RESULT
+            }
+            let vm = test_vm(ptr::null_mut());
+            let raw_jni_env = jni_sys::JNINativeInterface_ {
+                $jni_method: Some(unsafe { mem::transmute::<TestFn, VariadicFn>(method) }),
+                ..empty_raw_jni_env()
+            };
+            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+            let env = test_env(&vm, raw_jni_env);
+            let raw_object = 0x91011 as jni_sys::jobject;
+            let object = test_object(&env, raw_object);
+            let method_id = 0x7654 as jni_sys::jmethodID;
+            let arguments = (17 as i32, 19. as f64);
+            let result = $result;
+            unsafe {
+                METHOD_RESULT = result;
+                assert_eq!(ToJniTuple::$method(&object, method_id, arguments), result);
+                assert_eq!(METHOD_CALLS, 1);
+                assert_eq!(METHOD_ENV_ARGUMENT, raw_jni_env);
+                assert_eq!(METHOD_OBJECT_ARGUMENT, raw_object);
+                assert_eq!(METHOD_METHOD_ARGUMENT, method_id);
+                assert_eq!(METHOD_ARGUMENT0, arguments.0);
+                assert_eq!(METHOD_ARGUMENT1, arguments.1);
+            }
+        }
+    };
+}
+
+#[cfg(test)]
+mod to_jni_tuple_tests {
+    use super::*;
+    use std::mem;
+    use testing::*;
+
+    generate_to_jni_tuple_tests!(
+        jni_sys::jobject,
+        ptr::null_mut() as jni_sys::jobject,
+        0x1234 as jni_sys::jobject,
+        call_object_method,
+        CallObjectMethod,
+    );
+
+    generate_to_jni_tuple_tests!((), (), (), call_void_method, CallVoidMethod,);
+
+    generate_to_jni_tuple_tests!(
+        jni_sys::jboolean,
+        jni_sys::JNI_FALSE,
+        jni_sys::JNI_TRUE,
+        call_boolean_method,
+        CallBooleanMethod,
+    );
+
+    generate_to_jni_tuple_tests!(jni_sys::jchar, 0, 42, call_char_method, CallCharMethod,);
+
+    generate_to_jni_tuple_tests!(jni_sys::jbyte, 0, 42, call_byte_method, CallByteMethod,);
+
+    generate_to_jni_tuple_tests!(jni_sys::jshort, 0, 42, call_short_method, CallShortMethod,);
+
+    generate_to_jni_tuple_tests!(jni_sys::jint, 0, 42, call_int_method, CallIntMethod,);
+
+    generate_to_jni_tuple_tests!(jni_sys::jlong, 0, 42, call_long_method, CallLongMethod,);
+
+    generate_to_jni_tuple_tests!(jni_sys::jfloat, 0., 42., call_float_method, CallFloatMethod,);
+
+    generate_to_jni_tuple_tests!(
+        jni_sys::jdouble,
+        0.,
+        42.,
+        call_double_method,
+        CallDoubleMethod,
+    );
+}
 
 impl JniArgumentType for jni_sys::jboolean {}
 impl JniArgumentType for jni_sys::jchar {}

@@ -30,5 +30,9 @@ mod strings {
             string.class(&token),
             java::lang::Class::find(&env, "java/lang/String", &token).unwrap()
         );
+        assert_eq!(
+            string.to_string(&token).unwrap().as_string(&token),
+            "test-string"
+        );
     }
 }
