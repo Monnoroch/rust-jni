@@ -41,5 +41,8 @@ mod strings {
                 .as_string(&token),
             "17"
         );
+
+        assert_eq!(ToString::to_string(&string), "test-string");
+        assert!(format!("{:?}", string).contains("string: test-string"));
     }
 }
