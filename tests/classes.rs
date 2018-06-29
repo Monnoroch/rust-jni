@@ -18,6 +18,7 @@ mod classes {
                 .unwrap()
                 .is_same_as(&string_class, &token)
         );
+        assert_eq!(string_class.clone(&token).unwrap(), string_class);
 
         let string_class_from_string = java::lang::String::new(&env, "test-string", &token)
             .unwrap()
