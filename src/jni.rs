@@ -458,14 +458,6 @@ impl JavaVM {
         }
     }
 
-    /// Unsafe because one can pass an invalid `java_vm` pointer.
-    unsafe fn from_ptr(java_vm: *mut jni_sys::JavaVM) -> JavaVM {
-        JavaVM {
-            java_vm,
-            owned: false,
-        }
-    }
-
     /// Get the raw Java VM pointer.
     ///
     /// This function provides low-level access to all of JNI and thus is unsafe.
@@ -579,6 +571,14 @@ impl JavaVM {
         // There is no way to recover from detach failure, except leak or fail.
         if status != jni_sys::JNI_OK {
             panic!("Could not detach the current thread. Status: {}", status)
+        }
+    }
+
+    /// Unsafe because one can pass an invalid `java_vm` pointer.
+    unsafe fn from_ptr(java_vm: *mut jni_sys::JavaVM) -> JavaVM {
+        JavaVM {
+            java_vm,
+            owned: false,
         }
     }
 }

@@ -215,8 +215,12 @@ mod char_tests {
 /// A macro for generating [`JavaType`](trait.JavaType.html) implementations for most primitive
 /// Rust types.
 macro_rules! jni_io_traits {
-    ($type:ty, $jni_type:ty, $signature:expr, $doc:meta) => {
-        #[$doc]
+    ($type:ty, $jni_type:ty, $signature:expr, $link:expr, $jni_sys_link:expr) => {
+        /// Make
+        #[doc = $link]
+        /// mappable to
+        #[doc = $jni_sys_link]
+        ///.
         impl JavaType for $type {
             #[doc(hidden)]
             type __JniType = $jni_type;
@@ -227,7 +231,11 @@ macro_rules! jni_io_traits {
             }
         }
 
-        /// Make type convertible to the JNI type of the same size.
+        /// Make
+        #[doc = $link]
+        /// convertible to
+        #[doc = $jni_sys_link]
+        ///.
         #[doc(hidden)]
         impl ToJni for $type {
             unsafe fn __to_jni(&self) -> Self::__JniType {
@@ -235,7 +243,11 @@ macro_rules! jni_io_traits {
             }
         }
 
-        /// Make type convertible from the JNI type of the same size.
+        /// Make
+        #[doc = $link]
+        /// convertible from
+        #[doc = $jni_sys_link]
+        ///.
         #[doc(hidden)]
         impl<'env> FromJni<'env> for $type {
             unsafe fn __from_jni(_: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
@@ -249,36 +261,36 @@ jni_io_traits!(
     (),
     (),
     "V",
-    doc = "Make [`()`](https://doc.rust-lang.org/std/primitive.unit.html) mappable to \
-           [`()`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jchar.html)."
+    "[`()`](https://doc.rust-lang.org/std/primitive.unit.html)",
+    "[`()`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jchar.html)"
 );
 jni_io_traits!(
     u8,
     jni_sys::jbyte,
     "B",
-    doc = "Make [`u8`](https://doc.rust-lang.org/std/primitive.u8.html) mappable to \
-           [`jbyte`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jbyte.html)."
+    "[`u8`](https://doc.rust-lang.org/std/primitive.u8.html)",
+    "[`jbyte`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jbyte.html)"
 );
 jni_io_traits!(
     i16,
     jni_sys::jshort,
     "S",
-    doc = "Make [`i16`](https://doc.rust-lang.org/std/primitive.i16.html) mappable to \
-           [`jshort`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jshort.html)."
+    "[`i16`](https://doc.rust-lang.org/std/primitive.i16.html)",
+    "[`jshort`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jshort.html)"
 );
 jni_io_traits!(
     i32,
     jni_sys::jint,
     "I",
-    doc = "Make [`i32`](https://doc.rust-lang.org/std/primitive.i32.html) mappable to \
-           [`jint`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jint.html)."
+    "[`i32`](https://doc.rust-lang.org/std/primitive.i32.html)",
+    "[`jint`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jint.html)"
 );
 jni_io_traits!(
     i64,
     jni_sys::jlong,
     "J",
-    doc = "Make [`i64`](https://doc.rust-lang.org/std/primitive.i64.html) mappable to \
-           [`jlong`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jlong.html)."
+    "[`i64`](https://doc.rust-lang.org/std/primitive.i64.html)",
+    "[`jlong`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jlong.html)"
 );
 // For some reason, floats need to be passed as 64-bit floats to JNI.
 // When passed as 32-bit numbers, Java recieves `0.0` instead of the passed number.
@@ -293,15 +305,15 @@ jni_io_traits!(
 //     f32,
 //     jni_sys::jfloat,
 //     "F",
-//     doc = "Make [`f32`](https://doc.rust-lang.org/std/primitive.f32.html) mappable to \
-//            [`jfloat`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jfloat.html)."
+//     "[`f32`](https://doc.rust-lang.org/std/primitive.f32.html)",
+//     "[`jfloat`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jfloat.html)"
 // );
 jni_io_traits!(
     f64,
     jni_sys::jdouble,
     "D",
-    doc = "Make [`f64`](https://doc.rust-lang.org/std/primitive.f64.html) mappable to \
-           [`jdouble`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jdouble.html)."
+    "[`f64`](https://doc.rust-lang.org/std/primitive.f64.html)",
+    "[`jdouble`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jdouble.html)"
 );
 
 #[cfg(test)]
