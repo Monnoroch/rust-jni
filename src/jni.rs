@@ -32,10 +32,10 @@ pub enum JniError {
 ///
 /// # Exception tokens
 ///
-/// [`rust-jni`](index.html) tries to push as many programming errors as possible from run-time to compile-time.
-/// To not allow a caller to call JNI methods when there is a pending exception, these methods
-/// will require the caller to provide a [`NoException`](struct.NoException.html) token.
-/// The caller can obtain the token after attaching the thread to the Java VM:
+/// [`rust-jni`](index.html) tries to push as many programming errors as possible from run-time
+/// to compile-time. To not allow a caller to call JNI methods when there is a pending exception,
+/// these methods will require the caller to provide a [`NoException`](struct.NoException.html)
+/// token. The caller can obtain the token after attaching the thread to the Java VM:
 /// ```
 /// use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion};
 ///
@@ -44,7 +44,33 @@ pub enum JniError {
 /// let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
 /// let token = env.token();
 /// ```
-/// A token can not be obtained twice from a `JniEnv` value:
+/// Once obtained, the token can be used to call JNI methods:
+/// ```
+/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion, java};
+/// #
+/// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
+/// # let vm = JavaVM::create(&init_arguments).unwrap();
+/// # let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// let token = env.token();
+/// let string = java::lang::String::empty(&env, &token).unwrap();
+/// ```
+/// [`rust-jni`](index.html) follows Java semantics, where a method either returns a result
+/// or throws an exception. All Java methods return a [`JavaResult`](type.JavaResult.html) value,
+/// which is either an actual result or a [`Throwable`](struct.Throwable.html) value representing
+/// the exception thrown by this method call. Java methods never leave a pending exception,
+/// so they never consume the [`NoException`](struct.NoException.html) token, but they always
+/// require it to be presented:
+/// ```
+/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion, java};
+/// #
+/// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
+/// # let vm = JavaVM::create(&init_arguments).unwrap();
+/// # let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// let token = env.token();
+/// let string = java::lang::Class::find(&env, "java/lang/String", &token).unwrap();
+/// let exception = java::lang::Class::find(&env, "invalid", &token).unwrap_err();
+/// ```
+/// A token can not be obtained twice from a [`JniEnv`](struct.JniEnv.html) value:
 /// ```should_panic
 /// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion};
 /// #
@@ -54,24 +80,7 @@ pub enum JniError {
 /// let token = env.token();
 /// let token = env.token(); // panics!
 /// ```
-/// A token also can not be obtained when there is a pending exception:
-/// ```
-/// // TODO: a should_panic example with a token obtained when there's a pending exception.
-/// ```
-/// Once obtained, the token can be used to call JNI methods:
-/// ```
-/// // TODO: example for a non-token-consuming method.
-/// ```
-/// Some JNI methods can throw exceptions themselves. In this case the token will be consumed:
-/// ```
-/// // TODO: example for a token-consuming method.
-/// ```
-/// Methods that consume the token will always return a [`JniResult`](type.JniResult.html)
-/// value which will either have a value and a new [`NoException`](struct.NoException.html) token
-/// that can be used to call more JNI methods or an [`Exception`](struct.Exception.html) token:
-/// ```
-/// // TODO: example of a token-consuming method returning a new token.
-/// ```
+/// There is no possible way to obtain a token when there is a pending exception.
 /// The token is bound to the [`JniEnv`](struct.JniEnv.html) object, so it can't outlive it:
 /// ```compile_fail
 /// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion};
@@ -84,35 +93,35 @@ pub enum JniError {
 ///     token
 /// }; // doesn't compile!
 /// ```
-/// Tokens that are returned from other methods as part of a [`JniResult`](type.JniResult.html)
-/// are also bound to the [`JniEnv`](struct.JniEnv.html) object and can't outlive it:
+/// Some JNI methods can throw exceptions themselves. In this case the token will be consumed:
+/// ```compile_fail
+/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion, java};
+/// #
+/// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
+/// # let vm = JavaVM::create(&init_arguments).unwrap();
+/// # let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// let token = env.token();
+/// let exception = java::lang::String::empty(&env, &token).unwrap_err();
+/// exception.throw(token);
+/// java::lang::String::empty(&env, &token); // doesn't compile! Can't use the token any more.
 /// ```
-/// // TODO: a compile_fail example with a token, returned from a JNI method.
-/// ```
-/// If an [`Exception`](struct.Exception.html) token was returned, it means that
-/// there is a pending exception. The [`Exception`](struct.Exception.html) token can be
-/// [`unwrap`](https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap)-ped into a new
+/// Methods that consume the token will always return an [`Exception`](struct.Exception.html)
+/// token. The [`Exception`](struct.Exception.html) token can be
+/// [`unwrap`](struct.Exception.html#method.unwrap)-ped into a new
 /// [`NoException`](struct.NoException.html) token and a [`Throwable`](struct.Throwable.html)
-/// value with the pending exception.
-/// Unwrapping the [`Exception`](struct.Exception.html) token will clear the pending exception,
-/// so it is again safe to call JNI methods:
+/// value with the pending exception. Unwrapping the [`Exception`](struct.Exception.html) token
+///  will clear the pending exception, so it is again safe to call JNI methods:
 /// ```
-/// // TODO: an example for `Exception::unwrap`.
-/// ```
-///
-/// # Error handling in Java method calls
-///
-/// Calling methods on Java objects is slightly different. [`rust-jni`](index.html) follows Java
-/// semantics, whre a method either returns a result or throws an exception. All Java methods
-/// return a [`JavaResult`](type.JavaResult.html) value, which is either an actual result or a
-/// [`Throwable`](struct.Throwable.html) value representing the exception. Java methods never
-/// leave a pending exception, so they never consume the
-/// [`NoException`](struct.NoException.html) token, but they always require it to be presented:
-/// ```
-/// // TODO: an example of a non throwing Java method call.
-/// ```
-/// ```
-/// // TODO: an example of a throwing Java method call.
+/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion, java};
+/// #
+/// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
+/// # let vm = JavaVM::create(&init_arguments).unwrap();
+/// # let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// let token = env.token();
+/// let exception = java::lang::Class::find(&env, "invalid", &token).unwrap_err();
+/// let exception_token = exception.throw(token); // there is a pending exception now.
+/// let (exception, new_token) = exception_token.unwrap();
+/// java::lang::String::empty(&env, &new_token); // can call Java methods again.
 /// ```
 #[derive(Debug)]
 pub struct NoException<'env> {
@@ -162,25 +171,84 @@ impl<'env> NoException<'env> {
 #[derive(Debug)]
 pub struct Exception<'env> {
     _token: (),
-    _env: PhantomData<JniEnv<'env>>,
+    env: &'env JniEnv<'env>,
 }
 
 impl<'env> Exception<'env> {
+    /// Get and clear the pending exception and a [`NoException`](struct.NoException.html) token
+    /// to call more JNI methods. The [`Exception`](struct.Exception.html) token is consumed
+    /// by this method and can't be used any more.
+    pub fn unwrap(self) -> (Throwable<'env>, NoException<'env>) {
+        let throwable = get_and_clear_exception(self);
+        // Safe because we just cleared the pending exception.
+        let token = unsafe { NoException::new_raw() };
+        (throwable, token)
+    }
+
     /// Exchange a [`NoException`](struct.NoException.html) for an
     /// [`Exception`](struct.Exception.html) token. This means that [`rust-jni`](index.html)
     /// no onger can prove that there is no pending exception.
     /// Unsafe because there might not actually be a pending exception when this method is called.
-    unsafe fn new<'a>(_env: &'a JniEnv<'a>, _token: NoException) -> Exception<'a> {
-        Self::new_raw()
+    unsafe fn new<'a>(env: &'a JniEnv<'a>, _token: NoException) -> Exception<'a> {
+        Self::new_raw(env)
     }
 
     /// Unsafe because:
     /// 1. Unsafe because there might not actually be a pending exception when this method is called.
     /// 2. Doesn't ensure a correct lifetime
-    unsafe fn new_raw<'a>() -> Exception<'a> {
-        Exception {
-            _token: (),
-            _env: PhantomData::<JniEnv>,
+    unsafe fn new_raw<'a>(env: &'a JniEnv<'a>) -> Exception<'a> {
+        Exception { _token: (), env }
+    }
+
+    #[cfg(test)]
+    fn test<'a>(env: &'a JniEnv<'a>) -> Exception<'a> {
+        // Safe because only used for unit-testing.
+        unsafe { Self::new_raw(env) }
+    }
+}
+
+#[cfg(test)]
+mod exception_tests {
+    use super::*;
+    use testing::*;
+
+    #[test]
+    fn unwrap() {
+        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
+        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
+            EXCEPTION_OCCURED_CALLS += 1;
+            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
+            EXCEPTION_OCCURED_RESULT
+        }
+        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
+        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
+            EXCEPTION_CLEAR_CALLS += 1;
+            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionOccurred: Some(exception_occured),
+            ExceptionClear: Some(exception_clear),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_exception = 0x1234 as jni_sys::jobject;
+        unsafe {
+            EXCEPTION_OCCURED_RESULT = raw_exception;
+        }
+        let token = Exception::test(&env);
+        let (exception, _) = token.unwrap();
+        unsafe {
+            assert_eq!(exception.raw_object(), raw_exception);
+            assert_eq!(exception.env().raw_env(), raw_jni_env);
+            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
+            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
+            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
         }
     }
 }
@@ -194,7 +262,7 @@ impl<'env> Exception<'env> {
 /// token, when the function didn't throw an exception or an [`Exception`](struct.Exception.html)
 /// token when it did or it is unknown if it did.
 /// All JNI methods that are not calls to methods of Java classes use this type as their result.
-pub type JniResult<'env, T> = Result<(T, NoException<'env>), Exception<'env>>;
+type JniResult<'env, T> = Result<(T, NoException<'env>), Exception<'env>>;
 
 /// Create a [`JniResult`](type.JniResult.html) from a nullable pointer.
 ///
@@ -227,9 +295,7 @@ mod jni_result_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert!(
-                from_nullable(&env, ptr::null_mut() as *mut i32, NoException::new_raw()).is_err()
-            );
+            assert!(from_nullable(&env, ptr::null_mut() as *mut i32, NoException::test()).is_err());
         }
     }
 
@@ -239,7 +305,7 @@ mod jni_result_tests {
         let env = test_env(&vm, ptr::null_mut());
         let ptr = 0x1234 as *mut i32;
         unsafe {
-            let value = from_nullable(&env, ptr, NoException::new_raw());
+            let value = from_nullable(&env, ptr, NoException::test());
             assert!(value.is_ok());
             assert_eq!(value.unwrap().0, ptr);
         }
@@ -1887,7 +1953,7 @@ impl<'env> Object<'env> {
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#newlocalref)
     pub fn clone(&self, token: &NoException<'env>) -> JavaResult<'env, Object<'env>> {
-        with_checked_exception(self.env, token, |token| {
+        with_checked_exception(token, |token| {
             // Safe because the argument is ensured to be correct references by construction.
             let raw_object = unsafe { call_jni_method!(self.env, NewLocalRef, self.raw_object) };
             // Safe because `NewLocalRef` throws an exception before returning `null`.
@@ -2643,7 +2709,7 @@ impl<'env> Class<'env> {
         class_name: &str,
         token: &NoException<'a>,
     ) -> JavaResult<'a, Class<'a>> {
-        with_checked_exception(env, token, |token| {
+        with_checked_exception(token, |token| {
             let class_name = to_java_string(class_name);
             // Safe because arguments are correct.
             let raw_java_class =
@@ -3225,7 +3291,7 @@ impl<'env> String<'env> {
         raw_string: jni_sys::jstring,
         token: &NoException<'a>,
     ) -> JavaResult<'a, String<'a>> {
-        with_checked_exception(env, token, |token| {
+        with_checked_exception(token, |token| {
             from_nullable(env, raw_string, token).map(|(raw_string, token)| {
                 (
                     // Safe because the argument is a valid class reference.
@@ -3883,30 +3949,93 @@ mod string_tests {
     }
 }
 
+/// Get and clear the pending exception.
+fn get_and_clear_exception<'a>(token: Exception<'a>) -> Throwable<'a> {
+    // Safe because the argument is ensured to be correct references by construction.
+    let raw_java_throwable = unsafe { call_jni_method!(token.env, ExceptionOccurred) };
+    if raw_java_throwable == ptr::null_mut() {
+        panic!("No pending exception in presence of an Exception token. Should not ever happen.");
+    }
+    // Safe because the argument is ensured to be correct references by construction.
+    unsafe {
+        call_jni_method!(token.env, ExceptionClear);
+    }
+    // Safe because the arguments are correct.
+    unsafe { Throwable::__from_jni(token.env, raw_java_throwable) }
+}
+
+#[cfg(test)]
+mod get_and_clear_exception_tests {
+    use super::*;
+    use testing::*;
+
+    #[test]
+    fn exception() {
+        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
+        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
+            EXCEPTION_OCCURED_CALLS += 1;
+            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
+            EXCEPTION_OCCURED_RESULT
+        }
+        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
+        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
+            EXCEPTION_CLEAR_CALLS += 1;
+            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionOccurred: Some(exception_occured),
+            ExceptionClear: Some(exception_clear),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_exception = 0x1234 as jni_sys::jobject;
+        unsafe {
+            EXCEPTION_OCCURED_RESULT = raw_exception;
+        }
+        let exception = get_and_clear_exception(Exception::test(&env));
+        unsafe {
+            assert_eq!(exception.raw_object(), raw_exception);
+            assert_eq!(exception.env().raw_env(), raw_jni_env);
+            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
+            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
+            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "No pending exception in presence of an Exception token")]
+    fn exception_not_found() {
+        unsafe extern "system" fn exception_occured(_: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
+            ptr::null_mut() as jni_sys::jobject
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionOccurred: Some(exception_occured),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        get_and_clear_exception(Exception::test(&env));
+    }
+}
+
 /// Take a function that produces a [`JniResult`](type.JniResult.html), call it and produce
 /// a [`JavaResult`](type.JavaResult.html) from it.
 fn with_checked_exception<'a, Out, T: FnOnce(NoException<'a>) -> JniResult<'a, Out>>(
-    env: &'a JniEnv<'a>,
     token: &NoException<'a>,
     function: T,
 ) -> JavaResult<'a, Out> {
     // Safe, because we check for a pending exception after the call.
     let token = unsafe { token.clone() };
     match function(token) {
-        Err(_) => {
-            // Safe because the argument is ensured to be correct references by construction.
-            let raw_java_throwable = unsafe { call_jni_method!(env, ExceptionOccurred) };
-            if raw_java_throwable == ptr::null_mut() {
-                panic!("No pending exception in presence of an Exception token. Should not ever happen.");
-            }
-            // Safe because the argument is ensured to be correct references by construction.
-            unsafe {
-                call_jni_method!(env, ExceptionClear);
-            }
-            // Safe because the arguments are correct.
-            unsafe { Err(Throwable::__from_jni(env, raw_java_throwable)) }
-        }
         Ok((value, _)) => Ok(value),
+        Err(token) => Err(get_and_clear_exception(token)),
     }
 }
 
@@ -3917,14 +4046,8 @@ mod with_checked_exception_tests {
 
     #[test]
     fn no_exception() {
-        let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let result = with_checked_exception(&env, &NoException::test(), |_| unsafe {
-            Ok((17, NoException::new_raw()))
+        let result = with_checked_exception(&NoException::test(), |_| {
+            Ok((17, NoException::test()))
         }).unwrap();
         assert_eq!(result, 17);
     }
@@ -3957,8 +4080,8 @@ mod with_checked_exception_tests {
         unsafe {
             EXCEPTION_OCCURED_RESULT = raw_exception;
         }
-        let exception = with_checked_exception::<i32, _>(&env, &NoException::test(), |_| unsafe {
-            Err(Exception::new_raw())
+        let exception = with_checked_exception::<i32, _>(&NoException::test(), |_| {
+            Err(Exception::test(&env))
         }).unwrap_err();
         unsafe {
             assert_eq!(exception.raw_object(), raw_exception);
@@ -3968,23 +4091,5 @@ mod with_checked_exception_tests {
             assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
             assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
         }
-    }
-
-    #[test]
-    #[should_panic(expected = "No pending exception in presence of an Exception token")]
-    fn exception_not_found() {
-        unsafe extern "system" fn exception_occured(_: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            ptr::null_mut() as jni_sys::jobject
-        }
-        let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionOccurred: Some(exception_occured),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        with_checked_exception::<i32, _>(&env, &NoException::test(), |_| unsafe {
-            Err(Exception::new_raw())
-        }).unwrap_err();
     }
 }
