@@ -34,5 +34,12 @@ mod strings {
             string.to_string(&token).unwrap().as_string(&token),
             "test-string"
         );
+
+        assert_eq!(
+            java::lang::String::value_of_int(&env, 17, &token)
+                .unwrap()
+                .as_string(&token),
+            "17"
+        );
     }
 }
