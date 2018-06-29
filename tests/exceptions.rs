@@ -19,5 +19,10 @@ mod classes {
             exception.to_string(&token).unwrap().as_string(&token),
             "java.lang.Throwable: test-string"
         );
+        assert_eq!(
+            ToString::to_string(&exception),
+            "java.lang.Throwable: test-string"
+        );
+        assert!(format!("{:?}", exception).contains("java.lang.Throwable: test-string"));
     }
 }

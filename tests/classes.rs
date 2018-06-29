@@ -31,6 +31,8 @@ mod classes {
             string_class.to_string(&token).unwrap().as_string(&token),
             "class java.lang.String"
         );
+        assert_eq!(ToString::to_string(&string_class), "class java.lang.String");
+        assert!(format!("{:?}", string_class).contains("class java.lang.String"));
 
         let throwable_class = java::lang::Class::find(&env, "java/lang/Throwable", &token).unwrap();
         let exception_class =
