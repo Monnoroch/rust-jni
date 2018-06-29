@@ -288,6 +288,12 @@ generate_jni_type_tests!(
 // TODO: reimplement once Rust has variadic functions or variadic templates.
 #[doc(hidden)]
 pub trait ToJniTuple {
+    unsafe fn call_constructor(
+        class: &Class,
+        method_id: jni_sys::jmethodID,
+        arguments: Self,
+    ) -> jni_sys::jobject;
+
     unsafe fn call_object_method(
         object: &Object,
         method_id: jni_sys::jmethodID,
@@ -451,6 +457,7 @@ macro_rules! input_tuple_impls {
             $($type: ToJni<__JniType = $jni_type>,)*
             $($jni_type: JniArgumentType),*
         {
+            jni_method_call!(call_constructor, Class, NewObject, jni_sys::jobject, $($type,)*);
             jni_method_call!(call_object_method, Object, CallObjectMethod, jni_sys::jobject, $($type,)*);
             jni_method_call!(call_static_object_method, Class, CallStaticObjectMethod, jni_sys::jobject, $($type,)*);
             jni_method_call!(call_void_method, Object, CallVoidMethod, (), $($type,)*);
@@ -734,6 +741,124 @@ mod to_jni_tuple_tests {
         call_static_double_method,
         CallStaticDoubleMethod
     );
+
+    #[test]
+    fn call_constructor() {
+        // TODO(#25): test `f32` as well.
+        static mut METHOD_CALLS: i32 = 0;
+        static mut METHOD_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut METHOD_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut METHOD_METHOD_ARGUMENT: jni_sys::jmethodID = ptr::null_mut();
+        static mut METHOD_ARGUMENT0: jni_sys::jboolean = 0;
+        static mut METHOD_ARGUMENT1: jni_sys::jchar = 0;
+        static mut METHOD_ARGUMENT2: jni_sys::jbyte = 0;
+        static mut METHOD_ARGUMENT3: jni_sys::jshort = 0;
+        static mut METHOD_ARGUMENT4: jni_sys::jint = 0;
+        static mut METHOD_ARGUMENT5: jni_sys::jlong = 0;
+        static mut METHOD_ARGUMENT7: jni_sys::jdouble = 0.;
+        static mut METHOD_ARGUMENT8: jni_sys::jint = 0;
+        static mut METHOD_ARGUMENT9: jni_sys::jint = 0;
+        static mut METHOD_ARGUMENT10: jni_sys::jint = 0;
+        static mut METHOD_ARGUMENT11: jni_sys::jint = 0;
+        static mut METHOD_ARGUMENT12: jni_sys::jint = 0;
+        static mut METHOD_RESULT: jni_sys::jobject = ptr::null_mut();
+        type VariadicFn = unsafe extern "C" fn(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+            method_id: jni_sys::jmethodID,
+            ...
+        ) -> jni_sys::jobject;
+        type TestFn = unsafe extern "C" fn(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+            method_id: jni_sys::jmethodID,
+            argument0: jni_sys::jboolean,
+            argument1: jni_sys::jchar,
+            argument2: jni_sys::jbyte,
+            argument3: jni_sys::jshort,
+            argument4: jni_sys::jint,
+            argument5: jni_sys::jlong,
+            argument7: jni_sys::jdouble,
+            argument8: jni_sys::jint,
+            argument9: jni_sys::jint,
+            argument10: jni_sys::jint,
+            argument11: jni_sys::jint,
+            argument12: jni_sys::jint,
+        ) -> jni_sys::jobject;
+        unsafe extern "C" fn method(
+            env: *mut jni_sys::JNIEnv,
+            object: jni_sys::jobject,
+            method_id: jni_sys::jmethodID,
+            argument0: jni_sys::jboolean,
+            argument1: jni_sys::jchar,
+            argument2: jni_sys::jbyte,
+            argument3: jni_sys::jshort,
+            argument4: jni_sys::jint,
+            argument5: jni_sys::jlong,
+            argument7: jni_sys::jdouble,
+            argument8: jni_sys::jint,
+            argument9: jni_sys::jint,
+            argument10: jni_sys::jint,
+            argument11: jni_sys::jint,
+            argument12: jni_sys::jint,
+        ) -> jni_sys::jobject {
+            METHOD_CALLS += 1;
+            METHOD_ENV_ARGUMENT = env;
+            METHOD_OBJECT_ARGUMENT = object;
+            METHOD_METHOD_ARGUMENT = method_id;
+            METHOD_ARGUMENT0 = argument0;
+            METHOD_ARGUMENT1 = argument1;
+            METHOD_ARGUMENT2 = argument2;
+            METHOD_ARGUMENT3 = argument3;
+            METHOD_ARGUMENT4 = argument4;
+            METHOD_ARGUMENT5 = argument5;
+            METHOD_ARGUMENT7 = argument7;
+            METHOD_ARGUMENT8 = argument8;
+            METHOD_ARGUMENT9 = argument9;
+            METHOD_ARGUMENT10 = argument10;
+            METHOD_ARGUMENT11 = argument11;
+            METHOD_ARGUMENT12 = argument12;
+            METHOD_RESULT
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            NewObject: Some(unsafe { mem::transmute::<TestFn, VariadicFn>(method) }),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let class = test_class(&env, raw_object);
+        let method_id = 0x7654 as jni_sys::jmethodID;
+        let arguments = (
+            true, 'h', 15 as u8, 16 as i16, 17 as i32, 18 as i64, 20. as f64, 21 as i32, 22 as i32,
+            23 as i32, 24 as i32, 25 as i32,
+        );
+        let result = 0x1234 as jni_sys::jobject;
+        unsafe {
+            METHOD_RESULT = result;
+            assert_eq!(
+                ToJniTuple::call_constructor(&class, method_id, arguments),
+                result
+            );
+            assert_eq!(METHOD_CALLS, 1);
+            assert_eq!(METHOD_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(METHOD_OBJECT_ARGUMENT, raw_object);
+            assert_eq!(METHOD_METHOD_ARGUMENT, method_id);
+            assert_eq!(METHOD_ARGUMENT0, arguments.0.__to_jni());
+            assert_eq!(METHOD_ARGUMENT1, arguments.1.__to_jni());
+            assert_eq!(METHOD_ARGUMENT2, arguments.2.__to_jni());
+            assert_eq!(METHOD_ARGUMENT3, arguments.3.__to_jni());
+            assert_eq!(METHOD_ARGUMENT4, arguments.4.__to_jni());
+            assert_eq!(METHOD_ARGUMENT5, arguments.5.__to_jni());
+            assert_eq!(METHOD_ARGUMENT7, arguments.6.__to_jni());
+            assert_eq!(METHOD_ARGUMENT8, arguments.7.__to_jni());
+            assert_eq!(METHOD_ARGUMENT9, arguments.8.__to_jni());
+            assert_eq!(METHOD_ARGUMENT10, arguments.9.__to_jni());
+            assert_eq!(METHOD_ARGUMENT11, arguments.10.__to_jni());
+            assert_eq!(METHOD_ARGUMENT12, arguments.11.__to_jni());
+        }
+    }
 }
 
 impl JniArgumentType for jni_sys::jboolean {}
