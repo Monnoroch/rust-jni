@@ -27,6 +27,10 @@ mod classes {
 
         let class_class = java::lang::Class::find(&env, "java/lang/Class", &token).unwrap();
         assert!(string_class.is_instance_of(&class_class, &token));
+        assert_eq!(
+            string_class.to_string(&token).unwrap().as_string(&token),
+            "class java.lang.String"
+        );
 
         let throwable_class = java::lang::Class::find(&env, "java/lang/Throwable", &token).unwrap();
         let exception_class =
