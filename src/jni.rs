@@ -194,7 +194,8 @@ impl<'env> Exception<'env> {
     }
 
     /// Unsafe because:
-    /// 1. Unsafe because there might not actually be a pending exception when this method is called.
+    /// 1. Unsafe because there might not actually be a pending exception when this method is
+    /// called.
     /// 2. Doesn't ensure a correct lifetime
     unsafe fn new_raw<'a>(env: &'a JniEnv<'a>) -> Exception<'a> {
         Exception { _token: (), env }
@@ -1789,6 +1790,19 @@ macro_rules! object_java_class {
                 self
             }
         }
+
+        /// Allow comparing
+        #[doc = $link]
+        /// to Java objects. Java objects are compared by-reference to preserve
+        /// original Java semantics. To compare objects by value, call the
+        /// [`equals`](struct.Object.html#method.equals) method.
+        ///
+        /// Will panic if there is a pending exception in the current thread.
+        ///
+        /// This is mostly a convenience for using `assert_eq!()` in tests. Always prefer using
+        /// [`is_same_as`](struct.Object.html#methods.is_same_as) to comparing with `==`, because
+        /// the former checks for a pending exception in compile-time rather than the run-time.
+        impl<'env> Eq for $class<'env> {}
     };
 }
 
@@ -1828,17 +1842,34 @@ macro_rules! java_class {
             }
         }
 
+        /// Allow comparing
+        #[doc = $link]
+        /// to Java objects. Java objects are compared by-reference to preserve
+        /// original Java semantics. To compare objects by value, call the
+        /// [`equals`](struct.Object.html#method.equals) method.
+        ///
+        /// Will panic if there is a pending exception in the current thread.
+        ///
+        /// This is mostly a convenience for using `assert_eq!()` in tests. Always prefer using
+        /// [`is_same_as`](struct.Object.html#methods.is_same_as) to comparing with `==`, because
+        /// the former checks for a pending exception in compile-time rather than the run-time.
+        impl<'env, T> PartialEq<T> for $class<'env> where T: Cast<'env, Object<'env>> {
+            fn eq(&self, other: &T) -> bool {
+                Object::cast(self).eq(other)
+            }
+        }
+
         impl<'env> $class<'env> {
             /// Clone the
             #[doc = $link]
             ///. This is not a deep clone of the Java object,
-            /// but a Rust-like clone of the value. Since Java objects are reference counted, this will
-            /// increment the reference count.
+            /// but a Rust-like clone of the value. Since Java objects are reference counted, this
+            /// will increment the reference count.
             ///
             /// This method has a different signature from the one in the
-            /// [`Clone`](https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html) trait because
-            /// cloning a Java object is only safe when there is no pending exception and because
-            /// cloning a java object cat throw an exception.
+            /// [`Clone`](https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html) trait
+            /// because cloning a Java object is only safe when there is no pending exception and
+            /// because cloning a java object cat throw an exception.
             ///
             /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#newlocalref)
             pub fn clone(&self, token: &NoException<'env>) -> JavaResult<'env, Self>
@@ -1993,6 +2024,30 @@ impl<'env> Drop for Object<'env> {
         // Safe because the argument is ensured to be correct references by construction.
         unsafe {
             call_jni_method!(self.env, DeleteLocalRef, self.raw_object);
+        }
+    }
+}
+
+/// Allow comparing [`Object`](struct.Object.html) to Java objects. Java objects are compared
+/// by-reference to preserve original Java semantics. To compare objects by value, call the
+/// [`equals`](struct.Object.html#method.equals) method.
+///
+/// Will panic if there is a pending exception in the current thread.
+///
+/// This is mostly a convenience for using `assert_eq!()` in tests. Always prefer using
+/// [`is_same_as`](struct.Object.html#methods.is_same_as) to comparing with `==`, because
+/// the former checks for a pending exception in compile-time rather than the run-time.
+impl<'env, T> PartialEq<T> for Object<'env>
+where
+    T: Cast<'env, Object<'env>>,
+{
+    fn eq(&self, other: &T) -> bool {
+        if self.env().has_exception() {
+            panic!("Comparing Java objects with a pending exception in the current thread")
+        } else {
+            // Safe because we checked that there is no pending exception.
+            let token = unsafe { NoException::new_env(self.env()) };
+            self.is_same_as(other.cast(), &token)
         }
     }
 }
@@ -2393,6 +2448,100 @@ mod object_tests {
         assert_eq!(&object as *const _, object.cast() as *const _);
         mem::forget(object);
     }
+
+    #[test]
+    fn eq() {
+        static mut EXCEPTION_CHECK_CALLS: i32 = 0;
+        static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_check(
+            jni_env: *mut jni_sys::JNIEnv,
+        ) -> jni_sys::jboolean {
+            EXCEPTION_CHECK_CALLS += 1;
+            EXCEPTION_CHECK_ARGUMENT = jni_env;
+            jni_sys::JNI_FALSE
+        }
+        static mut IS_SAME_AS_CALLS: i32 = 0;
+        static mut IS_SAME_AS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut IS_SAME_AS_OBJECT1_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut IS_SAME_AS_OBJECT2_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn is_same_object(
+            env: *mut jni_sys::JNIEnv,
+            object1: jni_sys::jobject,
+            object2: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            IS_SAME_AS_CALLS += 1;
+            IS_SAME_AS_ENV_ARGUMENT = env;
+            IS_SAME_AS_OBJECT1_ARGUMENT = object1;
+            IS_SAME_AS_OBJECT2_ARGUMENT = object2;
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            IsSameObject: Some(is_same_object),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object1 = 0x91011 as jni_sys::jobject;
+        let raw_object2 = 0x1234 as jni_sys::jobject;
+        let object1 = test_object(&env, raw_object1);
+        let object2 = test_object(&env, raw_object2);
+        assert!(object1 == object2);
+        unsafe {
+            assert_eq!(IS_SAME_AS_CALLS, 1);
+            assert_eq!(IS_SAME_AS_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(IS_SAME_AS_OBJECT1_ARGUMENT, raw_object1);
+            assert_eq!(IS_SAME_AS_OBJECT2_ARGUMENT, raw_object2);
+            assert_eq!(EXCEPTION_CHECK_CALLS, 1);
+            assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
+        }
+    }
+
+    #[test]
+    fn eq_not_same() {
+        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        unsafe extern "system" fn is_same_object(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            IsSameObject: Some(is_same_object),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object1 = test_object(&env, ptr::null_mut());
+        let object2 = test_object(&env, ptr::null_mut());
+        assert!(object1 != object2);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Comparing Java objects with a pending exception in the current thread"
+    )]
+    fn eq_pending_exception() {
+        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object1 = test_object(&env, ptr::null_mut());
+        let object2 = test_object(&env, ptr::null_mut());
+        let _ = object1 == object2;
+    }
 }
 
 /// A type representing a Java
@@ -2687,6 +2836,100 @@ mod throwable_tests {
         assert_eq!(&object as *const _, object.cast() as *const _);
         assert_eq!(&object.object as *const _, object.cast() as *const _);
         mem::forget(object);
+    }
+
+    #[test]
+    fn eq() {
+        static mut EXCEPTION_CHECK_CALLS: i32 = 0;
+        static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_check(
+            jni_env: *mut jni_sys::JNIEnv,
+        ) -> jni_sys::jboolean {
+            EXCEPTION_CHECK_CALLS += 1;
+            EXCEPTION_CHECK_ARGUMENT = jni_env;
+            jni_sys::JNI_FALSE
+        }
+        static mut IS_SAME_AS_CALLS: i32 = 0;
+        static mut IS_SAME_AS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut IS_SAME_AS_OBJECT1_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut IS_SAME_AS_OBJECT2_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn is_same_object(
+            env: *mut jni_sys::JNIEnv,
+            object1: jni_sys::jobject,
+            object2: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            IS_SAME_AS_CALLS += 1;
+            IS_SAME_AS_ENV_ARGUMENT = env;
+            IS_SAME_AS_OBJECT1_ARGUMENT = object1;
+            IS_SAME_AS_OBJECT2_ARGUMENT = object2;
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            IsSameObject: Some(is_same_object),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object1 = 0x91011 as jni_sys::jobject;
+        let raw_object2 = 0x1234 as jni_sys::jobject;
+        let object1 = test_throwable(&env, raw_object1);
+        let object2 = test_throwable(&env, raw_object2);
+        assert!(object1 == object2);
+        unsafe {
+            assert_eq!(IS_SAME_AS_CALLS, 1);
+            assert_eq!(IS_SAME_AS_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(IS_SAME_AS_OBJECT1_ARGUMENT, raw_object1);
+            assert_eq!(IS_SAME_AS_OBJECT2_ARGUMENT, raw_object2);
+            assert_eq!(EXCEPTION_CHECK_CALLS, 1);
+            assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
+        }
+    }
+
+    #[test]
+    fn eq_not_same() {
+        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        unsafe extern "system" fn is_same_object(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            IsSameObject: Some(is_same_object),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object1 = test_throwable(&env, ptr::null_mut());
+        let object2 = test_throwable(&env, ptr::null_mut());
+        assert!(object1 != object2);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Comparing Java objects with a pending exception in the current thread"
+    )]
+    fn eq_pending_exception() {
+        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object1 = test_throwable(&env, ptr::null_mut());
+        let object2 = test_object(&env, ptr::null_mut());
+        let _ = object1 == object2;
     }
 }
 
@@ -3183,6 +3426,100 @@ mod class_tests {
         assert_eq!(&object as *const _, object.cast() as *const _);
         assert_eq!(&object.object as *const _, object.cast() as *const _);
         mem::forget(object);
+    }
+
+    #[test]
+    fn eq() {
+        static mut EXCEPTION_CHECK_CALLS: i32 = 0;
+        static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_check(
+            jni_env: *mut jni_sys::JNIEnv,
+        ) -> jni_sys::jboolean {
+            EXCEPTION_CHECK_CALLS += 1;
+            EXCEPTION_CHECK_ARGUMENT = jni_env;
+            jni_sys::JNI_FALSE
+        }
+        static mut IS_SAME_AS_CALLS: i32 = 0;
+        static mut IS_SAME_AS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut IS_SAME_AS_OBJECT1_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut IS_SAME_AS_OBJECT2_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn is_same_object(
+            env: *mut jni_sys::JNIEnv,
+            object1: jni_sys::jobject,
+            object2: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            IS_SAME_AS_CALLS += 1;
+            IS_SAME_AS_ENV_ARGUMENT = env;
+            IS_SAME_AS_OBJECT1_ARGUMENT = object1;
+            IS_SAME_AS_OBJECT2_ARGUMENT = object2;
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            IsSameObject: Some(is_same_object),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object1 = 0x91011 as jni_sys::jobject;
+        let raw_object2 = 0x1234 as jni_sys::jobject;
+        let object1 = test_class(&env, raw_object1);
+        let object2 = test_class(&env, raw_object2);
+        assert!(object1 == object2);
+        unsafe {
+            assert_eq!(IS_SAME_AS_CALLS, 1);
+            assert_eq!(IS_SAME_AS_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(IS_SAME_AS_OBJECT1_ARGUMENT, raw_object1);
+            assert_eq!(IS_SAME_AS_OBJECT2_ARGUMENT, raw_object2);
+            assert_eq!(EXCEPTION_CHECK_CALLS, 1);
+            assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
+        }
+    }
+
+    #[test]
+    fn eq_not_same() {
+        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        unsafe extern "system" fn is_same_object(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            IsSameObject: Some(is_same_object),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object1 = test_class(&env, ptr::null_mut());
+        let object2 = test_class(&env, ptr::null_mut());
+        assert!(object1 != object2);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Comparing Java objects with a pending exception in the current thread"
+    )]
+    fn eq_pending_exception() {
+        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object1 = test_class(&env, ptr::null_mut());
+        let object2 = test_object(&env, ptr::null_mut());
+        let _ = object1 == object2;
     }
 }
 
@@ -3946,6 +4283,100 @@ mod string_tests {
         assert_eq!(&object as *const _, object.cast() as *const _);
         assert_eq!(&object.object as *const _, object.cast() as *const _);
         mem::forget(object);
+    }
+
+    #[test]
+    fn eq() {
+        static mut EXCEPTION_CHECK_CALLS: i32 = 0;
+        static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_check(
+            jni_env: *mut jni_sys::JNIEnv,
+        ) -> jni_sys::jboolean {
+            EXCEPTION_CHECK_CALLS += 1;
+            EXCEPTION_CHECK_ARGUMENT = jni_env;
+            jni_sys::JNI_FALSE
+        }
+        static mut IS_SAME_AS_CALLS: i32 = 0;
+        static mut IS_SAME_AS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut IS_SAME_AS_OBJECT1_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        static mut IS_SAME_AS_OBJECT2_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn is_same_object(
+            env: *mut jni_sys::JNIEnv,
+            object1: jni_sys::jobject,
+            object2: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            IS_SAME_AS_CALLS += 1;
+            IS_SAME_AS_ENV_ARGUMENT = env;
+            IS_SAME_AS_OBJECT1_ARGUMENT = object1;
+            IS_SAME_AS_OBJECT2_ARGUMENT = object2;
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            IsSameObject: Some(is_same_object),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_object1 = 0x91011 as jni_sys::jobject;
+        let raw_object2 = 0x1234 as jni_sys::jobject;
+        let object1 = test_string(&env, raw_object1);
+        let object2 = test_string(&env, raw_object2);
+        assert!(object1 == object2);
+        unsafe {
+            assert_eq!(IS_SAME_AS_CALLS, 1);
+            assert_eq!(IS_SAME_AS_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(IS_SAME_AS_OBJECT1_ARGUMENT, raw_object1);
+            assert_eq!(IS_SAME_AS_OBJECT2_ARGUMENT, raw_object2);
+            assert_eq!(EXCEPTION_CHECK_CALLS, 1);
+            assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
+        }
+    }
+
+    #[test]
+    fn eq_not_same() {
+        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        unsafe extern "system" fn is_same_object(
+            _: *mut jni_sys::JNIEnv,
+            _: jni_sys::jobject,
+            _: jni_sys::jobject,
+        ) -> jni_sys::jboolean {
+            jni_sys::JNI_FALSE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            IsSameObject: Some(is_same_object),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object1 = test_string(&env, ptr::null_mut());
+        let object2 = test_string(&env, ptr::null_mut());
+        assert!(object1 != object2);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Comparing Java objects with a pending exception in the current thread"
+    )]
+    fn eq_pending_exception() {
+        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
+            jni_sys::JNI_TRUE
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionCheck: Some(exception_check),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let object1 = test_string(&env, ptr::null_mut());
+        let object2 = test_object(&env, ptr::null_mut());
+        let _ = object1 == object2;
     }
 }
 
