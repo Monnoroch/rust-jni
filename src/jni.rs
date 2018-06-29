@@ -1290,6 +1290,16 @@ macro_rules! call_jni_method {
     };
 }
 
+macro_rules! call_nullable_jni_method {
+    ($env:expr, $method:ident, $token:expr, $($argument:expr),*) => {
+        with_checked_exception($token, |token| {
+            let result =
+                call_jni_method!($env, $method, $($argument),*);
+            from_nullable($env, result, token)
+        })
+    }
+}
+
 impl<'vm> JniEnv<'vm> {
     /// Get the raw Java VM pointer.
     ///
@@ -2294,18 +2304,12 @@ impl<'env> Object<'env> {
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#newlocalref)
     pub fn clone(&self, token: &NoException<'env>) -> JavaResult<'env, Object<'env>> {
-        with_checked_exception(token, |token| {
-            // Safe because the argument is ensured to be correct references by construction.
-            let raw_object = unsafe { call_jni_method!(self.env, NewLocalRef, self.raw_object) };
-            // Safe because `NewLocalRef` throws an exception before returning `null`.
-            unsafe { from_nullable(self.env, raw_object, token) }.map(|(raw_object, token)| {
-                (
-                    // Safe because the argument is a valid class reference.
-                    unsafe { Self::from_raw(self.env, raw_object) },
-                    token,
-                )
-            })
-        })
+        // Safe because arguments are ensured to be the correct by construction and because
+        // `NewLocalRef` throws an exception before returning `null`.
+        let raw_object =
+            unsafe { call_nullable_jni_method!(self.env, NewLocalRef, token, self.raw_object)? };
+        // Safe because the argument is a valid class reference.
+        Ok(unsafe { Self::from_raw(self.env, raw_object) })
     }
 
     /// Construct from a raw pointer. Unsafe because an invalid pointer may be passed
@@ -2363,7 +2367,7 @@ where
 }
 
 #[cfg(test)]
-fn test_object<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Object<'env> {
+pub fn test_object<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Object<'env> {
     Object { env, raw_object }
 }
 
@@ -2704,20 +2708,14 @@ impl<'env> Class<'env> {
         class_name: &str,
         token: &NoException<'a>,
     ) -> JavaResult<'a, Class<'a>> {
-        with_checked_exception(token, |token| {
-            let class_name = to_java_string(class_name);
-            // Safe because arguments are correct.
-            let raw_java_class =
-                unsafe { call_jni_method!(env, FindClass, class_name.as_ptr() as *const c_char) };
-            // Safe because `FindClass` throws an exception before returning `null`.
-            unsafe { from_nullable(env, raw_java_class, token) }.map(|(raw_java_class, token)| {
-                (
-                    // Safe because the argument is a valid class reference.
-                    unsafe { Self::from_raw(env, raw_java_class) },
-                    token,
-                )
-            })
-        })
+        let class_name = to_java_string(class_name);
+        // Safe because the arguments are correct and because `FindClass` throws an exception
+        // before returning `null`.
+        let raw_class = unsafe {
+            call_nullable_jni_method!(env, FindClass, token, class_name.as_ptr() as *const c_char)?
+        };
+        // Safe because the argument is a valid class reference.
+        Ok(unsafe { Self::from_raw(env, raw_class) })
     }
 
     /// Get the parent class of this class. Will return
@@ -2769,7 +2767,7 @@ impl<'env> Class<'env> {
 java_class!(Class, "[`Class`](struct.Class.html)");
 
 #[cfg(test)]
-fn test_class<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Class<'env> {
+pub fn test_class<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Class<'env> {
     Class {
         object: test_object(env, raw_object),
     }
@@ -3003,11 +3001,13 @@ impl<'env> String<'env> {
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#newstring)
     pub fn empty<'a>(env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, String<'a>> {
-        // Safe because arguments are ensured to be the correct by construction.
-        let raw_string =
-            unsafe { call_jni_method!(env, NewString, ptr::null(), 0 as jni_sys::jsize) };
-        // Safe because `raw_string` is a valid reference to a `String` object.
-        unsafe { Self::from_ptr(env, raw_string, token) }
+        // Safe because arguments are ensured to be the correct by construction and because
+        // `NewString` throws an exception before returning `null`.
+        let raw_string = unsafe {
+            call_nullable_jni_method!(env, NewString, token, ptr::null(), 0 as jni_sys::jsize)?
+        };
+        // Safe because the argument is a valid string reference.
+        Ok(unsafe { Self::from_raw(env, raw_string) })
     }
 
     /// Create a new Java string from a Rust string.
@@ -3023,10 +3023,13 @@ impl<'env> String<'env> {
         }
 
         let buffer = to_java_string(string);
-        let raw_string =
-            unsafe { call_jni_method!(env, NewStringUTF, buffer.as_ptr() as *const c_char) };
-        // Safe because `raw_string` is a valid reference to a `String` object.
-        unsafe { Self::from_ptr(env, raw_string, token) }
+        // Safe because arguments are ensured to be the correct by construction and because
+        // `NewStringUTF` throws an exception before returning `null`.
+        let raw_string = unsafe {
+            call_nullable_jni_method!(env, NewStringUTF, token, buffer.as_ptr() as *const c_char)?
+        };
+        // Safe because the argument is a valid string reference.
+        Ok(unsafe { Self::from_raw(env, raw_string) })
     }
 
     /// String length (the number of unicode characters).
@@ -3086,23 +3089,6 @@ impl<'env> String<'env> {
             buffer.set_len(size);
         }
         from_java_string(buffer.as_slice()).unwrap().into_owned()
-    }
-
-    /// Unsafe because an incorrect object reference can be passed.
-    unsafe fn from_ptr<'a>(
-        env: &'a JniEnv<'a>,
-        raw_string: jni_sys::jstring,
-        token: &NoException<'a>,
-    ) -> JavaResult<'a, String<'a>> {
-        with_checked_exception(token, |token| {
-            from_nullable(env, raw_string, token).map(|(raw_string, token)| {
-                (
-                    // Safe because the argument is a valid class reference.
-                    Self::from_raw(env, raw_string),
-                    token,
-                )
-            })
-        })
     }
 
     /// Unsafe because an incorrect object reference can be passed.
@@ -3557,18 +3543,88 @@ mod string_tests {
 }
 
 /// Get and clear the pending exception.
-fn get_and_clear_exception<'a>(token: Exception<'a>) -> Throwable<'a> {
+fn maybe_get_and_clear_exception<'a>(env: &'a JniEnv<'a>) -> Option<Throwable<'a>> {
     // Safe because the argument is ensured to be correct references by construction.
-    let raw_java_throwable = unsafe { call_jni_method!(token.env, ExceptionOccurred) };
+    let raw_java_throwable = unsafe { call_jni_method!(env, ExceptionOccurred) };
     if raw_java_throwable == ptr::null_mut() {
-        panic!("No pending exception in presence of an Exception token. Should not ever happen.");
+        return None;
     }
     // Safe because the argument is ensured to be correct references by construction.
     unsafe {
-        call_jni_method!(token.env, ExceptionClear);
+        call_jni_method!(env, ExceptionClear);
     }
     // Safe because the arguments are correct.
-    unsafe { Throwable::__from_jni(token.env, raw_java_throwable) }
+    Some(unsafe { Throwable::__from_jni(env, raw_java_throwable) })
+}
+
+#[cfg(test)]
+mod maybe_get_and_clear_exception_tests {
+    use super::*;
+    use testing::*;
+
+    #[test]
+    fn exception() {
+        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
+        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
+        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
+            EXCEPTION_OCCURED_CALLS += 1;
+            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
+            EXCEPTION_OCCURED_RESULT
+        }
+        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
+        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
+            EXCEPTION_CLEAR_CALLS += 1;
+            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionOccurred: Some(exception_occured),
+            ExceptionClear: Some(exception_clear),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        let raw_exception = 0x1234 as jni_sys::jobject;
+        unsafe {
+            EXCEPTION_OCCURED_RESULT = raw_exception;
+        }
+        let exception = maybe_get_and_clear_exception(&env).unwrap();
+        unsafe {
+            assert_eq!(exception.raw_object(), raw_exception);
+            assert_eq!(exception.env().raw_env(), raw_jni_env);
+            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
+            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
+            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+        }
+    }
+
+    #[test]
+    fn exception_not_found() {
+        unsafe extern "system" fn exception_occured(_: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
+            ptr::null_mut() as jni_sys::jobject
+        }
+        let vm = test_vm(ptr::null_mut());
+        let raw_jni_env = jni_sys::JNINativeInterface_ {
+            ExceptionOccurred: Some(exception_occured),
+            ..empty_raw_jni_env()
+        };
+        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+        let env = test_env(&vm, raw_jni_env);
+        assert_eq!(maybe_get_and_clear_exception(&env), None);
+    }
+}
+
+/// Get and clear the pending exception.
+fn get_and_clear_exception<'a>(token: Exception<'a>) -> Throwable<'a> {
+    match maybe_get_and_clear_exception(token.env) {
+        None => panic!(
+            "No pending exception in presence of an Exception token. Should not ever happen."
+        ),
+        Some(exception) => exception,
+    }
 }
 
 #[cfg(test)]
