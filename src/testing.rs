@@ -1,5 +1,6 @@
-/// A module with tools used in unit tests.
 use java_string::*;
+/// A module with tools used in unit tests.
+use jni::{Cast, Object};
 use jni_sys;
 use std::ffi::CStr;
 use std::mem;
@@ -486,6 +487,17 @@ impl JniCalls {
         }
         self.current_call += 1;
         &self.calls[current_call]
+    }
+
+    /// Check that the object is what was expected.
+    pub fn assert_eq<'env, T>(&self, object: &T, raw_object: jni_sys::jobject)
+    where
+        T: Cast<'env, Object<'env>>,
+    {
+        unsafe {
+            assert_eq!(object.cast().raw_object(), raw_object);
+            assert_eq!(object.cast().env().raw_env(), self.env);
+        }
     }
 }
 
