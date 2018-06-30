@@ -2001,198 +2001,98 @@ macro_rules! generate_object_tests {
 
         #[test]
         fn drop() {
-            static mut DELETE_LOCAL_REF_CALLS: i32 = 0;
-            static mut DELETE_LOCAL_REF_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            static mut DELETE_LOCAL_REF_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-            unsafe extern "system" fn delete_local_ref(
-                env: *mut jni_sys::JNIEnv,
-                object: jni_sys::jobject,
-            ) {
-                DELETE_LOCAL_REF_CALLS += 1;
-                DELETE_LOCAL_REF_ENV_ARGUMENT = env;
-                DELETE_LOCAL_REF_OBJECT_ARGUMENT = object;
-            }
+            const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![JniCall::DeleteLocalRef(DeleteLocalRefCall {
+                object: RAW_OBJECT,
+            })]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                DeleteLocalRef: Some(delete_local_ref),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let raw_object = 0x91011 as jni_sys::jobject;
+            let env = test_env(&vm, calls.env);
             {
-                let _object = test_value(&env, raw_object);
-                unsafe {
-                    assert_eq!(DELETE_LOCAL_REF_CALLS, 0);
-                }
-            }
-            unsafe {
-                assert_eq!(DELETE_LOCAL_REF_CALLS, 1);
-                assert_eq!(DELETE_LOCAL_REF_ENV_ARGUMENT, raw_jni_env);
-                assert_eq!(DELETE_LOCAL_REF_OBJECT_ARGUMENT, raw_object);
+                let _object = test_value(&env, RAW_OBJECT);
+                // Haven't called the destructor at this point yet.
+                assert_eq!(calls.current_call, 0);
             }
         }
 
         #[test]
         fn clone() {
-            static mut NEW_LOCAL_REF_CALLS: i32 = 0;
-            static mut NEW_LOCAL_REF_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            static mut NEW_LOCAL_REF_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-            static mut NEW_LOCAL_REF_RESULT: jni_sys::jobject = ptr::null_mut();
-            unsafe extern "system" fn new_local_ref(
-                env: *mut jni_sys::JNIEnv,
-                object: jni_sys::jobject,
-            ) -> jni_sys::jobject {
-                NEW_LOCAL_REF_CALLS += 1;
-                NEW_LOCAL_REF_ENV_ARGUMENT = env;
-                NEW_LOCAL_REF_OBJECT_ARGUMENT = object;
-                NEW_LOCAL_REF_RESULT
-            }
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                NewLocalRef: Some(new_local_ref),
-                ..empty_raw_jni_env()
-            };
+            const RAW_OBJECT1: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+            const RAW_OBJECT2: jni_sys::jobject = 0x1234 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![JniCall::NewLocalRef(NewLocalRefCall {
+                object: RAW_OBJECT1,
+                result: RAW_OBJECT2,
+            })]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let raw_object1 = 0x91011 as jni_sys::jobject;
-            let raw_object2 = 0x1234 as jni_sys::jobject;
-            let object = test_value(&env, raw_object1);
-            unsafe {
-                NEW_LOCAL_REF_RESULT = raw_object2;
-            }
+            let env = test_env(&vm, calls.env);
+            let object = test_value(&env, RAW_OBJECT1);
             let clone = object.clone(&NoException::test()).unwrap();
             unsafe {
-                assert_eq!(clone.raw_object(), raw_object2);
-                assert_eq!(clone.env().raw_env(), raw_jni_env);
-                assert_eq!(NEW_LOCAL_REF_CALLS, 1);
-                assert_eq!(NEW_LOCAL_REF_ENV_ARGUMENT, raw_jni_env);
-                assert_eq!(NEW_LOCAL_REF_OBJECT_ARGUMENT, raw_object1);
+                assert_eq!(clone.raw_object(), RAW_OBJECT2);
+                assert_eq!(clone.env().raw_env(), calls.env);
             }
         }
 
         #[test]
         fn clone_null() {
-            unsafe extern "system" fn new_local_ref(
-                _: *mut jni_sys::JNIEnv,
-                _: jni_sys::jobject,
-            ) -> jni_sys::jobject {
-                ptr::null_mut() as jni_sys::jobject
-            }
-            static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-            static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-            unsafe extern "system" fn exception_occured(
-                env: *mut jni_sys::JNIEnv,
-            ) -> jni_sys::jobject {
-                EXCEPTION_OCCURED_CALLS += 1;
-                EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-                EXCEPTION_OCCURED_RESULT
-            }
-            static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-            static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-                EXCEPTION_CLEAR_CALLS += 1;
-                EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-            }
+            const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+            const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![
+                JniCall::NewLocalRef(NewLocalRefCall {
+                    object: RAW_OBJECT,
+                    result: ptr::null_mut() as jni_sys::jobject,
+                }),
+                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClearCall {}),
+            ]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                NewLocalRef: Some(new_local_ref),
-                ExceptionOccurred: Some(exception_occured),
-                ExceptionClear: Some(exception_clear),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let raw_exception = 0x1234 as jni_sys::jobject;
-            let object = test_value(&env, ptr::null_mut());
-            unsafe {
-                EXCEPTION_OCCURED_RESULT = raw_exception;
-            }
+            let env = test_env(&vm, calls.env);
+            let object = test_value(&env, RAW_OBJECT);
             let exception = object.clone(&NoException::test()).unwrap_err();
             unsafe {
-                assert_eq!(exception.raw_object(), raw_exception);
-                assert_eq!(exception.env().raw_env(), raw_jni_env);
-                assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-                assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-                assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-                assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+                assert_eq!(exception.raw_object(), EXCEPTION);
+                assert_eq!(exception.env().raw_env(), calls.env);
             }
         }
 
         #[test]
         fn eq() {
-            static mut EXCEPTION_CHECK_CALLS: i32 = 0;
-            static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            unsafe extern "system" fn exception_check(
-                jni_env: *mut jni_sys::JNIEnv,
-            ) -> jni_sys::jboolean {
-                EXCEPTION_CHECK_CALLS += 1;
-                EXCEPTION_CHECK_ARGUMENT = jni_env;
-                jni_sys::JNI_FALSE
-            }
-            static mut IS_SAME_AS_CALLS: i32 = 0;
-            static mut IS_SAME_AS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            static mut IS_SAME_AS_OBJECT1_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-            static mut IS_SAME_AS_OBJECT2_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-            unsafe extern "system" fn is_same_object(
-                env: *mut jni_sys::JNIEnv,
-                object1: jni_sys::jobject,
-                object2: jni_sys::jobject,
-            ) -> jni_sys::jboolean {
-                IS_SAME_AS_CALLS += 1;
-                IS_SAME_AS_ENV_ARGUMENT = env;
-                IS_SAME_AS_OBJECT1_ARGUMENT = object1;
-                IS_SAME_AS_OBJECT2_ARGUMENT = object2;
-                jni_sys::JNI_TRUE
-            }
+            const RAW_OBJECT1: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+            const RAW_OBJECT2: jni_sys::jobject = 0x93486 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![
+                JniCall::ExceptionCheck(ExceptionCheckCall {
+                    result: jni_sys::JNI_FALSE,
+                }),
+                JniCall::IsSameObject(IsSameObjectCall {
+                    object1: RAW_OBJECT1,
+                    object2: RAW_OBJECT2,
+                    result: jni_sys::JNI_TRUE,
+                }),
+            ]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                ExceptionCheck: Some(exception_check),
-                IsSameObject: Some(is_same_object),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let raw_object1 = 0x91011 as jni_sys::jobject;
-            let raw_object2 = 0x1234 as jni_sys::jobject;
-            let object1 = test_value(&env, raw_object1);
-            let object2 = test_value(&env, raw_object2);
+            let env = test_env(&vm, calls.env);
+            let object1 = test_value(&env, RAW_OBJECT1);
+            let object2 = test_value(&env, RAW_OBJECT2);
             assert!(object1 == object2);
-            unsafe {
-                assert_eq!(IS_SAME_AS_CALLS, 1);
-                assert_eq!(IS_SAME_AS_ENV_ARGUMENT, raw_jni_env);
-                assert_eq!(IS_SAME_AS_OBJECT1_ARGUMENT, raw_object1);
-                assert_eq!(IS_SAME_AS_OBJECT2_ARGUMENT, raw_object2);
-                assert_eq!(EXCEPTION_CHECK_CALLS, 1);
-                assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
-            }
         }
 
         #[test]
         fn eq_not_same() {
-            unsafe extern "system" fn exception_check(
-                _: *mut jni_sys::JNIEnv,
-            ) -> jni_sys::jboolean {
-                jni_sys::JNI_FALSE
-            }
-            unsafe extern "system" fn is_same_object(
-                _: *mut jni_sys::JNIEnv,
-                _: jni_sys::jobject,
-                _: jni_sys::jobject,
-            ) -> jni_sys::jboolean {
-                jni_sys::JNI_FALSE
-            }
+            const RAW_OBJECT1: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+            const RAW_OBJECT2: jni_sys::jobject = 0x93486 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![
+                JniCall::ExceptionCheck(ExceptionCheckCall {
+                    result: jni_sys::JNI_FALSE,
+                }),
+                JniCall::IsSameObject(IsSameObjectCall {
+                    object1: RAW_OBJECT1,
+                    object2: RAW_OBJECT2,
+                    result: jni_sys::JNI_FALSE,
+                }),
+            ]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                ExceptionCheck: Some(exception_check),
-                IsSameObject: Some(is_same_object),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let object1 = test_value(&env, ptr::null_mut());
-            let object2 = test_value(&env, ptr::null_mut());
+            let env = test_env(&vm, calls.env);
+            let object1 = test_value(&env, RAW_OBJECT1);
+            let object2 = test_value(&env, RAW_OBJECT2);
             assert!(object1 != object2);
         }
 
@@ -2201,20 +2101,15 @@ macro_rules! generate_object_tests {
             expected = "Comparing Java objects with a pending exception in the current thread"
         )]
         fn eq_pending_exception() {
-            unsafe extern "system" fn exception_check(
-                _: *mut jni_sys::JNIEnv,
-            ) -> jni_sys::jboolean {
-                jni_sys::JNI_TRUE
-            }
+            const RAW_OBJECT1: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+            const RAW_OBJECT2: jni_sys::jobject = 0x93486 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_TRUE,
+            })]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                ExceptionCheck: Some(exception_check),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let object1 = test_value(&env, ptr::null_mut());
-            let object2 = test_value(&env, ptr::null_mut());
+            let env = test_env(&vm, calls.env);
+            let object1 = test_value(&env, RAW_OBJECT1);
+            let object2 = test_value(&env, RAW_OBJECT2);
             let _ = object1 == object2;
         }
 
@@ -2530,18 +2425,11 @@ macro_rules! generate_object_tests {
             expected = "Displaying a Java object with a pending exception in the current thread"
         )]
         fn display_exception_pending() {
-            unsafe extern "system" fn exception_check(
-                _: *mut jni_sys::JNIEnv,
-            ) -> jni_sys::jboolean {
-                jni_sys::JNI_TRUE
-            }
+            let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_TRUE,
+            })]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                ExceptionCheck: Some(exception_check),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
+            let env = test_env(&vm, calls.env);
             let object = test_value(&env, ptr::null_mut());
             ToString::to_string(&object);
         }
@@ -2879,175 +2767,97 @@ mod object_tests {
 
     #[test]
     fn class() {
-        static mut GET_OBJECT_CLASS_CALLS: i32 = 0;
-        static mut GET_OBJECT_CLASS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut GET_OBJECT_CLASS_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        static mut GET_OBJECT_CLASS_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn get_object_class(
-            env: *mut jni_sys::JNIEnv,
-            object: jni_sys::jobject,
-        ) -> jni_sys::jobject {
-            GET_OBJECT_CLASS_CALLS += 1;
-            GET_OBJECT_CLASS_ENV_ARGUMENT = env;
-            GET_OBJECT_CLASS_OBJECT_ARGUMENT = object;
-            GET_OBJECT_CLASS_RESULT
-        }
+        const RAW_OBJECT: jni_sys::jobject = 0x093599 as jni_sys::jobject;
+        const RAW_CLASS: jni_sys::jobject = 0x347658 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::GetObjectClass(GetObjectClassCall {
+            object: RAW_OBJECT,
+            result: RAW_CLASS,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            GetObjectClass: Some(get_object_class),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        let raw_class = 0x1234 as jni_sys::jobject;
-        let object = test_object(&env, raw_object);
-        unsafe {
-            GET_OBJECT_CLASS_RESULT = raw_class;
-        }
+        let env = test_env(&vm, calls.env);
+        let object = test_value(&env, RAW_OBJECT);
         let class = object.class(&NoException::test());
         unsafe {
-            assert_eq!(class.raw_object(), raw_class);
-            assert_eq!(class.env().raw_env(), raw_jni_env);
-            assert_eq!(GET_OBJECT_CLASS_CALLS, 1);
-            assert_eq!(GET_OBJECT_CLASS_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(GET_OBJECT_CLASS_OBJECT_ARGUMENT, raw_object);
+            assert_eq!(class.raw_object(), RAW_CLASS);
+            assert_eq!(class.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     #[should_panic(expected = "doesn't have a class")]
     fn class_not_found() {
-        unsafe extern "system" fn get_object_class(
-            _: *mut jni_sys::JNIEnv,
-            _: jni_sys::jobject,
-        ) -> jni_sys::jobject {
-            ptr::null_mut() as jni_sys::jobject
-        }
+        const RAW_OBJECT: jni_sys::jobject = 0x093599 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::GetObjectClass(GetObjectClassCall {
+            object: RAW_OBJECT,
+            result: ptr::null_mut(),
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            GetObjectClass: Some(get_object_class),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let object = test_object(&env, ptr::null_mut());
+        let env = test_env(&vm, calls.env);
+        let object = test_value(&env, RAW_OBJECT);
         object.class(&NoException::test());
     }
 
     #[test]
     fn is_same_as_same() {
-        static mut IS_SAME_AS_CALLS: i32 = 0;
-        static mut IS_SAME_AS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut IS_SAME_AS_OBJECT1_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        static mut IS_SAME_AS_OBJECT2_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn is_same_object(
-            env: *mut jni_sys::JNIEnv,
-            object1: jni_sys::jobject,
-            object2: jni_sys::jobject,
-        ) -> jni_sys::jboolean {
-            IS_SAME_AS_CALLS += 1;
-            IS_SAME_AS_ENV_ARGUMENT = env;
-            IS_SAME_AS_OBJECT1_ARGUMENT = object1;
-            IS_SAME_AS_OBJECT2_ARGUMENT = object2;
-            jni_sys::JNI_TRUE
-        }
+        const RAW_OBJECT1: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+        const RAW_OBJECT2: jni_sys::jobject = 0x93486 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::IsSameObject(IsSameObjectCall {
+            object1: RAW_OBJECT1,
+            object2: RAW_OBJECT2,
+            result: jni_sys::JNI_TRUE,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            IsSameObject: Some(is_same_object),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object1 = 0x91011 as jni_sys::jobject;
-        let raw_object2 = 0x1234 as jni_sys::jobject;
-        let object1 = test_object(&env, raw_object1);
-        let object2 = test_object(&env, raw_object2);
+        let env = test_env(&vm, calls.env);
+        let object1 = test_value(&env, RAW_OBJECT1);
+        let object2 = test_value(&env, RAW_OBJECT2);
         assert!(object1.is_same_as(&object2, &NoException::test()));
-        unsafe {
-            assert_eq!(IS_SAME_AS_CALLS, 1);
-            assert_eq!(IS_SAME_AS_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(IS_SAME_AS_OBJECT1_ARGUMENT, raw_object1);
-            assert_eq!(IS_SAME_AS_OBJECT2_ARGUMENT, raw_object2);
-        }
     }
 
     #[test]
     fn is_same_as_not_same() {
-        unsafe extern "system" fn is_same_object(
-            _: *mut jni_sys::JNIEnv,
-            _: jni_sys::jobject,
-            _: jni_sys::jobject,
-        ) -> jni_sys::jboolean {
-            jni_sys::JNI_FALSE
-        }
+        const RAW_OBJECT1: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+        const RAW_OBJECT2: jni_sys::jobject = 0x93486 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::IsSameObject(IsSameObjectCall {
+            object1: RAW_OBJECT1,
+            object2: RAW_OBJECT2,
+            result: jni_sys::JNI_FALSE,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            IsSameObject: Some(is_same_object),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let object1 = test_object(&env, ptr::null_mut());
-        let object2 = test_object(&env, ptr::null_mut());
+        let env = test_env(&vm, calls.env);
+        let object1 = test_value(&env, RAW_OBJECT1);
+        let object2 = test_value(&env, RAW_OBJECT2);
         assert!(!object1.is_same_as(&object2, &NoException::test()));
     }
 
     #[test]
     fn is_instance_of() {
-        static mut IS_INSTANCE_OF_CALLS: i32 = 0;
-        static mut IS_INSTANCE_OF_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut IS_INSTANCE_OF_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        static mut IS_INSTANCE_OF_CLASS_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn is_instance_of(
-            env: *mut jni_sys::JNIEnv,
-            object: jni_sys::jobject,
-            class: jni_sys::jobject,
-        ) -> jni_sys::jboolean {
-            IS_INSTANCE_OF_CALLS += 1;
-            IS_INSTANCE_OF_ENV_ARGUMENT = env;
-            IS_INSTANCE_OF_OBJECT_ARGUMENT = object;
-            IS_INSTANCE_OF_CLASS_ARGUMENT = class;
-            jni_sys::JNI_TRUE
-        }
+        const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+        const RAW_CLASS: jni_sys::jobject = 0x93486 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::IsInstanceOf(IsInstanceOfCall {
+            object: RAW_OBJECT,
+            class: RAW_CLASS,
+            result: jni_sys::JNI_TRUE,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            IsInstanceOf: Some(is_instance_of),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        let raw_class = 0x1234 as jni_sys::jobject;
-        let object = test_object(&env, raw_object);
-        let class = test_class(&env, raw_class);
+        let env = test_env(&vm, calls.env);
+        let object = test_object(&env, RAW_OBJECT);
+        let class = test_class(&env, RAW_CLASS);
         assert!(object.is_instance_of(&class, &NoException::test()));
-        unsafe {
-            assert_eq!(IS_INSTANCE_OF_CALLS, 1);
-            assert_eq!(IS_INSTANCE_OF_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(IS_INSTANCE_OF_OBJECT_ARGUMENT, raw_object);
-            assert_eq!(IS_INSTANCE_OF_CLASS_ARGUMENT, raw_class);
-        }
     }
 
     #[test]
     fn is_not_instance_of() {
-        unsafe extern "system" fn is_instance_of(
-            _: *mut jni_sys::JNIEnv,
-            _: jni_sys::jobject,
-            _: jni_sys::jobject,
-        ) -> jni_sys::jboolean {
-            jni_sys::JNI_FALSE
-        }
+        const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+        const RAW_CLASS: jni_sys::jobject = 0x93486 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::IsInstanceOf(IsInstanceOfCall {
+            object: RAW_OBJECT,
+            class: RAW_CLASS,
+            result: jni_sys::JNI_FALSE,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            IsInstanceOf: Some(is_instance_of),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let object = test_object(&env, ptr::null_mut());
-        let class = test_class(&env, ptr::null_mut());
+        let env = test_env(&vm, calls.env);
+        let object = test_object(&env, RAW_OBJECT);
+        let class = test_class(&env, RAW_CLASS);
         assert!(!object.is_instance_of(&class, &NoException::test()));
     }
 }
@@ -3111,52 +2921,28 @@ mod throwable_tests {
 
     #[test]
     fn throw() {
-        static mut THROW_CALLS: i32 = 0;
-        static mut THROW_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut THROW_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn throw(
-            env: *mut jni_sys::JNIEnv,
-            object: jni_sys::jobject,
-        ) -> jni_sys::jint {
-            THROW_CALLS += 1;
-            THROW_ENV_ARGUMENT = env;
-            THROW_OBJECT_ARGUMENT = object;
-            jni_sys::JNI_OK
-        }
+        const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::Throw(ThrowCall {
+            object: RAW_OBJECT,
+            result: jni_sys::JNI_OK,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            Throw: Some(throw),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        let object = test_value(&env, raw_object);
+        let env = test_env(&vm, calls.env);
+        let object = test_value(&env, RAW_OBJECT);
         object.throw(NoException::test());
-        unsafe {
-            assert_eq!(THROW_CALLS, 1);
-            assert_eq!(THROW_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(THROW_OBJECT_ARGUMENT, raw_object);
-        }
     }
 
     #[test]
     #[should_panic(expected = "Throwing an exception has failed with status -1.")]
     fn throw_failed() {
-        unsafe extern "system" fn throw(
-            _: *mut jni_sys::JNIEnv,
-            _: jni_sys::jobject,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_ERR
-        }
+        const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::Throw(ThrowCall {
+            object: RAW_OBJECT,
+            result: jni_sys::JNI_ERR,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            Throw: Some(throw),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let object = test_value(&env, ptr::null_mut());
+        let env = test_env(&vm, calls.env);
+        let object = test_value(&env, RAW_OBJECT);
         object.throw(NoException::test());
     }
 }
@@ -3261,200 +3047,100 @@ mod class_tests {
 
     #[test]
     fn find() {
-        static mut FIND_CLASS_CALLS: i32 = 0;
-        static mut FIND_CLASS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut FIND_CLASS_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn find_class(
-            env: *mut jni_sys::JNIEnv,
-            name: *const c_char,
-        ) -> jni_sys::jobject {
-            assert_eq!(
-                from_java_string(CStr::from_ptr(name).to_bytes_with_nul()).unwrap(),
-                "test-class"
-            );
-            FIND_CLASS_CALLS += 1;
-            FIND_CLASS_ENV_ARGUMENT = env;
-            FIND_CLASS_RESULT
-        }
+        const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::FindClass(FindClassCall {
+            name: "test-class".to_owned(),
+            result: RAW_OBJECT,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            FindClass: Some(find_class),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        unsafe {
-            FIND_CLASS_RESULT = raw_object;
-        }
-
+        let env = test_env(&vm, calls.env);
         let class = Class::find(&env, "test-class", &NoException::test()).unwrap();
         unsafe {
-            assert_eq!(class.raw_object(), raw_object);
-            assert_eq!(class.env().raw_env(), raw_jni_env);
-            assert_eq!(FIND_CLASS_CALLS, 1);
-            assert_eq!(FIND_CLASS_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(class.raw_object(), RAW_OBJECT);
+            assert_eq!(class.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     fn find_not_found() {
-        unsafe extern "system" fn find_class(
-            _: *mut jni_sys::JNIEnv,
-            _: *const c_char,
-        ) -> jni_sys::jobject {
-            ptr::null_mut() as jni_sys::jobject
-        }
-        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            EXCEPTION_OCCURED_CALLS += 1;
-            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-            EXCEPTION_OCCURED_RESULT
-        }
-        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-            EXCEPTION_CLEAR_CALLS += 1;
-            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-        }
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::FindClass(FindClassCall {
+                name: "test-class".to_owned(),
+                result: ptr::null_mut(),
+            }),
+            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClearCall {}),
+        ]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            FindClass: Some(find_class),
-            ExceptionOccurred: Some(exception_occured),
-            ExceptionClear: Some(exception_clear),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_exception = 0x1234 as jni_sys::jobject;
-        unsafe {
-            EXCEPTION_OCCURED_RESULT = raw_exception;
-        }
+        let env = test_env(&vm, calls.env);
         let exception = Class::find(&env, "test-class", &NoException::test()).unwrap_err();
         unsafe {
-            assert_eq!(exception.raw_object(), raw_exception);
-            assert_eq!(exception.env().raw_env(), raw_jni_env);
-            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(exception.raw_object(), EXCEPTION);
+            assert_eq!(exception.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     fn is_subtype_of() {
-        static mut IS_ASSIGNABLE_FROM_CALLS: i32 = 0;
-        static mut IS_ASSIGNABLE_FROM_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut IS_ASSIGNABLE_FROM_CLASS1_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        static mut IS_ASSIGNABLE_FROM_CLASS2_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn is_assignable_from(
-            env: *mut jni_sys::JNIEnv,
-            class1: jni_sys::jobject,
-            class2: jni_sys::jobject,
-        ) -> jni_sys::jboolean {
-            IS_ASSIGNABLE_FROM_CALLS += 1;
-            IS_ASSIGNABLE_FROM_ENV_ARGUMENT = env;
-            IS_ASSIGNABLE_FROM_CLASS1_ARGUMENT = class1;
-            IS_ASSIGNABLE_FROM_CLASS2_ARGUMENT = class2;
-            jni_sys::JNI_TRUE
-        }
+        const RAW_CLASS1: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        const RAW_CLASS2: jni_sys::jobject = 0x294875 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::IsAssignableFrom(IsAssignableFromCall {
+            class1: RAW_CLASS1,
+            class2: RAW_CLASS2,
+            result: jni_sys::JNI_TRUE,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            IsAssignableFrom: Some(is_assignable_from),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_class1 = 0x91011 as jni_sys::jobject;
-        let raw_class2 = 0x1234 as jni_sys::jobject;
-        let class1 = test_class(&env, raw_class1);
-        let class2 = test_class(&env, raw_class2);
+        let env = test_env(&vm, calls.env);
+        let class1 = test_class(&env, RAW_CLASS1);
+        let class2 = test_class(&env, RAW_CLASS2);
         assert!(class1.is_subtype_of(&class2, &NoException::test()));
-        unsafe {
-            assert_eq!(IS_ASSIGNABLE_FROM_CALLS, 1);
-            assert_eq!(IS_ASSIGNABLE_FROM_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(IS_ASSIGNABLE_FROM_CLASS1_ARGUMENT, raw_class1);
-            assert_eq!(IS_ASSIGNABLE_FROM_CLASS2_ARGUMENT, raw_class2);
-        }
     }
 
     #[test]
     fn is_not_subtype_of() {
-        unsafe extern "system" fn is_assignable_from(
-            _: *mut jni_sys::JNIEnv,
-            _: jni_sys::jobject,
-            _: jni_sys::jobject,
-        ) -> jni_sys::jboolean {
-            jni_sys::JNI_FALSE
-        }
+        const RAW_CLASS1: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        const RAW_CLASS2: jni_sys::jobject = 0x294875 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::IsAssignableFrom(IsAssignableFromCall {
+            class1: RAW_CLASS1,
+            class2: RAW_CLASS2,
+            result: jni_sys::JNI_FALSE,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            IsAssignableFrom: Some(is_assignable_from),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let class1 = test_class(&env, ptr::null_mut());
-        let class2 = test_class(&env, ptr::null_mut());
+        let env = test_env(&vm, calls.env);
+        let class1 = test_class(&env, RAW_CLASS1);
+        let class2 = test_class(&env, RAW_CLASS2);
         assert!(!class1.is_subtype_of(&class2, &NoException::test()));
     }
 
     #[test]
     fn parent() {
-        static mut GET_SUPERCLASS_CALLS: i32 = 0;
-        static mut GET_SUPERCLASS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut GET_SUPERCLASS_CLASS_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        static mut GET_SUPERCLASS_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn get_superclass(
-            env: *mut jni_sys::JNIEnv,
-            class: jni_sys::jobject,
-        ) -> jni_sys::jobject {
-            GET_SUPERCLASS_CALLS += 1;
-            GET_SUPERCLASS_ENV_ARGUMENT = env;
-            GET_SUPERCLASS_CLASS_ARGUMENT = class;
-            GET_SUPERCLASS_RESULT
-        }
+        const RAW_CLASS1: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        const RAW_CLASS2: jni_sys::jobject = 0x294875 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::GetSuperclass(GetSuperclassCall {
+            class: RAW_CLASS1,
+            result: RAW_CLASS2,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            GetSuperclass: Some(get_superclass),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_class1 = 0x91011 as jni_sys::jobject;
-        let raw_class2 = 0x1234 as jni_sys::jobject;
-        let class = test_class(&env, raw_class1);
-        unsafe {
-            GET_SUPERCLASS_RESULT = raw_class2;
-        }
+        let env = test_env(&vm, calls.env);
+        let class = test_class(&env, RAW_CLASS1);
         let parent = class.parent(&NoException::test()).unwrap();
         unsafe {
-            assert_eq!(parent.raw_object(), raw_class2);
-            assert_eq!(parent.env().raw_env(), raw_jni_env);
-            assert_eq!(GET_SUPERCLASS_CALLS, 1);
-            assert_eq!(GET_SUPERCLASS_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(GET_SUPERCLASS_CLASS_ARGUMENT, raw_class1);
+            assert_eq!(parent.raw_object(), RAW_CLASS2);
+            assert_eq!(parent.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     fn no_parent() {
-        unsafe extern "system" fn get_superclass(
-            _: *mut jni_sys::JNIEnv,
-            _: jni_sys::jobject,
-        ) -> jni_sys::jobject {
-            ptr::null_mut()
-        }
+        const RAW_CLASS: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::GetSuperclass(GetSuperclassCall {
+            class: RAW_CLASS,
+            result: ptr::null_mut(),
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            GetSuperclass: Some(get_superclass),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let class = test_class(&env, ptr::null_mut());
+        let env = test_env(&vm, calls.env);
+        let class = test_class(&env, RAW_CLASS);
         assert!(class.parent(&NoException::test()).is_none());
     }
 }
@@ -3610,430 +3296,186 @@ mod string_tests {
 
     #[test]
     fn empty() {
-        static mut NEW_STRING_CALLS: i32 = 0;
-        static mut NEW_STRING_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut NEW_STRING_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn new_string(
-            env: *mut jni_sys::JNIEnv,
-            name: *const jni_sys::jchar,
-            size: jni_sys::jsize,
-        ) -> jni_sys::jobject {
-            assert_eq!(size, 0);
-            assert_eq!(name, ptr::null());
-            NEW_STRING_CALLS += 1;
-            NEW_STRING_ENV_ARGUMENT = env;
-            NEW_STRING_RESULT
-        }
+        const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::NewString(NewStringCall {
+            name: ptr::null(),
+            size: 0,
+            result: RAW_STRING,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            NewString: Some(new_string),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        unsafe {
-            NEW_STRING_RESULT = raw_object;
-        }
-
+        let env = test_env(&vm, calls.env);
         let string = String::empty(&env, &NoException::test()).unwrap();
         unsafe {
-            assert_eq!(string.raw_object(), raw_object);
-            assert_eq!(string.env().raw_env(), raw_jni_env);
-            assert_eq!(NEW_STRING_CALLS, 1);
-            assert_eq!(NEW_STRING_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(string.raw_object(), RAW_STRING);
+            assert_eq!(string.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     fn empty_exception() {
-        unsafe extern "system" fn new_string(
-            _: *mut jni_sys::JNIEnv,
-            _: *const jni_sys::jchar,
-            _: jni_sys::jsize,
-        ) -> jni_sys::jobject {
-            ptr::null_mut()
-        }
-        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            EXCEPTION_OCCURED_CALLS += 1;
-            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-            EXCEPTION_OCCURED_RESULT
-        }
-        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-            EXCEPTION_CLEAR_CALLS += 1;
-            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-        }
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::NewString(NewStringCall {
+                name: ptr::null(),
+                size: 0,
+                result: ptr::null_mut(),
+            }),
+            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClearCall {}),
+        ]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            NewString: Some(new_string),
-            ExceptionOccurred: Some(exception_occured),
-            ExceptionClear: Some(exception_clear),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_exception = 0x1234 as jni_sys::jobject;
-        unsafe {
-            EXCEPTION_OCCURED_RESULT = raw_exception;
-        }
+        let env = test_env(&vm, calls.env);
         let exception = String::empty(&env, &NoException::test()).unwrap_err();
         unsafe {
-            assert_eq!(exception.raw_object(), raw_exception);
-            assert_eq!(exception.env().raw_env(), raw_jni_env);
-            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(exception.raw_object(), EXCEPTION);
+            assert_eq!(exception.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     fn new_empty() {
-        static mut NEW_STRING_CALLS: i32 = 0;
-        static mut NEW_STRING_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut NEW_STRING_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn new_string(
-            env: *mut jni_sys::JNIEnv,
-            name: *const jni_sys::jchar,
-            size: jni_sys::jsize,
-        ) -> jni_sys::jobject {
-            assert_eq!(size, 0);
-            assert_eq!(name, ptr::null());
-            NEW_STRING_CALLS += 1;
-            NEW_STRING_ENV_ARGUMENT = env;
-            NEW_STRING_RESULT
-        }
+        const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::NewString(NewStringCall {
+            name: ptr::null(),
+            size: 0,
+            result: RAW_STRING,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            NewString: Some(new_string),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        unsafe {
-            NEW_STRING_RESULT = raw_object;
-        }
-
+        let env = test_env(&vm, calls.env);
         let string = String::new(&env, "", &NoException::test()).unwrap();
         unsafe {
-            assert_eq!(string.raw_object(), raw_object);
-            assert_eq!(string.env().raw_env(), raw_jni_env);
-            assert_eq!(NEW_STRING_CALLS, 1);
-            assert_eq!(NEW_STRING_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(string.raw_object(), RAW_STRING);
+            assert_eq!(string.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     fn new_empty_exception() {
-        unsafe extern "system" fn new_string(
-            _: *mut jni_sys::JNIEnv,
-            _: *const jni_sys::jchar,
-            _: jni_sys::jsize,
-        ) -> jni_sys::jobject {
-            ptr::null_mut()
-        }
-        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            EXCEPTION_OCCURED_CALLS += 1;
-            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-            EXCEPTION_OCCURED_RESULT
-        }
-        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-            EXCEPTION_CLEAR_CALLS += 1;
-            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-        }
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::NewString(NewStringCall {
+                name: ptr::null(),
+                size: 0,
+                result: ptr::null_mut(),
+            }),
+            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClearCall {}),
+        ]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            NewString: Some(new_string),
-            ExceptionOccurred: Some(exception_occured),
-            ExceptionClear: Some(exception_clear),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_exception = 0x1234 as jni_sys::jobject;
-        unsafe {
-            EXCEPTION_OCCURED_RESULT = raw_exception;
-        }
+        let env = test_env(&vm, calls.env);
         let exception = String::new(&env, "", &NoException::test()).unwrap_err();
         unsafe {
-            assert_eq!(exception.raw_object(), raw_exception);
-            assert_eq!(exception.env().raw_env(), raw_jni_env);
-            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(exception.raw_object(), EXCEPTION);
+            assert_eq!(exception.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     fn new() {
-        static mut NEW_STRING_CALLS: i32 = 0;
-        static mut NEW_STRING_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut NEW_STRING_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn new_string_utf(
-            env: *mut jni_sys::JNIEnv,
-            string: *const c_char,
-        ) -> jni_sys::jobject {
-            assert_eq!(
-                from_java_string(CStr::from_ptr(string).to_bytes_with_nul()).unwrap(),
-                "test-string"
-            );
-            NEW_STRING_CALLS += 1;
-            NEW_STRING_ENV_ARGUMENT = env;
-            NEW_STRING_RESULT
-        }
+        const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::NewStringUTF(NewStringUTFCall {
+            string: "test-string".to_owned(),
+            result: RAW_STRING,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            NewStringUTF: Some(new_string_utf),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        unsafe {
-            NEW_STRING_RESULT = raw_object;
-        }
-
+        let env = test_env(&vm, calls.env);
         let string = String::new(&env, "test-string", &NoException::test()).unwrap();
         unsafe {
-            assert_eq!(string.raw_object(), raw_object);
-            assert_eq!(string.env().raw_env(), raw_jni_env);
-            assert_eq!(NEW_STRING_CALLS, 1);
-            assert_eq!(NEW_STRING_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(string.raw_object(), RAW_STRING);
+            assert_eq!(string.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     fn new_exception() {
-        unsafe extern "system" fn new_string_utf(
-            _: *mut jni_sys::JNIEnv,
-            _: *const c_char,
-        ) -> jni_sys::jobject {
-            ptr::null_mut()
-        }
-        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            EXCEPTION_OCCURED_CALLS += 1;
-            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-            EXCEPTION_OCCURED_RESULT
-        }
-        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-            EXCEPTION_CLEAR_CALLS += 1;
-            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-        }
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::NewStringUTF(NewStringUTFCall {
+                string: "test-string".to_owned(),
+                result: ptr::null_mut(),
+            }),
+            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClearCall {}),
+        ]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            NewStringUTF: Some(new_string_utf),
-            ExceptionOccurred: Some(exception_occured),
-            ExceptionClear: Some(exception_clear),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_exception = 0x1234 as jni_sys::jobject;
-        unsafe {
-            EXCEPTION_OCCURED_RESULT = raw_exception;
-        }
+        let env = test_env(&vm, calls.env);
         let exception = String::new(&env, "test-string", &NoException::test()).unwrap_err();
         unsafe {
-            assert_eq!(exception.raw_object(), raw_exception);
-            assert_eq!(exception.env().raw_env(), raw_jni_env);
-            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(exception.raw_object(), EXCEPTION);
+            assert_eq!(exception.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     fn len() {
-        static mut GET_STRING_LENGTH_CALLS: i32 = 0;
-        static mut GET_STRING_LENGTH_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut GET_STRING_LENGTH_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        static mut GET_STRING_LENGTH_RESULT: jni_sys::jsize = 0;
-        unsafe extern "system" fn get_string_length(
-            env: *mut jni_sys::JNIEnv,
-            string: jni_sys::jobject,
-        ) -> jni_sys::jsize {
-            GET_STRING_LENGTH_CALLS += 1;
-            GET_STRING_LENGTH_ENV_ARGUMENT = env;
-            GET_STRING_LENGTH_OBJECT_ARGUMENT = string;
-            GET_STRING_LENGTH_RESULT
-        }
+        const LENGTH: usize = 17;
+        const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::GetStringLength(GetStringLengthCall {
+            string: RAW_STRING,
+            result: 17 as jni_sys::jsize,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            GetStringLength: Some(get_string_length),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        unsafe {
-            GET_STRING_LENGTH_RESULT = 17;
-        }
-
-        let string = unsafe { String::from_raw(&env, raw_object) };
-        assert_eq!(string.len(&NoException::test()), 17);
-        unsafe {
-            assert_eq!(GET_STRING_LENGTH_CALLS, 1);
-            assert_eq!(GET_STRING_LENGTH_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(GET_STRING_LENGTH_OBJECT_ARGUMENT, raw_object);
-        }
+        let env = test_env(&vm, calls.env);
+        let string = unsafe { String::from_raw(&env, RAW_STRING) };
+        assert_eq!(string.len(&NoException::test()), LENGTH);
     }
 
     #[test]
     fn size() {
-        static mut GET_STRING_SIZE_CALLS: i32 = 0;
-        static mut GET_STRING_SIZE_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut GET_STRING_SIZE_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        static mut GET_STRING_SIZE_RESULT: jni_sys::jsize = 0;
-        unsafe extern "system" fn get_string_utf_length(
-            env: *mut jni_sys::JNIEnv,
-            string: jni_sys::jobject,
-        ) -> jni_sys::jsize {
-            GET_STRING_SIZE_CALLS += 1;
-            GET_STRING_SIZE_ENV_ARGUMENT = env;
-            GET_STRING_SIZE_OBJECT_ARGUMENT = string;
-            GET_STRING_SIZE_RESULT
-        }
+        const LENGTH: usize = 17;
+        const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::GetStringUTFLength(GetStringUTFLengthCall {
+            string: RAW_STRING,
+            result: 17 as jni_sys::jsize,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            GetStringUTFLength: Some(get_string_utf_length),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        unsafe {
-            GET_STRING_SIZE_RESULT = 17;
-        }
-
-        let string = unsafe { String::from_raw(&env, raw_object) };
-        assert_eq!(string.size(&NoException::test()), 18);
-        unsafe {
-            assert_eq!(GET_STRING_SIZE_CALLS, 1);
-            assert_eq!(GET_STRING_SIZE_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(GET_STRING_SIZE_OBJECT_ARGUMENT, raw_object);
-        }
+        let env = test_env(&vm, calls.env);
+        let string = unsafe { String::from_raw(&env, RAW_STRING) };
+        assert_eq!(string.size(&NoException::test()), LENGTH + 1);
     }
 
     #[test]
     fn as_string() {
-        static mut GET_STRING_LENGTH_CALLS: i32 = 0;
-        static mut GET_STRING_LENGTH_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut GET_STRING_LENGTH_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        static mut GET_STRING_LENGTH_RESULT: jni_sys::jsize = 0;
-        unsafe extern "system" fn get_string_length(
-            env: *mut jni_sys::JNIEnv,
-            string: jni_sys::jobject,
-        ) -> jni_sys::jsize {
-            GET_STRING_LENGTH_CALLS += 1;
-            GET_STRING_LENGTH_ENV_ARGUMENT = env;
-            GET_STRING_LENGTH_OBJECT_ARGUMENT = string;
-            GET_STRING_LENGTH_RESULT
-        }
-        static mut GET_STRING_SIZE_CALLS: i32 = 0;
-        static mut GET_STRING_SIZE_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut GET_STRING_SIZE_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        static mut GET_STRING_SIZE_RESULT: jni_sys::jsize = 0;
-        unsafe extern "system" fn get_string_utf_length(
-            env: *mut jni_sys::JNIEnv,
-            string: jni_sys::jobject,
-        ) -> jni_sys::jsize {
-            GET_STRING_SIZE_CALLS += 1;
-            GET_STRING_SIZE_ENV_ARGUMENT = env;
-            GET_STRING_SIZE_OBJECT_ARGUMENT = string;
-            GET_STRING_SIZE_RESULT
-        }
-        static mut GET_STRING_UTF_REGION_CALLS: i32 = 0;
-        static mut GET_STRING_UTF_REGION_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut GET_STRING_UTF_REGION_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-        static mut GET_STRING_UTF_REGION_LENGTH_ARGUMENT: jni_sys::jsize = 0;
-        unsafe extern "system" fn get_string_utf_region(
-            env: *mut jni_sys::JNIEnv,
-            string: jni_sys::jobject,
-            start: jni_sys::jsize,
-            len: jni_sys::jsize,
-            buffer: *mut c_char,
-        ) {
-            assert_eq!(start, 0);
-            assert_ne!(buffer, ptr::null_mut());
-            let test_buffer = to_java_string("test-string");
-            for i in 0..test_buffer.len() {
-                *buffer.offset(i as isize) = test_buffer[i] as i8;
-            }
-            GET_STRING_UTF_REGION_CALLS += 1;
-            GET_STRING_UTF_REGION_ENV_ARGUMENT = env;
-            GET_STRING_UTF_REGION_OBJECT_ARGUMENT = string;
-            GET_STRING_UTF_REGION_LENGTH_ARGUMENT = len;
-        }
+        const LENGTH: usize = 5;
+        const SIZE: usize = 11; // `"test-string".len()`.
+        const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::GetStringLength(GetStringLengthCall {
+                string: RAW_STRING,
+                result: LENGTH as jni_sys::jsize,
+            }),
+            JniCall::GetStringUTFLength(GetStringUTFLengthCall {
+                string: RAW_STRING,
+                result: SIZE as jni_sys::jsize,
+            }),
+            JniCall::GetStringUTFRegion(GetStringUTFRegionCall {
+                string: RAW_STRING,
+                start: 0,
+                len: LENGTH as jni_sys::jsize,
+                buffer: "test-string".to_owned(),
+            }),
+        ]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            GetStringLength: Some(get_string_length),
-            GetStringUTFLength: Some(get_string_utf_length),
-            GetStringUTFRegion: Some(get_string_utf_region),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_object = 0x91011 as jni_sys::jobject;
-        unsafe {
-            GET_STRING_LENGTH_RESULT = 17;
-            GET_STRING_SIZE_RESULT = "test-string".len() as i32;
-        }
-
-        let string = unsafe { String::from_raw(&env, raw_object) };
+        let env = test_env(&vm, calls.env);
+        let string = unsafe { String::from_raw(&env, RAW_STRING) };
         assert_eq!(string.as_string(&NoException::test()), "test-string");
-        unsafe {
-            assert_eq!(GET_STRING_LENGTH_CALLS, 1);
-            assert_eq!(GET_STRING_LENGTH_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(GET_STRING_LENGTH_OBJECT_ARGUMENT, raw_object);
-            assert_eq!(GET_STRING_SIZE_CALLS, 1);
-            assert_eq!(GET_STRING_SIZE_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(GET_STRING_SIZE_OBJECT_ARGUMENT, raw_object);
-            assert_eq!(GET_STRING_UTF_REGION_CALLS, 1);
-            assert_eq!(GET_STRING_UTF_REGION_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(GET_STRING_UTF_REGION_OBJECT_ARGUMENT, raw_object);
-            assert_eq!(GET_STRING_UTF_REGION_LENGTH_ARGUMENT, 17);
-        }
     }
 
     #[test]
     fn as_string_empty() {
-        unsafe extern "system" fn get_string_length(
-            _: *mut jni_sys::JNIEnv,
-            _: jni_sys::jobject,
-        ) -> jni_sys::jsize {
-            0
-        }
+        const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::GetStringLength(GetStringLengthCall {
+            string: RAW_STRING,
+            result: 0,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            GetStringLength: Some(get_string_length),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let string = unsafe { String::from_raw(&env, ptr::null_mut()) };
+        let env = test_env(&vm, calls.env);
+        let string = unsafe { String::from_raw(&env, RAW_STRING) };
         assert_eq!(string.as_string(&NoException::test()), "");
     }
 
     #[test]
-    fn call() {
+    fn to_string_call() {
         static mut FIND_CLASS_CALLS: i32 = 0;
         static mut FIND_CLASS_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
         static mut FIND_CLASS_RESULT: jni_sys::jobject = ptr::null_mut();
@@ -4162,7 +3604,7 @@ mod string_tests {
     }
 
     #[test]
-    fn exception_thrown() {
+    fn to_string_exception_thrown() {
         unsafe extern "system" fn find_class(
             _: *mut jni_sys::JNIEnv,
             _: *const c_char,
@@ -4256,55 +3698,27 @@ mod maybe_get_and_clear_exception_tests {
 
     #[test]
     fn exception() {
-        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            EXCEPTION_OCCURED_CALLS += 1;
-            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-            EXCEPTION_OCCURED_RESULT
-        }
-        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-            EXCEPTION_CLEAR_CALLS += 1;
-            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-        }
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClearCall {}),
+        ]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionOccurred: Some(exception_occured),
-            ExceptionClear: Some(exception_clear),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_exception = 0x1234 as jni_sys::jobject;
-        unsafe {
-            EXCEPTION_OCCURED_RESULT = raw_exception;
-        }
+        let env = test_env(&vm, calls.env);
         let exception = maybe_get_and_clear_exception(&env).unwrap();
         unsafe {
-            assert_eq!(exception.raw_object(), raw_exception);
-            assert_eq!(exception.env().raw_env(), raw_jni_env);
-            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(exception.raw_object(), EXCEPTION);
+            assert_eq!(exception.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     fn exception_not_found() {
-        unsafe extern "system" fn exception_occured(_: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            ptr::null_mut() as jni_sys::jobject
-        }
+        let calls = test_raw_jni_env!(vec![JniCall::ExceptionOccurred(ExceptionOccurredCall {
+            result: ptr::null_mut(),
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionOccurred: Some(exception_occured),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
+        let env = test_env(&vm, calls.env);
         assert_eq!(maybe_get_and_clear_exception(&env), None);
     }
 }
@@ -4326,56 +3740,28 @@ mod get_and_clear_exception_tests {
 
     #[test]
     fn exception() {
-        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            EXCEPTION_OCCURED_CALLS += 1;
-            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-            EXCEPTION_OCCURED_RESULT
-        }
-        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-            EXCEPTION_CLEAR_CALLS += 1;
-            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-        }
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClearCall {}),
+        ]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionOccurred: Some(exception_occured),
-            ExceptionClear: Some(exception_clear),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_exception = 0x1234 as jni_sys::jobject;
-        unsafe {
-            EXCEPTION_OCCURED_RESULT = raw_exception;
-        }
+        let env = test_env(&vm, calls.env);
         let exception = get_and_clear_exception(Exception::test(&env));
         unsafe {
-            assert_eq!(exception.raw_object(), raw_exception);
-            assert_eq!(exception.env().raw_env(), raw_jni_env);
-            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(exception.raw_object(), EXCEPTION);
+            assert_eq!(exception.env().raw_env(), calls.env);
         }
     }
 
     #[test]
     #[should_panic(expected = "No pending exception in presence of an Exception token")]
     fn exception_not_found() {
-        unsafe extern "system" fn exception_occured(_: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            ptr::null_mut() as jni_sys::jobject
-        }
+        let calls = test_raw_jni_env!(vec![JniCall::ExceptionOccurred(ExceptionOccurredCall {
+            result: ptr::null_mut(),
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionOccurred: Some(exception_occured),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
+        let env = test_env(&vm, calls.env);
         get_and_clear_exception(Exception::test(&env));
     }
 }
@@ -4409,42 +3795,19 @@ mod with_checked_exception_tests {
 
     #[test]
     fn exception() {
-        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            EXCEPTION_OCCURED_CALLS += 1;
-            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-            EXCEPTION_OCCURED_RESULT
-        }
-        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-            EXCEPTION_CLEAR_CALLS += 1;
-            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-        }
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClearCall {}),
+        ]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionOccurred: Some(exception_occured),
-            ExceptionClear: Some(exception_clear),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_exception = 0x1234 as jni_sys::jobject;
-        unsafe {
-            EXCEPTION_OCCURED_RESULT = raw_exception;
-        }
+        let env = test_env(&vm, calls.env);
         let exception = with_checked_exception::<i32, _>(&NoException::test(), |_| {
             Err(Exception::test(&env))
         }).unwrap_err();
         unsafe {
-            assert_eq!(exception.raw_object(), raw_exception);
-            assert_eq!(exception.env().raw_env(), raw_jni_env);
-            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(exception.raw_object(), EXCEPTION);
+            assert_eq!(exception.env().raw_env(), calls.env);
         }
     }
 }
@@ -4693,63 +4056,35 @@ pub mod method_calls {
 
         #[test]
         fn no_such_method() {
-            unsafe extern "system" fn get_object_class(
-                _: *mut jni_sys::JNIEnv,
-                _: jni_sys::jobject,
-            ) -> jni_sys::jobject {
-                0x57469 as jni_sys::jclass
-            }
-            unsafe extern "system" fn get_method_id(
-                _: *mut jni_sys::JNIEnv,
-                _: jni_sys::jobject,
-                _: *const c_char,
-                _: *const c_char,
-            ) -> jni_sys::jmethodID {
-                ptr::null_mut()
-            }
-            static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-            static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-            unsafe extern "system" fn exception_occured(
-                env: *mut jni_sys::JNIEnv,
-            ) -> jni_sys::jobject {
-                EXCEPTION_OCCURED_CALLS += 1;
-                EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-                EXCEPTION_OCCURED_RESULT
-            }
-            static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-            static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-                EXCEPTION_CLEAR_CALLS += 1;
-                EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-            }
+            const RAW_OBJECT: jni_sys::jobject = 0x098957 as jni_sys::jobject;
+            const RAW_CLASS: jni_sys::jobject = 0x239875 as jni_sys::jobject;
+            const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![
+                JniCall::GetObjectClass(GetObjectClassCall {
+                    object: RAW_OBJECT,
+                    result: RAW_CLASS,
+                }),
+                JniCall::GetMethodID(GetMethodIDCall {
+                    class: RAW_CLASS,
+                    name: "test-method".to_owned(),
+                    signature: "()Z".to_owned(),
+                    result: ptr::null_mut(),
+                }),
+                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClearCall {}),
+            ]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                GetObjectClass: Some(get_object_class),
-                GetMethodID: Some(get_method_id),
-                ExceptionOccurred: Some(exception_occured),
-                ExceptionClear: Some(exception_clear),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let raw_object = 0x91011 as jni_sys::jobject;
-            let raw_exception = 0x32885 as jni_sys::jthrowable;
-            let object = test_object(&env, raw_object);
+            let env = test_env(&vm, calls.env);
+            let object = test_object(&env, RAW_OBJECT);
             unsafe {
-                EXCEPTION_OCCURED_RESULT = raw_exception;
                 let exception = super::call_method::<Object, _, _, fn() -> bool>(
                     &object,
-                    "",
+                    "test-method",
                     (),
                     &NoException::test(),
                 ).unwrap_err();
-                assert_eq!(exception.raw_object(), raw_exception);
-                assert_eq!(exception.env().raw_env(), raw_jni_env);
-                assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-                assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-                assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-                assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+                assert_eq!(exception.raw_object(), EXCEPTION);
+                assert_eq!(exception.env().raw_env(), calls.env);
             }
         }
 
@@ -5013,112 +4348,58 @@ pub mod method_calls {
 
         #[test]
         fn no_such_class() {
-            unsafe extern "system" fn find_class(
-                _: *mut jni_sys::JNIEnv,
-                _: *const c_char,
-            ) -> jni_sys::jobject {
-                ptr::null_mut()
-            }
-            static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-            static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-            unsafe extern "system" fn exception_occured(
-                env: *mut jni_sys::JNIEnv,
-            ) -> jni_sys::jobject {
-                EXCEPTION_OCCURED_CALLS += 1;
-                EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-                EXCEPTION_OCCURED_RESULT
-            }
-            static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-            static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-                EXCEPTION_CLEAR_CALLS += 1;
-                EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-            }
+            const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![
+                JniCall::FindClass(FindClassCall {
+                    name: "java/lang/Object".to_owned(),
+                    result: ptr::null_mut(),
+                }),
+                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClearCall {}),
+            ]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                FindClass: Some(find_class),
-                ExceptionOccurred: Some(exception_occured),
-                ExceptionClear: Some(exception_clear),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let raw_exception = 0x32885 as jni_sys::jthrowable;
+            let env = test_env(&vm, calls.env);
             unsafe {
-                EXCEPTION_OCCURED_RESULT = raw_exception;
                 let exception = super::call_static_method::<Object, _, _, fn() -> bool>(
                     &env,
                     "",
                     (),
                     &NoException::test(),
                 ).unwrap_err();
-                assert_eq!(exception.raw_object(), raw_exception);
-                assert_eq!(exception.env().raw_env(), raw_jni_env);
-                assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-                assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-                assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-                assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+                assert_eq!(exception.raw_object(), EXCEPTION);
+                assert_eq!(exception.env().raw_env(), calls.env);
             }
         }
 
         #[test]
         fn no_such_method() {
-            unsafe extern "system" fn find_class(
-                _: *mut jni_sys::JNIEnv,
-                _: *const c_char,
-            ) -> jni_sys::jobject {
-                0x57469 as jni_sys::jclass
-            }
-            unsafe extern "system" fn get_method_id(
-                _: *mut jni_sys::JNIEnv,
-                _: jni_sys::jobject,
-                _: *const c_char,
-                _: *const c_char,
-            ) -> jni_sys::jmethodID {
-                ptr::null_mut()
-            }
-            static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-            static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-            unsafe extern "system" fn exception_occured(
-                env: *mut jni_sys::JNIEnv,
-            ) -> jni_sys::jobject {
-                EXCEPTION_OCCURED_CALLS += 1;
-                EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-                EXCEPTION_OCCURED_RESULT
-            }
-            static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-            static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-                EXCEPTION_CLEAR_CALLS += 1;
-                EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-            }
+            const RAW_CLASS: jni_sys::jobject = 0x239875 as jni_sys::jobject;
+            const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![
+                JniCall::FindClass(FindClassCall {
+                    name: "java/lang/Object".to_owned(),
+                    result: RAW_CLASS,
+                }),
+                JniCall::GetStaticMethodID(GetStaticMethodIDCall {
+                    class: RAW_CLASS,
+                    name: "test-method".to_owned(),
+                    signature: "()Z".to_owned(),
+                    result: ptr::null_mut(),
+                }),
+                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClearCall {}),
+            ]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                FindClass: Some(find_class),
-                GetStaticMethodID: Some(get_method_id),
-                ExceptionOccurred: Some(exception_occured),
-                ExceptionClear: Some(exception_clear),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let raw_exception = 0x32885 as jni_sys::jthrowable;
+            let env = test_env(&vm, calls.env);
             unsafe {
-                EXCEPTION_OCCURED_RESULT = raw_exception;
                 let exception = super::call_static_method::<Object, _, _, fn() -> bool>(
                     &env,
-                    "",
+                    "test-method",
                     (),
                     &NoException::test(),
                 ).unwrap_err();
-                assert_eq!(exception.raw_object(), raw_exception);
-                assert_eq!(exception.env().raw_env(), raw_jni_env);
-                assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-                assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-                assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-                assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+                assert_eq!(exception.raw_object(), EXCEPTION);
+                assert_eq!(exception.env().raw_env(), calls.env);
             }
         }
 
@@ -5377,112 +4658,52 @@ pub mod method_calls {
 
         #[test]
         fn no_such_class() {
-            unsafe extern "system" fn find_class(
-                _: *mut jni_sys::JNIEnv,
-                _: *const c_char,
-            ) -> jni_sys::jobject {
-                ptr::null_mut()
-            }
-            static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-            static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-            unsafe extern "system" fn exception_occured(
-                env: *mut jni_sys::JNIEnv,
-            ) -> jni_sys::jobject {
-                EXCEPTION_OCCURED_CALLS += 1;
-                EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-                EXCEPTION_OCCURED_RESULT
-            }
-            static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-            static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-                EXCEPTION_CLEAR_CALLS += 1;
-                EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-            }
+            const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![
+                JniCall::FindClass(FindClassCall {
+                    name: "java/lang/Object".to_owned(),
+                    result: ptr::null_mut(),
+                }),
+                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClearCall {}),
+            ]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                FindClass: Some(find_class),
-                ExceptionOccurred: Some(exception_occured),
-                ExceptionClear: Some(exception_clear),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let arguments = (17 as i32, 19. as f64);
-            let raw_exception = 0x32885 as jni_sys::jthrowable;
+            let env = test_env(&vm, calls.env);
             unsafe {
-                EXCEPTION_OCCURED_RESULT = raw_exception;
-                let exception = super::call_constructor::<Object, _, fn(i32, f64)>(
-                    &env,
-                    arguments,
-                    &NoException::test(),
-                ).unwrap_err();
-                assert_eq!(exception.raw_object(), raw_exception);
-                assert_eq!(exception.env().raw_env(), raw_jni_env);
-                assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-                assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-                assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-                assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+                let exception =
+                    super::call_constructor::<Object, _, fn()>(&env, (), &NoException::test())
+                        .unwrap_err();
+                assert_eq!(exception.raw_object(), EXCEPTION);
+                assert_eq!(exception.env().raw_env(), calls.env);
             }
         }
 
         #[test]
         fn no_such_method() {
-            unsafe extern "system" fn find_class(
-                _: *mut jni_sys::JNIEnv,
-                _: *const c_char,
-            ) -> jni_sys::jobject {
-                0x57469 as jni_sys::jclass
-            }
-            unsafe extern "system" fn get_method_id(
-                _: *mut jni_sys::JNIEnv,
-                _: jni_sys::jobject,
-                _: *const c_char,
-                _: *const c_char,
-            ) -> jni_sys::jmethodID {
-                ptr::null_mut()
-            }
-            static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-            static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-            unsafe extern "system" fn exception_occured(
-                env: *mut jni_sys::JNIEnv,
-            ) -> jni_sys::jobject {
-                EXCEPTION_OCCURED_CALLS += 1;
-                EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-                EXCEPTION_OCCURED_RESULT
-            }
-            static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-            static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-            unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-                EXCEPTION_CLEAR_CALLS += 1;
-                EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-            }
+            const RAW_CLASS: jni_sys::jobject = 0x239875 as jni_sys::jobject;
+            const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![
+                JniCall::FindClass(FindClassCall {
+                    name: "java/lang/Object".to_owned(),
+                    result: RAW_CLASS,
+                }),
+                JniCall::GetMethodID(GetMethodIDCall {
+                    class: RAW_CLASS,
+                    name: "<init>".to_owned(),
+                    signature: "()V".to_owned(),
+                    result: ptr::null_mut(),
+                }),
+                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClearCall {}),
+            ]);
             let vm = test_vm(ptr::null_mut());
-            let raw_jni_env = jni_sys::JNINativeInterface_ {
-                FindClass: Some(find_class),
-                GetMethodID: Some(get_method_id),
-                ExceptionOccurred: Some(exception_occured),
-                ExceptionClear: Some(exception_clear),
-                ..empty_raw_jni_env()
-            };
-            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-            let env = test_env(&vm, raw_jni_env);
-            let arguments = (17 as i32, 19. as f64);
-            let raw_exception = 0x32885 as jni_sys::jthrowable;
+            let env = test_env(&vm, calls.env);
             unsafe {
-                EXCEPTION_OCCURED_RESULT = raw_exception;
-                let exception = super::call_constructor::<Object, _, fn(i32, f64)>(
-                    &env,
-                    arguments,
-                    &NoException::test(),
-                ).unwrap_err();
-                assert_eq!(exception.raw_object(), raw_exception);
-                assert_eq!(exception.env().raw_env(), raw_jni_env);
-                assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-                assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-                assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-                assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+                let exception =
+                    super::call_constructor::<Object, _, fn()>(&env, (), &NoException::test())
+                        .unwrap_err();
+                assert_eq!(exception.raw_object(), EXCEPTION);
+                assert_eq!(exception.env().raw_env(), calls.env);
             }
         }
 

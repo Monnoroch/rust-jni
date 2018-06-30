@@ -14,6 +14,10 @@ extern crate jni_sys;
 #[macro_use]
 extern crate lazy_static;
 
+#[cfg(test)]
+#[macro_use]
+mod testing;
+
 mod attach_arguments;
 mod init_arguments;
 mod java_string;
@@ -21,7 +25,6 @@ mod jni;
 mod methods;
 mod primitives;
 mod raw;
-mod testing;
 mod version;
 
 pub use attach_arguments::AttachArguments;
