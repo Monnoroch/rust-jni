@@ -218,41 +218,18 @@ mod exception_tests {
 
     #[test]
     fn unwrap() {
-        static mut EXCEPTION_OCCURED_CALLS: i32 = 0;
-        static mut EXCEPTION_OCCURED_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        static mut EXCEPTION_OCCURED_RESULT: jni_sys::jobject = ptr::null_mut();
-        unsafe extern "system" fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject {
-            EXCEPTION_OCCURED_CALLS += 1;
-            EXCEPTION_OCCURED_ENV_ARGUMENT = env;
-            EXCEPTION_OCCURED_RESULT
-        }
-        static mut EXCEPTION_CLEAR_CALLS: i32 = 0;
-        static mut EXCEPTION_CLEAR_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_clear(env: *mut jni_sys::JNIEnv) {
-            EXCEPTION_CLEAR_CALLS += 1;
-            EXCEPTION_CLEAR_ENV_ARGUMENT = env;
-        }
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClearCall {}),
+        ]);
         let vm = test_vm(ptr::null_mut());
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionOccurred: Some(exception_occured),
-            ExceptionClear: Some(exception_clear),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-        let env = test_env(&vm, raw_jni_env);
-        let raw_exception = 0x1234 as jni_sys::jobject;
-        unsafe {
-            EXCEPTION_OCCURED_RESULT = raw_exception;
-        }
+        let env = test_env(&vm, calls.env);
         let token = Exception::test(&env);
         let (exception, _) = token.unwrap();
         unsafe {
-            assert_eq!(exception.raw_object(), raw_exception);
-            assert_eq!(exception.env().raw_env(), raw_jni_env);
-            assert_eq!(EXCEPTION_OCCURED_CALLS, 1);
-            assert_eq!(EXCEPTION_OCCURED_ENV_ARGUMENT, raw_jni_env);
-            assert_eq!(EXCEPTION_CLEAR_CALLS, 1);
-            assert_eq!(EXCEPTION_CLEAR_ENV_ARGUMENT, raw_jni_env);
+            assert_eq!(exception.raw_object(), EXCEPTION);
+            assert_eq!(exception.env().raw_env(), calls.env);
         }
     }
 }
@@ -828,6 +805,9 @@ mod java_vm_tests {
 
     #[test]
     fn attach() {
+        let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+            result: jni_sys::JNI_FALSE,
+        })]);
         static mut GET_ENV_CALLS: i32 = 0;
         static mut GET_ENV_VM_ARGUMENT: *mut jni_sys::JavaVM = ptr::null_mut();
         static mut GET_ENV_VERSION_ARGUMENT: jni_sys::jint = 0;
@@ -841,7 +821,6 @@ mod java_vm_tests {
             GET_ENV_VERSION_ARGUMENT = version;
             jni_sys::JNI_EDETACHED
         }
-
         static mut ATTACH_CALLS: i32 = 0;
         static mut ATTACH_VM_ARGUMENT: *mut jni_sys::JavaVM = ptr::null_mut();
         static mut ATTACH_ENV_ARGUMENT: *mut c_void = ptr::null_mut();
@@ -857,22 +836,6 @@ mod java_vm_tests {
             ATTACH_ARGUMENT = argument;
             jni_sys::JNI_OK
         }
-
-        static mut EXCEPTION_CHECK_CALLS: i32 = 0;
-        static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_check(
-            jni_env: *mut jni_sys::JNIEnv,
-        ) -> jni_sys::jboolean {
-            EXCEPTION_CHECK_CALLS += 1;
-            EXCEPTION_CHECK_ARGUMENT = jni_env;
-            jni_sys::JNI_FALSE
-        }
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionCheck: Some(exception_check),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-
         let raw_java_vm = jni_sys::JNIInvokeInterface_ {
             GetEnv: Some(get_env),
             AttachCurrentThread: Some(attach),
@@ -882,7 +845,7 @@ mod java_vm_tests {
         let vm = test_vm(raw_java_vm_ptr);
         let init_arguments = init_arguments::new(JniVersion::V8);
         unsafe {
-            ATTACH_ENV_ARGUMENT = raw_jni_env as *mut c_void;
+            ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
         }
         let env = vm.attach(&AttachArguments::named(&init_arguments, "test-name"))
             .unwrap();
@@ -899,10 +862,8 @@ mod java_vm_tests {
                 ).unwrap(),
                 "test-name"
             );
-            assert_eq!(EXCEPTION_CHECK_CALLS, 1);
-            assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
             assert_eq!(env.raw_jvm(), raw_java_vm_ptr);
-            assert_eq!(env.raw_env(), raw_jni_env);
+            assert_eq!(env.raw_env(), calls.env);
         }
         assert_eq!(env.has_token, RefCell::new(true));
         assert_eq!(env.native_method_call, false);
@@ -1055,6 +1016,9 @@ mod java_vm_tests {
     #[test]
     #[should_panic(expected = "Newly attached thread has a pending exception")]
     fn attach_pending_exception() {
+        let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+            result: jni_sys::JNI_TRUE,
+        })]);
         unsafe extern "system" fn get_env(
             _: *mut jni_sys::JavaVM,
             _: *mut *mut c_void,
@@ -1062,7 +1026,6 @@ mod java_vm_tests {
         ) -> jni_sys::jint {
             jni_sys::JNI_EDETACHED
         }
-
         static mut ATTACH_ENV_ARGUMENT: *mut c_void = ptr::null_mut();
         unsafe extern "system" fn attach(
             _: *mut jni_sys::JavaVM,
@@ -1072,16 +1035,6 @@ mod java_vm_tests {
             *jni_env = ATTACH_ENV_ARGUMENT;
             jni_sys::JNI_OK
         }
-
-        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
-            jni_sys::JNI_TRUE
-        }
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionCheck: Some(exception_check),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-
         let raw_java_vm = jni_sys::JNIInvokeInterface_ {
             GetEnv: Some(get_env),
             AttachCurrentThread: Some(attach),
@@ -1090,7 +1043,7 @@ mod java_vm_tests {
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
         unsafe {
-            ATTACH_ENV_ARGUMENT = raw_jni_env as *mut c_void;
+            ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
         }
         vm.attach(&AttachArguments::new(&init_arguments::new(JniVersion::V8)))
             .unwrap();
@@ -1098,6 +1051,9 @@ mod java_vm_tests {
 
     #[test]
     fn attach_daemon() {
+        let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+            result: jni_sys::JNI_FALSE,
+        })]);
         static mut GET_ENV_CALLS: i32 = 0;
         static mut GET_ENV_VM_ARGUMENT: *mut jni_sys::JavaVM = ptr::null_mut();
         static mut GET_ENV_VERSION_ARGUMENT: jni_sys::jint = 0;
@@ -1111,7 +1067,6 @@ mod java_vm_tests {
             GET_ENV_VERSION_ARGUMENT = version;
             jni_sys::JNI_EDETACHED
         }
-
         static mut ATTACH_CALLS: i32 = 0;
         static mut ATTACH_VM_ARGUMENT: *mut jni_sys::JavaVM = ptr::null_mut();
         static mut ATTACH_ENV_ARGUMENT: *mut c_void = ptr::null_mut();
@@ -1127,22 +1082,6 @@ mod java_vm_tests {
             ATTACH_ARGUMENT = argument;
             jni_sys::JNI_OK
         }
-
-        static mut EXCEPTION_CHECK_CALLS: i32 = 0;
-        static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_check(
-            jni_env: *mut jni_sys::JNIEnv,
-        ) -> jni_sys::jboolean {
-            EXCEPTION_CHECK_CALLS += 1;
-            EXCEPTION_CHECK_ARGUMENT = jni_env;
-            jni_sys::JNI_FALSE
-        }
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionCheck: Some(exception_check),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-
         let raw_java_vm = jni_sys::JNIInvokeInterface_ {
             GetEnv: Some(get_env),
             AttachCurrentThreadAsDaemon: Some(attach),
@@ -1152,7 +1091,7 @@ mod java_vm_tests {
         let vm = test_vm(raw_java_vm_ptr);
         let init_arguments = init_arguments::new(JniVersion::V8);
         unsafe {
-            ATTACH_ENV_ARGUMENT = raw_jni_env as *mut c_void;
+            ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
         }
         let env = vm.attach_daemon(&AttachArguments::named(&init_arguments, "test-name"))
             .unwrap();
@@ -1169,10 +1108,8 @@ mod java_vm_tests {
                 ).unwrap(),
                 "test-name"
             );
-            assert_eq!(EXCEPTION_CHECK_CALLS, 1);
-            assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
             assert_eq!(env.raw_jvm(), raw_java_vm_ptr);
-            assert_eq!(env.raw_env(), raw_jni_env);
+            assert_eq!(env.raw_env(), calls.env);
         }
         assert_eq!(env.has_token, RefCell::new(true));
         assert_eq!(env.native_method_call, false);
@@ -1431,6 +1368,9 @@ mod jni_env_tests {
 
     #[test]
     fn drop() {
+        let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+            result: jni_sys::JNI_FALSE,
+        })]);
         static mut DETACH_CALLS: i32 = 0;
         static mut DETACH_ARGUMENT: *mut jni_sys::JavaVM = ptr::null_mut();
         unsafe extern "system" fn detach(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint {
@@ -1443,25 +1383,11 @@ mod jni_env_tests {
             ..empty_raw_java_vm()
         };
         let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
-        static mut EXCEPTION_CHECK_CALLS: i32 = 0;
-        static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_check(
-            jni_env: *mut jni_sys::JNIEnv,
-        ) -> jni_sys::jboolean {
-            EXCEPTION_CHECK_CALLS += 1;
-            EXCEPTION_CHECK_ARGUMENT = jni_env;
-            jni_sys::JNI_FALSE
-        }
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionCheck: Some(exception_check),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
         {
             let _env = JniEnv {
                 version: JniVersion::V8,
                 vm: &vm,
-                jni_env: raw_jni_env,
+                jni_env: calls.env,
                 has_token: RefCell::new(true),
                 native_method_call: false,
             };
@@ -1472,8 +1398,6 @@ mod jni_env_tests {
         unsafe {
             assert_eq!(DETACH_CALLS, 1);
             assert_eq!(DETACH_ARGUMENT, vm.java_vm);
-            assert_eq!(EXCEPTION_CHECK_CALLS, 1);
-            assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
         }
     }
 
@@ -1487,6 +1411,12 @@ mod jni_env_tests {
     #[test]
     #[should_panic(expected = "Dropping `JniEnv` with a pending exception is not allowed")]
     fn drop_exception_pending() {
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_TRUE,
+            }),
+            JniCall::ExceptionDescribe(ExceptionDescribeCall {}),
+        ]);
         unsafe extern "system" fn destroy_vm(_: *mut jni_sys::JavaVM) -> jni_sys::jint {
             jni_sys::JNI_OK
         }
@@ -1499,40 +1429,10 @@ mod jni_env_tests {
             ..empty_raw_java_vm()
         };
         let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
-        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
-            jni_sys::JNI_TRUE
-        }
-        static mut EXCEPTION_DESCRIBE_CALLS: i32 = 0;
-        static mut EXCEPTION_DESCRIBE_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_describe(jni_env: *mut jni_sys::JNIEnv) {
-            EXCEPTION_DESCRIBE_CALLS += 1;
-            EXCEPTION_DESCRIBE_ARGUMENT = jni_env;
-        }
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionCheck: Some(exception_check),
-            ExceptionDescribe: Some(exception_describe),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-
-        struct Test {
-            raw_jni_env: *mut jni_sys::JNIEnv,
-        }
-        impl Drop for Test {
-            fn drop(&mut self) {
-                unsafe {
-                    assert_eq!(1, EXCEPTION_DESCRIBE_CALLS);
-                    assert_eq!(self.raw_jni_env, EXCEPTION_DESCRIBE_ARGUMENT);
-                }
-            }
-        }
-        // _test.drop() will be called to check the `ExceptionDescribe` call after the panic.
-        let _test = Test { raw_jni_env };
-
         JniEnv {
             version: JniVersion::V8,
             vm: &vm,
-            jni_env: raw_jni_env,
+            jni_env: calls.env,
             has_token: RefCell::new(true),
             native_method_call: false,
         };
@@ -1541,6 +1441,9 @@ mod jni_env_tests {
     #[test]
     #[should_panic(expected = "Could not detach the current thread. Status: -1")]
     fn drop_detach_error() {
+        let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+            result: jni_sys::JNI_FALSE,
+        })]);
         unsafe extern "system" fn detach(_: *mut jni_sys::JavaVM) -> jni_sys::jint {
             jni_sys::JNI_ERR
         }
@@ -1549,17 +1452,10 @@ mod jni_env_tests {
             ..empty_raw_java_vm()
         };
         let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
-        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
-            jni_sys::JNI_FALSE
-        }
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionCheck: Some(exception_check),
-            ..empty_raw_jni_env()
-        };
         JniEnv {
             version: JniVersion::V8,
             vm: &vm,
-            jni_env: &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv,
+            jni_env: calls.env,
             has_token: RefCell::new(true),
             native_method_call: false,
         };
@@ -1567,44 +1463,22 @@ mod jni_env_tests {
 
     #[test]
     fn token() {
-        static mut EXCEPTION_CHECK_CALLS: i32 = 0;
-        static mut EXCEPTION_CHECK_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-        unsafe extern "system" fn exception_check(
-            jni_env: *mut jni_sys::JNIEnv,
-        ) -> jni_sys::jboolean {
-            EXCEPTION_CHECK_CALLS += 1;
-            EXCEPTION_CHECK_ARGUMENT = jni_env;
-            jni_sys::JNI_FALSE
-        }
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionCheck: Some(exception_check),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-
+        let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+            result: jni_sys::JNI_FALSE,
+        })]);
         let raw_java_vm_ptr = 0x1234 as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
-        let env = test_env(&vm, raw_jni_env);
+        let env = test_env(&vm, calls.env);
         env.token();
-        unsafe {
-            assert_eq!(EXCEPTION_CHECK_CALLS, 1);
-            assert_eq!(EXCEPTION_CHECK_ARGUMENT, raw_jni_env);
-        }
         assert_eq!(env.has_token, RefCell::new(false));
     }
 
     #[test]
     #[should_panic(expected = "Trying to obtain a second `NoException` token from the `JniEnv`")]
     fn token_twice() {
-        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
-            jni_sys::JNI_FALSE
-        }
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionCheck: Some(exception_check),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-
+        let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+            result: jni_sys::JNI_FALSE,
+        })]);
         unsafe extern "system" fn detach(_: *mut jni_sys::JavaVM) -> jni_sys::jint {
             jni_sys::JNI_OK
         }
@@ -1616,7 +1490,7 @@ mod jni_env_tests {
         let env = JniEnv {
             version: JniVersion::V8,
             vm: &vm,
-            jni_env: raw_jni_env,
+            jni_env: calls.env,
             has_token: RefCell::new(false),
             native_method_call: true,
         };
@@ -1628,21 +1502,14 @@ mod jni_env_tests {
         expected = "Trying to obtain a `NoException` token when there is a pending exception"
     )]
     fn token_pending_exception() {
-        static mut EXCEPTION_CHECK_CALLS: i32 = 0;
-        unsafe extern "system" fn exception_check(_: *mut jni_sys::JNIEnv) -> jni_sys::jboolean {
-            if EXCEPTION_CHECK_CALLS == 0 {
-                EXCEPTION_CHECK_CALLS += 1;
-                jni_sys::JNI_TRUE
-            } else {
-                jni_sys::JNI_FALSE
-            }
-        }
-        let raw_jni_env = jni_sys::JNINativeInterface_ {
-            ExceptionCheck: Some(exception_check),
-            ..empty_raw_jni_env()
-        };
-        let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_TRUE,
+            }),
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_FALSE,
+            }),
+        ]);
         unsafe extern "system" fn detach(_: *mut jni_sys::JavaVM) -> jni_sys::jint {
             jni_sys::JNI_OK
         }
@@ -1651,7 +1518,7 @@ mod jni_env_tests {
             ..empty_raw_java_vm()
         };
         let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
-        let env = test_env(&vm, raw_jni_env);
+        let env = test_env(&vm, calls.env);
         env.token();
     }
 }
