@@ -227,10 +227,7 @@ mod exception_tests {
         let env = test_env(&vm, calls.env);
         let token = Exception::test(&env);
         let (exception, _) = token.unwrap();
-        unsafe {
-            assert_eq!(exception.raw_object(), EXCEPTION);
-            assert_eq!(exception.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&exception, EXCEPTION);
     }
 }
 
@@ -1893,10 +1890,7 @@ macro_rules! generate_object_tests {
             let env = test_env(&vm, calls.env);
             let object = test_value(&env, RAW_OBJECT1);
             let clone = object.clone(&NoException::test()).unwrap();
-            unsafe {
-                assert_eq!(clone.raw_object(), RAW_OBJECT2);
-                assert_eq!(clone.env().raw_env(), calls.env);
-            }
+            calls.assert_eq(&clone, RAW_OBJECT2);
         }
 
         #[test]
@@ -1915,10 +1909,7 @@ macro_rules! generate_object_tests {
             let env = test_env(&vm, calls.env);
             let object = test_value(&env, RAW_OBJECT);
             let exception = object.clone(&NoException::test()).unwrap_err();
-            unsafe {
-                assert_eq!(exception.raw_object(), EXCEPTION);
-                assert_eq!(exception.env().raw_env(), calls.env);
-            }
+            calls.assert_eq(&exception, EXCEPTION);
         }
 
         #[test]
@@ -2644,10 +2635,7 @@ mod object_tests {
         let env = test_env(&vm, calls.env);
         let object = test_value(&env, RAW_OBJECT);
         let class = object.class(&NoException::test());
-        unsafe {
-            assert_eq!(class.raw_object(), RAW_CLASS);
-            assert_eq!(class.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&class, RAW_CLASS);
     }
 
     #[test]
@@ -2922,10 +2910,7 @@ mod class_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let class = Class::find(&env, "test-class", &NoException::test()).unwrap();
-        unsafe {
-            assert_eq!(class.raw_object(), RAW_OBJECT);
-            assert_eq!(class.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&class, RAW_OBJECT);
     }
 
     #[test]
@@ -2942,10 +2927,7 @@ mod class_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let exception = Class::find(&env, "test-class", &NoException::test()).unwrap_err();
-        unsafe {
-            assert_eq!(exception.raw_object(), EXCEPTION);
-            assert_eq!(exception.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&exception, EXCEPTION);
     }
 
     #[test]
@@ -2992,10 +2974,7 @@ mod class_tests {
         let env = test_env(&vm, calls.env);
         let class = test_class(&env, RAW_CLASS1);
         let parent = class.parent(&NoException::test()).unwrap();
-        unsafe {
-            assert_eq!(parent.raw_object(), RAW_CLASS2);
-            assert_eq!(parent.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&parent, RAW_CLASS2);
     }
 
     #[test]
@@ -3172,10 +3151,7 @@ mod string_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let string = String::empty(&env, &NoException::test()).unwrap();
-        unsafe {
-            assert_eq!(string.raw_object(), RAW_STRING);
-            assert_eq!(string.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&string, RAW_STRING);
     }
 
     #[test]
@@ -3193,10 +3169,7 @@ mod string_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let exception = String::empty(&env, &NoException::test()).unwrap_err();
-        unsafe {
-            assert_eq!(exception.raw_object(), EXCEPTION);
-            assert_eq!(exception.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&exception, EXCEPTION);
     }
 
     #[test]
@@ -3210,10 +3183,7 @@ mod string_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let string = String::new(&env, "", &NoException::test()).unwrap();
-        unsafe {
-            assert_eq!(string.raw_object(), RAW_STRING);
-            assert_eq!(string.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&string, RAW_STRING);
     }
 
     #[test]
@@ -3231,10 +3201,7 @@ mod string_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let exception = String::new(&env, "", &NoException::test()).unwrap_err();
-        unsafe {
-            assert_eq!(exception.raw_object(), EXCEPTION);
-            assert_eq!(exception.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&exception, EXCEPTION);
     }
 
     #[test]
@@ -3247,10 +3214,7 @@ mod string_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let string = String::new(&env, "test-string", &NoException::test()).unwrap();
-        unsafe {
-            assert_eq!(string.raw_object(), RAW_STRING);
-            assert_eq!(string.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&string, RAW_STRING);
     }
 
     #[test]
@@ -3267,10 +3231,7 @@ mod string_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let exception = String::new(&env, "test-string", &NoException::test()).unwrap_err();
-        unsafe {
-            assert_eq!(exception.raw_object(), EXCEPTION);
-            assert_eq!(exception.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&exception, EXCEPTION);
     }
 
     #[test]
@@ -3573,10 +3534,7 @@ mod maybe_get_and_clear_exception_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let exception = maybe_get_and_clear_exception(&env).unwrap();
-        unsafe {
-            assert_eq!(exception.raw_object(), EXCEPTION);
-            assert_eq!(exception.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&exception, EXCEPTION);
     }
 
     #[test]
@@ -3615,10 +3573,7 @@ mod get_and_clear_exception_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let exception = get_and_clear_exception(Exception::test(&env));
-        unsafe {
-            assert_eq!(exception.raw_object(), EXCEPTION);
-            assert_eq!(exception.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&exception, EXCEPTION);
     }
 
     #[test]
@@ -3672,10 +3627,7 @@ mod with_checked_exception_tests {
         let exception = with_checked_exception::<i32, _>(&NoException::test(), |_| {
             Err(Exception::test(&env))
         }).unwrap_err();
-        unsafe {
-            assert_eq!(exception.raw_object(), EXCEPTION);
-            assert_eq!(exception.env().raw_env(), calls.env);
-        }
+        calls.assert_eq(&exception, EXCEPTION);
     }
 }
 
@@ -4233,8 +4185,7 @@ pub mod method_calls {
                     (),
                     &NoException::test(),
                 ).unwrap_err();
-                assert_eq!(exception.raw_object(), EXCEPTION);
-                assert_eq!(exception.env().raw_env(), calls.env);
+                calls.assert_eq(&exception, EXCEPTION);
             }
         }
 
@@ -4265,8 +4216,7 @@ pub mod method_calls {
                     (),
                     &NoException::test(),
                 ).unwrap_err();
-                assert_eq!(exception.raw_object(), EXCEPTION);
-                assert_eq!(exception.env().raw_env(), calls.env);
+                calls.assert_eq(&exception, EXCEPTION);
             }
         }
 
@@ -4540,8 +4490,7 @@ pub mod method_calls {
                 let exception =
                     super::call_constructor::<Object, _, fn()>(&env, (), &NoException::test())
                         .unwrap_err();
-                assert_eq!(exception.raw_object(), EXCEPTION);
-                assert_eq!(exception.env().raw_env(), calls.env);
+                calls.assert_eq(&exception, EXCEPTION);
             }
         }
 
@@ -4569,8 +4518,7 @@ pub mod method_calls {
                 let exception =
                     super::call_constructor::<Object, _, fn()>(&env, (), &NoException::test())
                         .unwrap_err();
-                assert_eq!(exception.raw_object(), EXCEPTION);
-                assert_eq!(exception.env().raw_env(), calls.env);
+                calls.assert_eq(&exception, EXCEPTION);
             }
         }
 
