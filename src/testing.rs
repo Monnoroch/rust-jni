@@ -418,6 +418,12 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
+pub struct ExceptionDescribeCall {}
+
+__generate_method_check_impl!(ExceptionDescribe, ExceptionDescribeCall, fn() -> (), |_| ());
+
+#[doc(hidden)]
+#[derive(Debug)]
 pub enum JniCall {
     DeleteLocalRef(DeleteLocalRefCall),
     NewLocalRef(NewLocalRefCall),
@@ -438,6 +444,7 @@ pub enum JniCall {
     GetMethodID(GetMethodIDCall),
     GetStaticMethodID(GetStaticMethodIDCall),
     GetStringUTFRegion(GetStringUTFRegionCall),
+    ExceptionDescribe(ExceptionDescribeCall),
 }
 
 #[doc(hidden)]
@@ -612,11 +619,11 @@ macro_rules! test_raw_jni_env {
             )
         }
         unsafe extern "system" fn get_string_utf_region(
-            env: *mut jni_sys::JNIEnv,
-            string: jni_sys::jobject,
-            start: jni_sys::jsize,
-            len: jni_sys::jsize,
-            buffer: *mut c_char,
+            env: *mut ::jni_sys::JNIEnv,
+            string: ::jni_sys::jobject,
+            start: ::jni_sys::jsize,
+            len: ::jni_sys::jsize,
+            buffer: *mut ::std::os::raw::c_char,
         ) {
             GetStringUTFRegionCall::__check_call(
                 __to_static_ref(&CALLS),
@@ -627,7 +634,11 @@ macro_rules! test_raw_jni_env {
                 buffer,
             )
         }
+        unsafe extern "system" fn exception_describe(env: *mut ::jni_sys::JNIEnv) {
+            ExceptionDescribeCall::__check_call(__to_static_ref(&CALLS), env)
+        }
         let raw_env = ::jni_sys::JNINativeInterface_ {
+            ExceptionDescribe: Some(exception_describe),
             GetStringUTFRegion: Some(get_string_utf_region),
             GetMethodID: Some(get_method_id),
             GetStaticMethodID: Some(get_static_method_id),
