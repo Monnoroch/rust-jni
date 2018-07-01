@@ -13,6 +13,11 @@ mod classes {
 
         let string = java::lang::String::new(&env, "test-string", &token).unwrap();
         let exception = java::lang::Throwable::new(&env, string, &token).unwrap();
+        assert!(exception.class(&token).is_same_as(
+            &java::lang::Throwable::get_class(&env, &token).unwrap(),
+            &token
+        ));
+
         let token = exception.throw(token);
         let (exception, token) = token.unwrap();
         assert_eq!(

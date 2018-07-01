@@ -1692,6 +1692,18 @@ macro_rules! object_java_class {
         /// [`is_same_as`](struct.Object.html#methods.is_same_as) to comparing with `==`, because
         /// the former checks for a pending exception in compile-time rather than the run-time.
         impl<'env> Eq for $class<'env> {}
+
+        impl<'env> $class<'env> {
+            /// Get the Java class object for
+            #[doc = $link]
+            ///.
+            ///
+            /// [`Object::getClass` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#getClass())
+            pub fn get_class(env: &'env JniEnv<'env>, token: &NoException<'env>)
+                -> JavaResult<'env, Class<'env>> {
+                Class::find(env, concat!("java/lang", "/", stringify!($class)), token)
+            }
+        }
     };
 }
 
@@ -2376,6 +2388,36 @@ macro_rules! generate_object_tests {
                 format!("{}", object),
                 "<Object::toString threw an exception which could not be formatted>"
             );
+        }
+
+        #[test]
+        fn get_class() {
+            const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![JniCall::FindClass(FindClassCall {
+                name: concat!("java/lang/", stringify!($class)).to_owned(),
+                result: RAW_OBJECT,
+            })]);
+            let vm = test_vm(ptr::null_mut());
+            let env = test_env(&vm, calls.env);
+            let class = $class::get_class(&env, &NoException::test()).unwrap();
+            calls.assert_eq(&class, RAW_OBJECT);
+        }
+
+        #[test]
+        fn get_class_not_found() {
+            const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+            let calls = test_raw_jni_env!(vec![
+                JniCall::FindClass(FindClassCall {
+                    name: concat!("java/lang/", stringify!($class)).to_owned(),
+                    result: ptr::null_mut(),
+                }),
+                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClearCall {}),
+            ]);
+            let vm = test_vm(ptr::null_mut());
+            let env = test_env(&vm, calls.env);
+            let exception = $class::get_class(&env, &NoException::test()).unwrap_err();
+            calls.assert_eq(&exception, EXCEPTION);
         }
     };
 }
@@ -3497,7 +3539,6 @@ java_class!(String, "[`String`](struct.String.html)");
 #[cfg(test)]
 mod string_tests {
     use super::*;
-    use std::ffi::CStr;
     use std::mem;
     use std::ops::Deref;
     use testing::*;
