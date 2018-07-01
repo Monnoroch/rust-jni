@@ -509,7 +509,10 @@ pub unsafe fn __to_static_ref<T>(reference: &'static T) -> &'static mut T {
 
 #[macro_export]
 macro_rules! test_raw_jni_env {
-    ($calls:expr) => {{
+    ($calls:expr) => {
+        test_raw_jni_env!($calls, empty_raw_jni_env())
+    };
+    ($calls:expr, $default_raw_env:expr) => {{
         lazy_static! {
             static ref CALLS: JniCalls = JniCalls::new($calls);
         }
@@ -670,7 +673,7 @@ macro_rules! test_raw_jni_env {
             ExceptionClear: Some(exception_clear),
             ExceptionCheck: Some(exception_check),
             IsSameObject: Some(is_same_object),
-            ..empty_raw_jni_env()
+            ..$default_raw_env
         };
         let calls: &'static mut JniCalls = unsafe { __to_static_ref(&CALLS) };
         // The `raw_env` value is supposed to be dropped at the end of this scope, so I have
