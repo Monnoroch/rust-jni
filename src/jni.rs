@@ -3294,7 +3294,12 @@ java_class!(
         link = "[`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.String))",
         new(message: &String<'env>),
     ),
-    methods = (),
+    methods = (
+        doc = "Get the exception message.",
+        link = "[`Throwable::getMessage` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#getMessage()).",
+        java_name = "getMessage",
+        get_message() -> String<'env>,
+    ),
     static_methods = (),
 );
 
@@ -3607,7 +3612,7 @@ impl<'env> String<'env> {
                 self.raw_object() as jni_sys::jstring
             )
         };
-        size as usize + 1 // +1 for the '\0' byte.
+        size as usize
     }
 
     /// Convert the Java `String` into a Rust `String`.
@@ -3622,7 +3627,7 @@ impl<'env> String<'env> {
             return "".to_owned();
         }
 
-        let size = self.size(token);
+        let size = self.size(token) + 1; // +1 for the '\0' byte.
         let mut buffer: Vec<u8> = Vec::with_capacity(size);
         // Safe because arguments are ensured to be the correct by construction.
         unsafe {
@@ -3794,7 +3799,7 @@ mod string_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let string = unsafe { String::from_raw(&env, RAW_STRING) };
-        assert_eq!(string.size(&NoException::test()), LENGTH + 1);
+        assert_eq!(string.size(&NoException::test()), LENGTH);
     }
 
     #[test]
