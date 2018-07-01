@@ -2180,6 +2180,203 @@ macro_rules! generate_object_tests {
             let object = test_value(&env, ptr::null_mut());
             ToString::to_string(&object);
         }
+
+        #[test]
+        fn display_exception_thrown() {
+            const RAW_OBJECT: jni_sys::jobject = 0x924858 as jni_sys::jobject;
+            const RAW_CLASS: jni_sys::jobject = 0x239875 as jni_sys::jobject;
+            const RAW_EXCEPTION_CLASS: jni_sys::jobject = 0x912376 as jni_sys::jobject;
+            const METHOD_ID: jni_sys::jmethodID = 0x923476 as jni_sys::jmethodID;
+            const EXCEPTION_METHOD_ID: jni_sys::jmethodID = 0x8293659 as jni_sys::jmethodID;
+            const RAW_STRING: jni_sys::jstring = 0x92385 as jni_sys::jstring;
+            const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+            const LENGTH: usize = 5;
+            const SIZE: usize = 11; // `"test-string".len()`.
+            static mut METHOD_CALLS: i32 = 0;
+            static mut METHOD_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+            type VariadicFn = unsafe extern "C" fn(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+                ...
+            ) -> jni_sys::jstring;
+            type TestFn = unsafe extern "C" fn(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+            ) -> jni_sys::jstring;
+            unsafe extern "C" fn method(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+            ) -> jni_sys::jstring {
+                METHOD_CALLS += 1;
+                if METHOD_CALLS == 1 {
+                    assert_eq!(object, RAW_OBJECT);
+                    assert_eq!(method_id, METHOD_ID);
+                    METHOD_ENV_ARGUMENT = env;
+                } else {
+                    assert_eq!(object, EXCEPTION);
+                    assert_eq!(method_id, EXCEPTION_METHOD_ID);
+                    assert_eq!(env, METHOD_ENV_ARGUMENT);
+                }
+                RAW_STRING
+            }
+            let raw_jni_env = jni_sys::JNINativeInterface_ {
+                CallObjectMethod: Some(unsafe { mem::transmute::<TestFn, VariadicFn>(method) }),
+                ..empty_raw_jni_env()
+            };
+            let calls = test_raw_jni_env!(
+                vec![
+                    JniCall::ExceptionCheck(ExceptionCheckCall {
+                        result: jni_sys::JNI_FALSE,
+                    }),
+                    JniCall::GetObjectClass(GetObjectClassCall {
+                        object: RAW_OBJECT,
+                        result: RAW_CLASS,
+                    }),
+                    JniCall::GetMethodID(GetMethodIDCall {
+                        class: RAW_CLASS,
+                        name: "toString".to_owned(),
+                        signature: "()Ljava/lang/String;".to_owned(),
+                        result: METHOD_ID,
+                    }),
+                    JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+                    JniCall::ExceptionClear(ExceptionClearCall {}),
+                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
+                    JniCall::GetObjectClass(GetObjectClassCall {
+                        object: EXCEPTION,
+                        result: RAW_EXCEPTION_CLASS,
+                    }),
+                    JniCall::GetMethodID(GetMethodIDCall {
+                        class: RAW_EXCEPTION_CLASS,
+                        name: "toString".to_owned(),
+                        signature: "()Ljava/lang/String;".to_owned(),
+                        result: EXCEPTION_METHOD_ID,
+                    }),
+                    JniCall::ExceptionOccurred(ExceptionOccurredCall {
+                        result: ptr::null_mut(),
+                    }),
+                    JniCall::DeleteLocalRef(DeleteLocalRefCall {
+                        object: RAW_EXCEPTION_CLASS,
+                    }),
+                    JniCall::GetStringLength(GetStringLengthCall {
+                        string: RAW_STRING,
+                        result: LENGTH as jni_sys::jsize,
+                    }),
+                    JniCall::GetStringUTFLength(GetStringUTFLengthCall {
+                        string: RAW_STRING,
+                        result: SIZE as jni_sys::jsize,
+                    }),
+                    JniCall::GetStringUTFRegion(GetStringUTFRegionCall {
+                        string: RAW_STRING,
+                        start: 0,
+                        len: LENGTH as jni_sys::jsize,
+                        buffer: "test-string".to_owned(),
+                    }),
+                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_STRING }),
+                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: EXCEPTION }),
+                ],
+                raw_jni_env
+            );
+            let vm = test_vm(ptr::null_mut());
+            let env = test_env(&vm, calls.env);
+            let object = test_value(&env, RAW_OBJECT);
+            assert_eq!(
+                ToString::to_string(&object),
+                "Object::toString threw an exception: test-string"
+            );
+        }
+
+        #[test]
+        fn display_exception_thrown_twice() {
+            const RAW_OBJECT: jni_sys::jobject = 0x924858 as jni_sys::jobject;
+            const RAW_CLASS: jni_sys::jobject = 0x239875 as jni_sys::jobject;
+            const RAW_EXCEPTION_CLASS: jni_sys::jobject = 0x912376 as jni_sys::jobject;
+            const METHOD_ID: jni_sys::jmethodID = 0x923476 as jni_sys::jmethodID;
+            const EXCEPTION_METHOD_ID: jni_sys::jmethodID = 0x8293659 as jni_sys::jmethodID;
+            const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+            const EXCEPTION2: jni_sys::jobject = 0x2836 as jni_sys::jobject;
+            static mut METHOD_CALLS: i32 = 0;
+            static mut METHOD_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+            type VariadicFn = unsafe extern "C" fn(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+                ...
+            ) -> jni_sys::jstring;
+            type TestFn = unsafe extern "C" fn(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+            ) -> jni_sys::jstring;
+            unsafe extern "C" fn method(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+            ) -> jni_sys::jstring {
+                METHOD_CALLS += 1;
+                if METHOD_CALLS == 1 {
+                    assert_eq!(object, RAW_OBJECT);
+                    assert_eq!(method_id, METHOD_ID);
+                    METHOD_ENV_ARGUMENT = env;
+                } else {
+                    assert_eq!(object, EXCEPTION);
+                    assert_eq!(method_id, EXCEPTION_METHOD_ID);
+                    assert_eq!(env, METHOD_ENV_ARGUMENT);
+                }
+                ptr::null_mut()
+            }
+            let raw_jni_env = jni_sys::JNINativeInterface_ {
+                CallObjectMethod: Some(unsafe { mem::transmute::<TestFn, VariadicFn>(method) }),
+                ..empty_raw_jni_env()
+            };
+            let calls = test_raw_jni_env!(
+                vec![
+                    JniCall::ExceptionCheck(ExceptionCheckCall {
+                        result: jni_sys::JNI_FALSE,
+                    }),
+                    JniCall::GetObjectClass(GetObjectClassCall {
+                        object: RAW_OBJECT,
+                        result: RAW_CLASS,
+                    }),
+                    JniCall::GetMethodID(GetMethodIDCall {
+                        class: RAW_CLASS,
+                        name: "toString".to_owned(),
+                        signature: "()Ljava/lang/String;".to_owned(),
+                        result: METHOD_ID,
+                    }),
+                    JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+                    JniCall::ExceptionClear(ExceptionClearCall {}),
+                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
+                    JniCall::GetObjectClass(GetObjectClassCall {
+                        object: EXCEPTION,
+                        result: RAW_EXCEPTION_CLASS,
+                    }),
+                    JniCall::GetMethodID(GetMethodIDCall {
+                        class: RAW_EXCEPTION_CLASS,
+                        name: "toString".to_owned(),
+                        signature: "()Ljava/lang/String;".to_owned(),
+                        result: EXCEPTION_METHOD_ID,
+                    }),
+                    JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION2 }),
+                    JniCall::ExceptionClear(ExceptionClearCall {}),
+                    JniCall::DeleteLocalRef(DeleteLocalRefCall {
+                        object: RAW_EXCEPTION_CLASS,
+                    }),
+                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: EXCEPTION2 }),
+                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: EXCEPTION }),
+                ],
+                raw_jni_env
+            );
+            let vm = test_vm(ptr::null_mut());
+            let env = test_env(&vm, calls.env);
+            let object = test_value(&env, RAW_OBJECT);
+            assert_eq!(
+                ToString::to_string(&object),
+                "<Object::toString threw an exception which could not be formatted>"
+            );
+        }
     };
 }
 
@@ -2467,7 +2664,6 @@ pub fn test_object<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) 
 #[cfg(test)]
 mod object_tests {
     use super::*;
-    use std::ffi::CStr;
     use std::mem;
     use testing::*;
 
@@ -2650,7 +2846,6 @@ java_class!(Throwable, "[`Throwable`](struct.Throwable.html)");
 #[cfg(test)]
 mod throwable_tests {
     use super::*;
-    use std::ffi::CStr;
     use std::mem;
     use std::ops::Deref;
     use testing::*;
@@ -2778,7 +2973,6 @@ pub fn test_class<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -
 #[cfg(test)]
 mod class_tests {
     use super::*;
-    use std::ffi::CStr;
     use std::mem;
     use std::ops::Deref;
     use testing::*;
