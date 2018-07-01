@@ -173,6 +173,18 @@ macro_rules! java_class {
                 ($($static_method_argument_name:ident: $static_method_argument_type:ty),*)
                 -> $static_method_result:ty,
         )*),
+        native_methods = ($(
+            function_name = $native_function_name:ident,
+            $native_method_name:ident
+                ($($native_method_argument_name:ident: $native_method_argument_type:ty),*)
+                -> $native_method_result:ty,
+        )*),
+        static_native_methods = ($(
+            function_name = $static_native_function_name:ident,
+            $static_native_method_name:ident
+                ($($static_native_method_argument_name:ident: $static_native_method_argument_type:ty),*)
+                -> $static_native_method_result:ty,
+        )*),
         super_classes = ($(
             $($super_super_class:ident)::+,
             link = $super_super_class_link:expr
@@ -448,6 +460,102 @@ macro_rules! java_class {
                 )*),
             )*),
         );
+
+        // Native method stubs.
+
+        $(
+            #[no_mangle]
+            #[doc(hidden)]
+            pub unsafe extern "C" fn $native_function_name(
+                raw_env: *mut ::jni_sys::JNIEnv,
+                object: ::jni_sys::jobject,
+                $($native_method_argument_name: <$native_method_argument_type as ::rust_jni::JavaType>::__JniType,)*
+            ) -> <$native_method_result as ::rust_jni::JavaType>::__JniType {
+                // TODO: make sure `$native_method_result: ::rust_jni::__generator::FromJni`.
+                // Compile-time check that declared arguments implement the `JniArgumentType`
+                // trait.
+                $(::rust_jni::__generator::test_jni_argument_type($native_method_argument_name);)*
+                ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
+                    // Compile-time check that declared arguments implement the `FromJni` trait.
+                    $(
+                        {
+                            let value =
+                                <$native_method_argument_type as ::rust_jni::__generator::FromJni>
+                                    ::__from_jni(env, $native_method_argument_name);
+                            ::rust_jni::__generator::test_from_jni_type(&value);
+                            ::std::mem::forget(value);
+                        }
+                    )*
+
+                    let object = <$class as ::rust_jni::__generator::FromJni>::__from_jni(env, object);
+                    object
+                        .$native_method_name(
+                            $(::rust_jni::__generator::FromJni::__from_jni(env, $native_method_argument_name),)*
+                            &token,
+                        )
+                        .map(|value| {
+                            let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
+                            // We don't want to delete the reference to result for object results.
+                            ::std::mem::forget(value);
+                            result
+                        })
+                })
+            }
+        )*
+
+        $(
+            #[no_mangle]
+            #[doc(hidden)]
+            pub unsafe extern "C" fn $static_native_function_name(
+                raw_env: *mut ::jni_sys::JNIEnv,
+                raw_class: ::jni_sys::jclass,
+                $($static_native_method_argument_name: <$static_native_method_argument_type as ::rust_jni::JavaType>::__JniType,)*
+            ) -> <$static_native_method_result as ::rust_jni::JavaType>::__JniType {
+                // TODO: make sure `$native_method_result: ::rust_jni::__generator::FromJni`.
+                // Compile-time check that declared arguments implement the `JniArgumentType`
+                // trait.
+                $(::rust_jni::__generator::test_jni_argument_type($static_native_method_argument_name);)*
+                ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
+                    // Compile-time check that declared arguments implement the `FromJni` trait.
+                    $(
+                        {
+                            let value =
+                                <$static_native_method_argument_type as ::rust_jni::__generator::FromJni>
+                                    ::__from_jni(env, $static_native_method_argument_name);
+                            ::rust_jni::__generator::test_from_jni_type(&value);
+                            ::std::mem::forget(value);
+                        }
+                    )*
+
+                    let class = $class::get_class(env, &token)?;
+                    let raw_class = <::rust_jni::java::lang::Class as ::rust_jni::__generator::FromJni>::__from_jni(env, raw_class);
+                    if !class.is_same_as(&raw_class, &token) {
+                        // This should never happen, as native method's link name has the class,
+                        // so it must be bound to a correct clas by the JVM.
+                        // Still, this is a good test to ensure that the system
+                        // is in a consistent state.
+                        panic!(concat!(
+                            "Native method ",
+                            stringify!($static_native_function_name),
+                            " does not belong to class ",
+                            $package, "/", stringify!($class),
+                        ));
+                    }
+
+                    $class::$static_native_method_name(
+                        env,
+                        $(::rust_jni::__generator::FromJni::__from_jni(env, $static_native_method_argument_name),)*
+                        &token,
+                    )
+                    .map(|value| {
+                        let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
+                        // We don't want to delete the reference to result for object results.
+                        ::std::mem::forget(value);
+                        result
+                    })
+                })
+            }
+        )*
 
         // Common traits for convenience.
 

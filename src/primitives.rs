@@ -2,13 +2,16 @@ use jni::*;
 use jni_sys;
 use std::char;
 use std::iter;
-#[cfg(test)]
 use std::ptr;
 
 /// A macro for generating [`JniType`](trait.JniType.html) implementation for primitive types.
 macro_rules! jni_type_trait {
-    ($type:ty, $method:ident, $static_method:ident) => {
+    ($type:ty, $default:expr, $method:ident, $static_method:ident) => {
         impl JniType for $type {
+            fn default() -> Self {
+                $default
+            }
+
             unsafe fn call_method<In: ToJniTuple>(
                 object: &Object,
                 method_id: jni_sys::jmethodID,
@@ -30,23 +33,36 @@ macro_rules! jni_type_trait {
 
 jni_type_trait!(
     jni_sys::jobject,
+    ptr::null_mut(),
     call_object_method,
     call_static_object_method
 );
-jni_type_trait!((), call_void_method, call_static_void_method);
+jni_type_trait!((), (), call_void_method, call_static_void_method);
 jni_type_trait!(
     jni_sys::jboolean,
+    jni_sys::JNI_FALSE,
     call_boolean_method,
     call_static_boolean_method
 );
-jni_type_trait!(jni_sys::jchar, call_char_method, call_static_char_method);
-jni_type_trait!(jni_sys::jbyte, call_byte_method, call_static_byte_method);
-jni_type_trait!(jni_sys::jshort, call_short_method, call_static_short_method);
-jni_type_trait!(jni_sys::jint, call_int_method, call_static_int_method);
-jni_type_trait!(jni_sys::jlong, call_long_method, call_static_long_method);
-jni_type_trait!(jni_sys::jfloat, call_float_method, call_static_float_method);
+jni_type_trait!(jni_sys::jchar, 0, call_char_method, call_static_char_method);
+jni_type_trait!(jni_sys::jbyte, 0, call_byte_method, call_static_byte_method);
+jni_type_trait!(
+    jni_sys::jshort,
+    0,
+    call_short_method,
+    call_static_short_method
+);
+jni_type_trait!(jni_sys::jint, 0, call_int_method, call_static_int_method);
+jni_type_trait!(jni_sys::jlong, 0, call_long_method, call_static_long_method);
+jni_type_trait!(
+    jni_sys::jfloat,
+    0.,
+    call_float_method,
+    call_static_float_method
+);
 jni_type_trait!(
     jni_sys::jdouble,
+    0.,
     call_double_method,
     call_static_double_method
 );
@@ -65,6 +81,11 @@ macro_rules! generate_jni_type_tests {
             use super::*;
             use std::mem;
             use testing::*;
+
+            #[test]
+            fn default() {
+                assert_eq!(<$jni_type as JniType>::default(), $default);
+            }
 
             #[test]
             fn call_method() {

@@ -211,6 +211,28 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
+pub struct ThrowNewCall {
+    pub class: jni_sys::jobject,
+    pub message: String,
+    pub result: jni_sys::jint,
+}
+
+__generate_method_check_impl!(
+    ThrowNew,
+    ThrowNewCall,
+    fn(class: jni_sys::jobject, message: *const c_char) -> jni_sys::jint,
+    |call: &Self| {
+        assert_eq!(class, call.class);
+        assert_eq!(
+            from_java_string(CStr::from_ptr(message).to_bytes_with_nul()).unwrap(),
+            call.message
+        );
+        call.result
+    }
+);
+
+#[doc(hidden)]
+#[derive(Debug)]
 pub struct FindClassCall {
     pub name: String,
     pub result: jni_sys::jobject,
@@ -461,6 +483,37 @@ __generate_method_check_impl!(ExceptionDescribe, ExceptionDescribeCall, fn() -> 
 
 #[doc(hidden)]
 #[derive(Debug)]
+pub struct GetVersionCall {
+    pub result: jni_sys::jint,
+}
+
+__generate_method_check_impl!(
+    GetVersion,
+    GetVersionCall,
+    fn() -> jni_sys::jint,
+    |call: &Self| call.result
+);
+
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct GetJavaVMCall {
+    pub vm: *mut jni_sys::JavaVM,
+    pub result: jni_sys::jint,
+}
+
+__generate_method_check_impl!(
+    GetJavaVM,
+    GetJavaVMCall,
+    fn(vm: *mut *mut jni_sys::JavaVM) -> jni_sys::jint,
+    |call: &Self| {
+        assert_ne!(vm, ptr::null_mut());
+        *vm = call.vm;
+        call.result
+    }
+);
+
+#[doc(hidden)]
+#[derive(Debug)]
 pub enum JniCall {
     DeleteLocalRef(DeleteLocalRefCall),
     NewLocalRef(NewLocalRefCall),
@@ -471,6 +524,7 @@ pub enum JniCall {
     GetObjectClass(GetObjectClassCall),
     IsInstanceOf(IsInstanceOfCall),
     Throw(ThrowCall),
+    ThrowNew(ThrowNewCall),
     FindClass(FindClassCall),
     DefineClass(DefineClassCall),
     IsAssignableFrom(IsAssignableFromCall),
@@ -483,6 +537,8 @@ pub enum JniCall {
     GetStaticMethodID(GetStaticMethodIDCall),
     GetStringUTFRegion(GetStringUTFRegionCall),
     ExceptionDescribe(ExceptionDescribeCall),
+    GetJavaVM(GetJavaVMCall),
+    GetVersion(GetVersionCall),
 }
 
 #[doc(hidden)]
@@ -604,6 +660,13 @@ macro_rules! test_raw_jni_env {
         ) -> ::jni_sys::jint {
             ThrowCall::__check_call(__to_static_ref(&CALLS), env, object)
         }
+        unsafe extern "system" fn throw_new(
+            env: *mut ::jni_sys::JNIEnv,
+            class: ::jni_sys::jobject,
+            message: *const ::std::os::raw::c_char,
+        ) -> ::jni_sys::jint {
+            ThrowNewCall::__check_call(__to_static_ref(&CALLS), env, class, message)
+        }
         unsafe extern "system" fn find_class(
             env: *mut ::jni_sys::JNIEnv,
             name: *const ::std::os::raw::c_char,
@@ -705,7 +768,18 @@ macro_rules! test_raw_jni_env {
         unsafe extern "system" fn exception_describe(env: *mut ::jni_sys::JNIEnv) {
             ExceptionDescribeCall::__check_call(__to_static_ref(&CALLS), env)
         }
+        unsafe extern "system" fn get_java_vm(
+            env: *mut jni_sys::JNIEnv,
+            vm: *mut *mut jni_sys::JavaVM,
+        ) -> jni_sys::jint {
+            GetJavaVMCall::__check_call(__to_static_ref(&CALLS), env, vm)
+        }
+        unsafe extern "system" fn get_version(env: *mut jni_sys::JNIEnv) -> jni_sys::jint {
+            GetVersionCall::__check_call(__to_static_ref(&CALLS), env)
+        }
         let raw_env = ::jni_sys::JNINativeInterface_ {
+            GetJavaVM: Some(get_java_vm),
+            GetVersion: Some(get_version),
             ExceptionDescribe: Some(exception_describe),
             GetStringUTFRegion: Some(get_string_utf_region),
             GetMethodID: Some(get_method_id),
@@ -719,6 +793,7 @@ macro_rules! test_raw_jni_env {
             FindClass: Some(find_class),
             DefineClass: Some(define_class),
             Throw: Some(throw),
+            ThrowNew: Some(throw_new),
             IsInstanceOf: Some(is_instance_of),
             DeleteLocalRef: Some(delete_local_ref),
             GetObjectClass: Some(get_object_class),

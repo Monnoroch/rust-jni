@@ -50,6 +50,9 @@ pub mod __generator {
     pub use jni::method_calls::call_constructor;
     pub use jni::method_calls::call_method;
     pub use jni::method_calls::call_static_method;
+    pub use jni::native_method_wrapper;
+    pub use jni::test_from_jni_type;
+    pub use jni::test_jni_argument_type;
     pub use jni::FromJni;
     pub use jni::ToJni;
 }
