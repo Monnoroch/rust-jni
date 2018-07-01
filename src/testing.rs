@@ -48,6 +48,9 @@ macro_rules! __generate_method_check_impl {
             }
         }
     };
+    ($method:ident, $type:ident, fn($($argument_name:ident: $argument_type:ty,)*) -> $resutl_type:ty, $code:expr) => {
+        __generate_method_check_impl!($method, $type, fn($($argument_name: $argument_type),*) -> $resutl_type, $code);
+    };
 }
 
 #[doc(hidden)]
@@ -222,6 +225,39 @@ __generate_method_check_impl!(
             from_java_string(CStr::from_ptr(name).to_bytes_with_nul()).unwrap(),
             call.name
         );
+        call.result
+    }
+);
+
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct DefineClassCall {
+    pub name: *const c_char,
+    pub loader: jni_sys::jobject,
+    pub buffer: Vec<i8>,
+    pub result: jni_sys::jobject,
+}
+
+__generate_method_check_impl!(
+    DefineClass,
+    DefineClassCall,
+    fn(
+        name: *const c_char,
+        loader: jni_sys::jobject,
+        buffer: *const jni_sys::jbyte,
+        buffer_size: jni_sys::jsize,
+    ) -> jni_sys::jobject,
+    |call: &Self| {
+        assert_eq!(name, call.name);
+        assert_eq!(loader, call.loader);
+        assert_eq!(buffer_size, call.buffer.len() as jni_sys::jsize);
+        let buffer = Vec::<i8>::from_raw_parts(
+            buffer as *mut i8,
+            buffer_size as usize,
+            buffer_size as usize,
+        );
+        assert_eq!(buffer, call.buffer);
+        mem::forget(buffer);
         call.result
     }
 );
@@ -436,6 +472,7 @@ pub enum JniCall {
     IsInstanceOf(IsInstanceOfCall),
     Throw(ThrowCall),
     FindClass(FindClassCall),
+    DefineClass(DefineClassCall),
     IsAssignableFrom(IsAssignableFromCall),
     GetSuperclass(GetSuperclassCall),
     NewString(NewStringCall),
@@ -573,6 +610,22 @@ macro_rules! test_raw_jni_env {
         ) -> ::jni_sys::jobject {
             FindClassCall::__check_call(__to_static_ref(&CALLS), env, name)
         }
+        unsafe extern "system" fn define_class(
+            env: *mut ::jni_sys::JNIEnv,
+            name: *const ::std::os::raw::c_char,
+            loader: ::jni_sys::jobject,
+            buffer: *const ::jni_sys::jbyte,
+            buffer_size: ::jni_sys::jsize,
+        ) -> ::jni_sys::jobject {
+            DefineClassCall::__check_call(
+                __to_static_ref(&CALLS),
+                env,
+                name,
+                loader,
+                buffer,
+                buffer_size,
+            )
+        }
         unsafe extern "system" fn is_assignable_from(
             env: *mut ::jni_sys::JNIEnv,
             class1: ::jni_sys::jobject,
@@ -664,6 +717,7 @@ macro_rules! test_raw_jni_env {
             GetSuperclass: Some(get_superclass),
             IsAssignableFrom: Some(is_assignable_from),
             FindClass: Some(find_class),
+            DefineClass: Some(define_class),
             Throw: Some(throw),
             IsInstanceOf: Some(is_instance_of),
             DeleteLocalRef: Some(delete_local_ref),

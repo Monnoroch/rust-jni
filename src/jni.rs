@@ -1862,7 +1862,9 @@ macro_rules! java_class {
             }
         }
 
-        /// Allow displaying Java objects.
+        /// Allow displaying
+        #[doc = $link]
+        ///.
         ///
         /// [`Object::toString` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#toString())
         ///
@@ -3375,6 +3377,31 @@ impl<'env> Class<'env> {
         Ok(unsafe { Self::from_raw(env, raw_class) })
     }
 
+    /// Define a new Java class from a `.class` file contents.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#defineclass)
+    pub fn define<'a>(
+        env: &'a JniEnv<'a>,
+        bytes: &[u8],
+        token: &NoException<'a>,
+    ) -> JavaResult<'a, Class<'a>> {
+        // Safe because the arguments are correct and because `DefineClass` throws an exception
+        // before returning `null`.
+        let raw_class = unsafe {
+            call_nullable_jni_method!(
+                env,
+                DefineClass,
+                token,
+                ptr::null() as *const c_char,
+                ptr::null_mut() as jni_sys::jobject,
+                bytes.as_ptr() as *const jni_sys::jbyte,
+                bytes.len() as jni_sys::jsize
+            )?
+        };
+        // Safe because the argument is a valid class reference.
+        Ok(unsafe { Self::from_raw(env, raw_class) })
+    }
+
     /// Get the parent class of this class. Will return
     /// [`None`](https://doc.rust-lang.org/std/option/enum.Option.html#variant.None) for the
     /// [`Object`](struct.Object.html) class or any interface.
@@ -3476,6 +3503,40 @@ mod class_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let exception = Class::find(&env, "test-class", &NoException::test()).unwrap_err();
+        calls.assert_eq(&exception, EXCEPTION);
+    }
+
+    #[test]
+    fn define() {
+        const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![JniCall::DefineClass(DefineClassCall {
+            name: ptr::null(),
+            loader: ptr::null_mut(),
+            buffer: vec![17, (230 as u8) as i8],
+            result: RAW_OBJECT,
+        })]);
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, calls.env);
+        let class = Class::define(&env, &[17, 230], &NoException::test()).unwrap();
+        calls.assert_eq(&class, RAW_OBJECT);
+    }
+
+    #[test]
+    fn define_not_found() {
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::DefineClass(DefineClassCall {
+                name: ptr::null(),
+                loader: ptr::null_mut(),
+                buffer: vec![17, (230 as u8) as i8],
+                result: ptr::null_mut(),
+            }),
+            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClearCall {}),
+        ]);
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, calls.env);
+        let exception = Class::define(&env, &[17, 230], &NoException::test()).unwrap_err();
         calls.assert_eq(&exception, EXCEPTION);
     }
 
