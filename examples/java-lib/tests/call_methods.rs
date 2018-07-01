@@ -62,11 +62,10 @@ mod call_methods {
             TestMethodsClass::test_static_function_long(&env, 7, 10, 9, &token).unwrap(),
             10
         );
-        // TODO(#25): enable when fixed.
-        // assert_eq!(
-        //     TestMethodsClass::test_static_function_float(&env, 7., 10., 9., &token).unwrap(),
-        //     10.
-        // );
+        assert_eq!(
+            TestMethodsClass::test_static_function_float(&env, 7., 10., 9., &token).unwrap(),
+            10.
+        );
         assert_eq!(
             TestMethodsClass::test_static_function_double(&env, 7., 10., 9., &token).unwrap(),
             10.
@@ -100,8 +99,7 @@ mod call_methods {
         assert_eq!(value.test_function_short(7, 10, 9, &token).unwrap(), 10);
         assert_eq!(value.test_function_int(7, 10, 9, &token).unwrap(), 10);
         assert_eq!(value.test_function_long(7, 10, 9, &token).unwrap(), 10);
-        // TODO(#25): enable when fixed.
-        // assert_eq!(value.test_function_float(7., 10., 9., &token).unwrap(), 10.);
+        assert_eq!(value.test_function_float(7., 10., 9., &token).unwrap(), 10.);
         assert_eq!(
             value.test_function_double(7., 10., 9., &token).unwrap(),
             10.

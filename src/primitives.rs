@@ -765,7 +765,6 @@ mod to_jni_tuple_tests {
 
     #[test]
     fn call_constructor() {
-        // TODO(#25): test `f32` as well.
         static mut METHOD_CALLS: i32 = 0;
         static mut METHOD_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
         static mut METHOD_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
@@ -777,7 +776,7 @@ mod to_jni_tuple_tests {
         static mut METHOD_ARGUMENT4: jni_sys::jint = 0;
         static mut METHOD_ARGUMENT5: jni_sys::jlong = 0;
         static mut METHOD_ARGUMENT7: jni_sys::jdouble = 0.;
-        static mut METHOD_ARGUMENT8: jni_sys::jint = 0;
+        static mut METHOD_ARGUMENT8: jni_sys::jfloat = 0.;
         static mut METHOD_ARGUMENT9: jni_sys::jint = 0;
         static mut METHOD_ARGUMENT10: jni_sys::jint = 0;
         static mut METHOD_ARGUMENT11: jni_sys::jint = 0;
@@ -800,7 +799,7 @@ mod to_jni_tuple_tests {
             argument4: jni_sys::jint,
             argument5: jni_sys::jlong,
             argument7: jni_sys::jdouble,
-            argument8: jni_sys::jint,
+            argument8: jni_sys::jfloat,
             argument9: jni_sys::jint,
             argument10: jni_sys::jint,
             argument11: jni_sys::jint,
@@ -817,7 +816,7 @@ mod to_jni_tuple_tests {
             argument4: jni_sys::jint,
             argument5: jni_sys::jlong,
             argument7: jni_sys::jdouble,
-            argument8: jni_sys::jint,
+            argument8: jni_sys::jfloat,
             argument9: jni_sys::jint,
             argument10: jni_sys::jint,
             argument11: jni_sys::jint,
@@ -852,8 +851,8 @@ mod to_jni_tuple_tests {
         let class = test_class(&env, raw_object);
         let method_id = 0x7654 as jni_sys::jmethodID;
         let arguments = (
-            true, 'h', 15 as u8, 16 as i16, 17 as i32, 18 as i64, 20. as f64, 21 as i32, 22 as i32,
-            23 as i32, 24 as i32, 25 as i32,
+            true, 'h', 15 as u8, 16 as i16, 17 as i32, 18 as i64, 20. as f64, 21. as f32,
+            22 as i32, 23 as i32, 24 as i32, 25 as i32,
         );
         let result = 0x1234 as jni_sys::jobject;
         unsafe {
@@ -1151,22 +1150,13 @@ jni_io_traits!(
     "[`i64`](https://doc.rust-lang.org/std/primitive.i64.html)",
     "[`jlong`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jlong.html)"
 );
-// For some reason, floats need to be passed as 64-bit floats to JNI.
-// When passed as 32-bit numbers, Java recieves `0.0` instead of the passed number.
-// This also causes `__JniType` to not reside in `JavaType`, as this is the
-// only exceptional case.
-// TODO(#25): figure out the underlying cause of this.
-// native call -> java: f64
-// java -> native call: f32
-// java -> native method: f64
-// native method -> java: f64
-// jni_io_traits!(
-//     f32,
-//     jni_sys::jfloat,
-//     "F",
-//     "[`f32`](https://doc.rust-lang.org/std/primitive.f32.html)",
-//     "[`jfloat`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jfloat.html)"
-// );
+jni_io_traits!(
+    f32,
+    jni_sys::jfloat,
+    "F",
+    "[`f32`](https://doc.rust-lang.org/std/primitive.f32.html)",
+    "[`jfloat`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jfloat.html)"
+);
 jni_io_traits!(
     f64,
     jni_sys::jdouble,

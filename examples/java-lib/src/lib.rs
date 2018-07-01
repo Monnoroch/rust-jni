@@ -210,11 +210,10 @@ pub mod rustjni {
                 link = "",
                 java_name = "testFunction",
                 test_function_long(value1: i64, value2: i64, value3: i64) -> i64,
-                // TODO(#25): enable when fixed.
-                // doc = "",
-                // link = "",
-                // java_name = "testFunction",
-                // test_function_float(value1: f32, value2: f32, value3: f32) -> f32,
+                doc = "",
+                link = "",
+                java_name = "testFunction",
+                test_function_float(value1: f32, value2: f32, value3: f32) -> f32,
                 doc = "",
                 link = "",
                 java_name = "testFunction",
@@ -253,11 +252,10 @@ pub mod rustjni {
                 link = "",
                 java_name = "testStaticFunction",
                 test_static_function_long(value1: i64, value2: i64, value3: i64) -> i64,
-                // TODO(#25): enable when fixed.
-                // doc = "",
-                // link = "",
-                // java_name = "testStaticFunction",
-                // test_static_function_float(value1: f32, value2: f32, value3: f32) -> f32,
+                doc = "",
+                link = "",
+                java_name = "testStaticFunction",
+                test_static_function_float(value1: f32, value2: f32, value3: f32) -> f32,
                 doc = "",
                 link = "",
                 java_name = "testStaticFunction",
@@ -282,9 +280,8 @@ pub mod rustjni {
                 test_native_function_int(value1: i32, value2: i32, value3: i32) -> i32,
                 function_name = Java_rustjni_test_TestMethodsClass_testNativeFunction__JJJ,
                 test_native_function_long(value1: i64, value2: i64, value3: i64) -> i64,
-                // TODO(#25): enable when fixed.
-                // function_name = Java_rustjni_test_TestMethodsClass_testNativeFunction__FFF,
-                // test_native_function_float(value1: f32, value2: f32, value3: f32) -> f32,
+                function_name = Java_rustjni_test_TestMethodsClass_testNativeFunction__FFF,
+                test_native_function_float(value1: f32, value2: f32, value3: f32) -> f32,
                 function_name = Java_rustjni_test_TestMethodsClass_testNativeFunction__DDD,
                 test_native_function_double(value1: f64, value2: f64, value3: f64) -> f64,
                 function_name = Java_rustjni_test_TestMethodsClass_testNativeFunction__Lrustjni_test_TestMethodsClass_2Lrustjni_test_TestMethodsClass_2Lrustjni_test_TestMethodsClass_2,
@@ -305,9 +302,8 @@ pub mod rustjni {
                 test_static_native_function_int(value1: i32, value2: i32, value3: i32) -> i32,
                 function_name = Java_rustjni_test_TestMethodsClass_testStaticNativeFunction__JJJ,
                 test_static_native_function_long(value1: i64, value2: i64, value3: i64) -> i64,
-                // TODO(#25): enable when fixed.
-                // function_name = Java_rustjni_test_TestMethodsClass_testStaticNativeFunction__FFF,
-                // test_static_native_function_float(value1: f32, value2: f32, value3: f32) -> f32,
+                function_name = Java_rustjni_test_TestMethodsClass_testStaticNativeFunction__FFF,
+                test_static_native_function_float(value1: f32, value2: f32, value3: f32) -> f32,
                 function_name = Java_rustjni_test_TestMethodsClass_testStaticNativeFunction__DDD,
                 test_static_native_function_double(value1: f64, value2: f64, value3: f64) -> f64,
                 function_name = Java_rustjni_test_TestMethodsClass_testStaticNativeFunction__Lrustjni_test_TestMethodsClass_2Lrustjni_test_TestMethodsClass_2Lrustjni_test_TestMethodsClass_2,
@@ -394,16 +390,15 @@ pub mod rustjni {
                 Self::test_static_function_long(self.env(), value1, value2, value3, token)
             }
 
-            // TODO(#25): enable when fixed.
-            // pub fn test_native_function_float(
-            //     &self,
-            //     value1: f32,
-            //     value2: f32,
-            //     value3: f32,
-            //     token: &::rust_jni::NoException<'env>,
-            // ) -> ::rust_jni::JavaResult<'env, f32> {
-            //     Self::test_static_function_float(self.env(), value1, value2, value3, token)
-            // }
+            pub fn test_native_function_float(
+                &self,
+                value1: f32,
+                value2: f32,
+                value3: f32,
+                token: &::rust_jni::NoException<'env>,
+            ) -> ::rust_jni::JavaResult<'env, f32> {
+                Self::test_static_function_float(self.env(), value1, value2, value3, token)
+            }
 
             pub fn test_native_function_double(
                 &self,
@@ -492,16 +487,15 @@ pub mod rustjni {
                 Ok(value2)
             }
 
-            // TODO(#25): enable when fixed.
-            // pub fn test_static_native_function_float(
-            //     _env: &'env ::rust_jni::JniEnv<'env>,
-            //     _value1: f32,
-            //     value2: f32,
-            //     _value3: f32,
-            //     _: &::rust_jni::NoException<'env>,
-            // ) -> ::rust_jni::JavaResult<'env, f32> {
-            //     Ok(value2)
-            // }
+            pub fn test_static_native_function_float(
+                _env: &'env ::rust_jni::JniEnv<'env>,
+                _value1: f32,
+                value2: f32,
+                _value3: f32,
+                _: &::rust_jni::NoException<'env>,
+            ) -> ::rust_jni::JavaResult<'env, f32> {
+                Ok(value2)
+            }
 
             pub fn test_static_native_function_double(
                 _env: &'env ::rust_jni::JniEnv<'env>,
