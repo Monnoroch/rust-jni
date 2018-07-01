@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::fmt;
 use std::marker::PhantomData;
 use std::os::raw::{c_char, c_void};
+use std::panic;
 use std::ptr;
 use std::string;
 use version::{self, JniVersion};
@@ -1529,6 +1530,8 @@ mod jni_env_tests {
 /// This trait should only be implemented for classes by generated code.
 #[doc(hidden)]
 pub trait JniType {
+    fn default() -> Self;
+
     unsafe fn call_method<In: ToJniTuple>(
         object: &Object,
         method_id: jni_sys::jmethodID,
@@ -4755,3 +4758,430 @@ pub mod method_calls {
         }
     }
 }
+
+/// Unsafe because an incorrect pointer can be passed as an argument.
+unsafe fn throw_new_runtime_exception(raw_env: *mut jni_sys::JNIEnv, message: impl AsRef<str>) {
+    let message = to_java_string(message.as_ref());
+    let class_name = to_java_string("java/lang/RuntimeException");
+    let find_class = (**raw_env).FindClass.unwrap();
+    let class = find_class(raw_env, class_name.as_ptr() as *const i8);
+    if class == ptr::null_mut() {
+        panic!(
+            "Could not find the java.lang.RuntimeException class on panic, aborting the program."
+        );
+    } else {
+        let throw_new_fn = (**raw_env).ThrowNew.unwrap();
+        let status = throw_new_fn(raw_env, class, message.as_ptr() as *const i8);
+        if status != jni_sys::JNI_OK {
+            panic!("Could not throw a new runtime exception on panic, aborting the program.");
+        }
+    }
+}
+
+/// A function to wrap calls to [`rust-jni`](index.html) API from generated native Java methods.
+///
+/// THIS FUNCTION SHOULD NOT BE CALLED MANUALLY.
+///
+/// This method should only be used by generated code for native methods and is unsafe
+/// because an incorrect pointer can be passed to it as an argument.
+#[doc(hidden)]
+pub unsafe fn native_method_wrapper<T, R: JniType>(raw_env: *mut jni_sys::JNIEnv, callback: T) -> R
+where
+    T: for<'a> FnOnce(&'a JniEnv<'a>, NoException<'a>) -> JavaResult<'a, R> + panic::UnwindSafe,
+{
+    let result = panic::catch_unwind(|| {
+        let exception_check = ((**raw_env).ExceptionCheck).unwrap();
+        if exception_check(raw_env) != jni_sys::JNI_FALSE {
+            panic!("Native method called from a thread with a pending exception.");
+        }
+
+        let mut java_vm: *mut jni_sys::JavaVM = ptr::null_mut();
+        let get_java_vm_fn = ((**raw_env).GetJavaVM).unwrap();
+        let status = get_java_vm_fn(raw_env, (&mut java_vm) as *mut *mut jni_sys::JavaVM);
+        if status != jni_sys::JNI_OK {
+            panic!(format!("Could not get Java VM. Status: {:?}", status));
+        }
+
+        // Safe because we pass a correct `java_vm` pointer.
+        let vm = JavaVM::from_ptr(java_vm);
+        let get_version_fn = ((**raw_env).GetVersion).unwrap();
+        let env = JniEnv {
+            version: version::from_raw(get_version_fn(raw_env)),
+            vm: &vm,
+            jni_env: raw_env,
+            has_token: RefCell::new(true),
+            native_method_call: true,
+        };
+
+        // Safe because we checked for a pending exception.
+        let token = NoException::new_raw();
+        let result = callback(&env, token);
+        match result {
+            Ok(result) => result,
+            Err(exception) => {
+                // Safe because we already cleared the pending exception at this point.
+                let token = NoException::new_raw();
+                exception.throw(token);
+                R::default()
+            }
+        }
+    });
+    match result {
+        Ok(result) => result,
+        Err(error) => {
+            if let Some(string) = error.downcast_ref::<string::String>() {
+                throw_new_runtime_exception(raw_env, format!("Rust panic: {}", string));
+            } else if let Some(string) = error.downcast_ref::<&str>() {
+                throw_new_runtime_exception(raw_env, format!("Rust panic: {}", string));
+            } else {
+                throw_new_runtime_exception(raw_env, "Rust panic: generic panic.");
+            }
+            R::default()
+        }
+    }
+}
+
+#[cfg(test)]
+mod native_method_wrapper_tests {
+    use super::*;
+    use testing::*;
+
+    #[test]
+    fn success() {
+        const JAVA_VM: *mut jni_sys::JavaVM = 0x1234 as *mut jni_sys::JavaVM;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_FALSE,
+            }),
+            JniCall::GetJavaVM(GetJavaVMCall {
+                vm: JAVA_VM,
+                result: jni_sys::JNI_OK,
+            }),
+            JniCall::GetVersion(GetVersionCall {
+                result: jni_sys::JNI_VERSION_1_4,
+            }),
+        ]);
+        let result = 10;
+        unsafe {
+            let actual_result = native_method_wrapper(calls.env, |env, _| {
+                assert_eq!(env.raw_env(), calls.env);
+                assert_eq!(env.raw_jvm(), JAVA_VM);
+                assert_eq!(env.version(), JniVersion::V4);
+                Ok(result)
+            });
+            assert_eq!(actual_result, result);
+        }
+    }
+
+    #[test]
+    fn exception() {
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        const JAVA_VM: *mut jni_sys::JavaVM = 0x1234 as *mut jni_sys::JavaVM;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_FALSE,
+            }),
+            JniCall::GetJavaVM(GetJavaVMCall {
+                vm: JAVA_VM,
+                result: jni_sys::JNI_OK,
+            }),
+            JniCall::GetVersion(GetVersionCall {
+                result: jni_sys::JNI_VERSION_1_4,
+            }),
+            JniCall::Throw(ThrowCall {
+                object: EXCEPTION,
+                result: jni_sys::JNI_OK,
+            }),
+            JniCall::DeleteLocalRef(DeleteLocalRefCall { object: EXCEPTION }),
+        ]);
+        unsafe {
+            let result: i32 = native_method_wrapper(calls.env, |env, _| {
+                assert_eq!(env.raw_env(), calls.env);
+                assert_eq!(env.raw_jvm(), JAVA_VM);
+                assert_eq!(env.version(), JniVersion::V4);
+                Err(Throwable {
+                    object: Object::__from_jni(env, EXCEPTION),
+                })
+            });
+            assert_eq!(result, <i32 as JniType>::default());
+        }
+    }
+
+    #[test]
+    fn panic() {
+        const RAW_CLASS: jni_sys::jobject = 0x209375 as jni_sys::jobject;
+        const JAVA_VM: *mut jni_sys::JavaVM = 0x1234 as *mut jni_sys::JavaVM;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_FALSE,
+            }),
+            JniCall::GetJavaVM(GetJavaVMCall {
+                vm: JAVA_VM,
+                result: jni_sys::JNI_OK,
+            }),
+            JniCall::GetVersion(GetVersionCall {
+                result: jni_sys::JNI_VERSION_1_4,
+            }),
+            JniCall::FindClass(FindClassCall {
+                name: "java/lang/RuntimeException".to_owned(),
+                result: RAW_CLASS,
+            }),
+            JniCall::ThrowNew(ThrowNewCall {
+                class: RAW_CLASS,
+                message: "Rust panic: ERROR".to_owned(),
+                result: jni_sys::JNI_OK,
+            }),
+        ]);
+        unsafe {
+            let actual_result: i32 = native_method_wrapper(calls.env, |env, _| {
+                assert_eq!(env.raw_env(), calls.env);
+                assert_eq!(env.raw_jvm(), JAVA_VM);
+                assert_eq!(env.version(), JniVersion::V4);
+                panic!("ERROR");
+            });
+            assert_eq!(actual_result, <i32 as JniType>::default());
+        }
+    }
+
+    #[test]
+    fn panic_owned() {
+        const RAW_CLASS: jni_sys::jobject = 0x209375 as jni_sys::jobject;
+        const JAVA_VM: *mut jni_sys::JavaVM = 0x1234 as *mut jni_sys::JavaVM;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_FALSE,
+            }),
+            JniCall::GetJavaVM(GetJavaVMCall {
+                vm: JAVA_VM,
+                result: jni_sys::JNI_OK,
+            }),
+            JniCall::GetVersion(GetVersionCall {
+                result: jni_sys::JNI_VERSION_1_4,
+            }),
+            JniCall::FindClass(FindClassCall {
+                name: "java/lang/RuntimeException".to_owned(),
+                result: RAW_CLASS,
+            }),
+            JniCall::ThrowNew(ThrowNewCall {
+                class: RAW_CLASS,
+                message: "Rust panic: ERROR".to_owned(),
+                result: jni_sys::JNI_OK,
+            }),
+        ]);
+        unsafe {
+            let actual_result: i32 = native_method_wrapper(calls.env, |env, _| {
+                assert_eq!(env.raw_env(), calls.env);
+                assert_eq!(env.raw_jvm(), JAVA_VM);
+                assert_eq!(env.version(), JniVersion::V4);
+                panic!("ERROR".to_owned());
+            });
+            assert_eq!(actual_result, <i32 as JniType>::default());
+        }
+    }
+
+    #[test]
+    fn non_string_panic() {
+        const RAW_CLASS: jni_sys::jobject = 0x209375 as jni_sys::jobject;
+        const JAVA_VM: *mut jni_sys::JavaVM = 0x1234 as *mut jni_sys::JavaVM;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_FALSE,
+            }),
+            JniCall::GetJavaVM(GetJavaVMCall {
+                vm: JAVA_VM,
+                result: jni_sys::JNI_OK,
+            }),
+            JniCall::GetVersion(GetVersionCall {
+                result: jni_sys::JNI_VERSION_1_4,
+            }),
+            JniCall::FindClass(FindClassCall {
+                name: "java/lang/RuntimeException".to_owned(),
+                result: RAW_CLASS,
+            }),
+            JniCall::ThrowNew(ThrowNewCall {
+                class: RAW_CLASS,
+                message: "Rust panic: generic panic.".to_owned(),
+                result: jni_sys::JNI_OK,
+            }),
+        ]);
+        unsafe {
+            let actual_result: i32 = native_method_wrapper(calls.env, |_, _| {
+                panic!(123);
+            });
+            assert_eq!(actual_result, <i32 as JniType>::default());
+        }
+    }
+
+    #[test]
+    fn has_exception() {
+        const RAW_CLASS: jni_sys::jobject = 0x209375 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_TRUE,
+            }),
+            JniCall::FindClass(FindClassCall {
+                name: "java/lang/RuntimeException".to_owned(),
+                result: RAW_CLASS,
+            }),
+            JniCall::ThrowNew(ThrowNewCall {
+                class: RAW_CLASS,
+                message: "Rust panic: Native method called from a thread with a pending exception."
+                    .to_owned(),
+                result: jni_sys::JNI_OK,
+            }),
+        ]);
+        unsafe {
+            let result = native_method_wrapper(calls.env, |_, _| Ok(10));
+            assert_eq!(result, <i32 as JniType>::default());
+        }
+    }
+
+    #[test]
+    fn get_java_vm_error() {
+        const RAW_CLASS: jni_sys::jobject = 0x209375 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_FALSE,
+            }),
+            JniCall::GetJavaVM(GetJavaVMCall {
+                vm: ptr::null_mut(),
+                result: jni_sys::JNI_ERR,
+            }),
+            JniCall::FindClass(FindClassCall {
+                name: "java/lang/RuntimeException".to_owned(),
+                result: RAW_CLASS,
+            }),
+            JniCall::ThrowNew(ThrowNewCall {
+                class: RAW_CLASS,
+                message: "Rust panic: Could not get Java VM. Status: -1".to_owned(),
+                result: jni_sys::JNI_OK,
+            }),
+        ]);
+        unsafe {
+            let result = native_method_wrapper(calls.env, |_, _| Ok(10));
+            assert_eq!(result, <i32 as JniType>::default());
+        }
+    }
+
+    #[test]
+    fn throw_failed() {
+        const RAW_CLASS: jni_sys::jobject = 0x209375 as jni_sys::jobject;
+        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
+        const JAVA_VM: *mut jni_sys::JavaVM = 0x1234 as *mut jni_sys::JavaVM;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_FALSE,
+            }),
+            JniCall::GetJavaVM(GetJavaVMCall {
+                vm: JAVA_VM,
+                result: jni_sys::JNI_OK,
+            }),
+            JniCall::GetVersion(GetVersionCall {
+                result: jni_sys::JNI_VERSION_1_4,
+            }),
+            JniCall::Throw(ThrowCall {
+                object: EXCEPTION,
+                result: jni_sys::JNI_ERR,
+            }),
+            JniCall::DeleteLocalRef(DeleteLocalRefCall { object: EXCEPTION }),
+            JniCall::FindClass(FindClassCall {
+                name: "java/lang/RuntimeException".to_owned(),
+                result: RAW_CLASS,
+            }),
+            JniCall::ThrowNew(ThrowNewCall {
+                class: RAW_CLASS,
+                message: "Rust panic: Throwing an exception has failed with status -1.".to_owned(),
+                result: jni_sys::JNI_OK,
+            }),
+        ]);
+        unsafe {
+            let result: i32 = native_method_wrapper(calls.env, |env, _| {
+                Err(Throwable {
+                    object: Object::__from_jni(env, EXCEPTION),
+                })
+            });
+            assert_eq!(result, <i32 as JniType>::default());
+        }
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Could not find the java.lang.RuntimeException class on panic, aborting the program"
+    )]
+    fn find_class_error() {
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_TRUE,
+            }),
+            JniCall::FindClass(FindClassCall {
+                name: "java/lang/RuntimeException".to_owned(),
+                result: ptr::null_mut(),
+            }),
+        ]);
+        unsafe {
+            native_method_wrapper(calls.env, |_, _| Ok(10));
+        }
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Could not throw a new runtime exception on panic, aborting the program"
+    )]
+    fn throw_new_error() {
+        const RAW_CLASS: jni_sys::jobject = 0x209375 as jni_sys::jobject;
+        let calls = test_raw_jni_env!(vec![
+            JniCall::ExceptionCheck(ExceptionCheckCall {
+                result: jni_sys::JNI_TRUE,
+            }),
+            JniCall::FindClass(FindClassCall {
+                name: "java/lang/RuntimeException".to_owned(),
+                result: RAW_CLASS,
+            }),
+            JniCall::ThrowNew(ThrowNewCall {
+                class: RAW_CLASS,
+                message: "Rust panic: Native method called from a thread with a pending exception."
+                    .to_owned(),
+                result: jni_sys::JNI_ERR,
+            }),
+        ]);
+        unsafe {
+            native_method_wrapper(calls.env, |_, _| Ok(10));
+        }
+    }
+}
+
+/// Test that a value implements the [`JniArgumentType`](trait.JniArgumentType.html)
+/// in compile-time.
+///
+/// THIS FUNCTION SHOULD NOT BE CALLED MANUALLY.
+///
+/// # Examples
+/// ```
+/// # extern crate rust_jni;
+/// # extern crate jni_sys;
+/// ::rust_jni::__generator::test_jni_argument_type(0 as ::jni_sys::jint);
+/// ```
+/// ```compile_fail
+/// # extern crate rust_jni;
+/// ::rust_jni::__generator::test_jni_argument_type(0 as u64);
+/// ```
+#[doc(hidden)]
+pub fn test_jni_argument_type<T: JniArgumentType>(_value: T) {}
+
+/// Test that a value implements the [`FromJni`](trait.FromJni.html)
+/// in compile-time.
+///
+/// THIS FUNCTION SHOULD NOT BE CALLED MANUALLY.
+///
+/// # Examples
+/// ```
+/// # extern crate rust_jni;
+/// # extern crate jni_sys;
+/// ::rust_jni::__generator::test_from_jni_type(&(0 as i32));
+/// ```
+/// ```compile_fail
+/// # extern crate rust_jni;
+/// ::rust_jni::__generator::test_from_jni_type(&(0 as u64));
+/// ```
+#[doc(hidden)]
+pub fn test_from_jni_type<'env, T: FromJni<'env>>(_value: &T) {}

@@ -1,0 +1,10 @@
+[package]
+name = "rust-jni-java-dylib"
+version = "0.1.0"
+authors = ["Monnoroch <monnoroch@gmail.com>"]
+
+[dependencies]
+rust-jni-java-lib = { path = "../../java-lib" }
+
+[lib]
+crate-type = ["dylib"]
