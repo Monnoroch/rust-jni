@@ -6,13 +6,170 @@ pub mod rustjni {
     pub mod test {
         use rust_jni::java;
 
+        java_interface!(
+            interface = TestInterface,
+            link = "",
+            extends = (),
+            methods = (
+                doc = "",
+                link = "",
+                java_name = "testInterfaceFunction",
+                test_interface_function(value: i32) -> i64,
+            ),
+        );
+
+        java_interface!(
+            interface = TestInterfaceExtended,
+            link = "",
+            extends = (TestInterface),
+            methods = (
+                doc = "",
+                link = "",
+                java_name = "testInterfaceExtendedFunction",
+                test_interface_extended_function(value: i32) -> i64,
+            ),
+        );
+
         java_class!(
             package = "rustjni/test",
-            class = TestMethodsClass,
-            java_link = "",
+            class = TestClass,
+            link = "",
             rust_link = "",
             extends = java::lang::Object,
             super_link = "",
+            implements = (
+                name = TestInterface,
+                link = "",
+                methods = (
+                    test_interface_function(value: i32) -> i64,
+                ),
+            ),
+            constructors = (
+                doc = "",
+                link = "",
+                init(),
+            ),
+            methods = (
+                doc = "",
+                link = "",
+                java_name = "testClassFunction",
+                test_class_function(value: i32) -> i64,
+                doc = "",
+                link = "",
+                java_name = "testInterfaceFunction",
+                test_interface_function(value: i32) -> i64,
+            ),
+            static_methods = (
+                doc = "",
+                link = "",
+                java_name = "create",
+                create() -> Self,
+            ),
+            super_classes = (),
+            super_interfaces = (),
+        );
+
+        java_class!(
+            package = "rustjni/test",
+            class = TestClassExtended,
+            link = "",
+            rust_link = "",
+            extends = TestClass,
+            super_link = "",
+            implements = (
+                name = TestInterfaceExtended,
+                link = "",
+                methods = (
+                    test_interface_extended_function(value: i32) -> i64,
+                ),
+            ),
+            constructors = (
+                doc = "",
+                link = "",
+                init(),
+            ),
+            methods = (
+                doc = "",
+                link = "",
+                java_name = "testClassExtendedFunction",
+                test_class_extended_function(value: i32) -> i64,
+                doc = "",
+                link = "",
+                java_name = "testInterfaceExtendedFunction",
+                test_interface_extended_function(value: i32) -> i64,
+            ),
+            static_methods = (
+                doc = "",
+                link = "",
+                java_name = "create",
+                create() -> Self,
+            ),
+            super_classes = (
+                java::lang::Object,
+                link = ""
+            ),
+            super_interfaces = (
+                name = TestInterface,
+                link = "",
+                methods = (
+                    test_interface_function(value: i32) -> i64,
+                ),
+            ),
+        );
+
+        java_class!(
+            package = "rustjni/test",
+            class = TestClassExtendedFinal,
+            link = "",
+            rust_link = "",
+            extends = TestClassExtended,
+            super_link = "",
+            implements = (),
+            constructors = (
+                doc = "",
+                link = "",
+                init(),
+            ),
+            methods = (
+                doc = "",
+                link = "",
+                java_name = "testClassExtendedFinalFunction",
+                test_class_extended_final_function(value: i32) -> i64,
+            ),
+            static_methods = (
+                doc = "",
+                link = "",
+                java_name = "create",
+                create() -> Self,
+            ),
+            super_classes = (
+                java::lang::Object,
+                link = "",
+                TestClass,
+                link = ""
+            ),
+            super_interfaces = (
+                name = TestInterface,
+                link = "",
+                methods = (
+                    test_interface_function(value: i32) -> i64,
+                ),
+                name = TestInterfaceExtended,
+                link = "",
+                methods = (
+                    test_interface_extended_function(value: i32) -> i64,
+                ),
+            ),
+        );
+
+        java_class!(
+            package = "rustjni/test",
+            class = TestMethodsClass,
+            link = "",
+            rust_link = "",
+            extends = java::lang::Object,
+            super_link = "",
+            implements = (),
             constructors = (
                 doc = "",
                 link = "",
@@ -105,6 +262,7 @@ pub mod rustjni {
                 test_static_function_class(value1: &TestMethodsClass, value2: &TestMethodsClass, value3: &TestMethodsClass) -> TestMethodsClass<'env>,
             ),
             super_classes = (),
+            super_interfaces = (),
         );
     }
 }
