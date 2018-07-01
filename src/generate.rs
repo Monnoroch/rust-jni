@@ -11,16 +11,146 @@
 
 // TODO: invent some way to not repeat the interface declaration in class declarations.
 
-/// Generate Java class mapping.
+/// Generate Java interface wrapper.
+#[macro_export]
+macro_rules! java_interface {
+    (
+        interface = $interface:ident,
+        link = $link:expr,
+        extends = ($($($extended_interface:ident)::+),*),
+        methods = ($(
+            doc = $method_documentation:expr,
+            link = $method_link:expr,
+            java_name = $java_method_name:expr,
+            $method_name:ident
+                ($($method_argument_name:ident: $method_argument_type:ty),*)
+                -> $method_result:ty,
+        )*),
+    ) => {
+        /// Rust wrapper type for the
+        #[doc = $link]
+        /// Java interface.
+        pub trait $interface<'env>: $($($extended_interface)::* <'env>),* {
+            $(
+                #[doc = $method_documentation]
+                ///
+                #[doc = $method_link]
+                fn $method_name(
+                    &self,
+                    $($method_argument_name: $method_argument_type,)*
+                    token: &::rust_jni::NoException<'env>,
+                ) -> ::rust_jni::JavaResult<'env, $method_result>;
+            )*
+        }
+    };
+}
+
+/// Helper macro.
+///
+/// DO NOT USE MANUALLY!
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __generate_super_interface {
+    (
+        class = $class:ident,
+        class_link = $class_link:expr,
+        interface_link = $implemented_interface_link:expr,
+        extends = $super_class:path,
+        name = $($implemented_interface:ident)::+,
+        name_path = $implemented_interface_path:path,
+        methods = ($(
+            $interface_method_name:ident
+                ($(
+                    $interface_method_argument_name:ident:
+                    $interface_method_argument_type:ty
+                ),*) -> $interface_method_result:ty,
+        )*),
+    ) => {
+        /// Implement
+        #[doc = $implemented_interface_link]
+        /// interface for
+        #[doc = $class_link]
+        ///.
+        impl<'env> $($implemented_interface)::* <'env> for $class<'env> {
+            $(
+                fn $interface_method_name(
+                    &self,
+                    $($interface_method_argument_name: $interface_method_argument_type),*,
+                    token: &::rust_jni::NoException<'env>,
+                ) -> ::rust_jni::JavaResult<'env, $interface_method_result> {
+                    <$super_class as $implemented_interface>
+                        ::$interface_method_name(
+                            self, $($interface_method_argument_name),*, token
+                        )
+                }
+            )*
+        }
+    };
+}
+
+/// Helper macro.
+///
+/// DO NOT USE MANUALLY!
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __generate_super_interfaces {
+    (
+        class = $class:ident,
+        class_link = $class_link:expr,
+        extends = $super_class:path,
+        interfaces = ($(
+            link = $implemented_interface_link:expr,
+            name = $($implemented_interface:ident)::+,
+            methods = ($(
+                $interface_method_name:ident
+                    ($(
+                        $interface_method_argument_name:ident:
+                        $interface_method_argument_type:ty
+                    ),*) -> $interface_method_result:ty,
+            )*),
+        )*),
+    ) => {
+        $(
+            __generate_super_interface!(
+                class = $class,
+                class_link = $class_link,
+                interface_link = $implemented_interface_link,
+                extends = $super_class,
+                name = $($implemented_interface)::+,
+                name_path = $($implemented_interface)::+,
+                methods = ($(
+                    $interface_method_name
+                        ($(
+                            $interface_method_argument_name:
+                            $interface_method_argument_type
+                        ),*) -> $interface_method_result,
+                )*),
+            );
+        )*
+    };
+}
+
+/// Generate Java class wrapper.
 #[macro_export]
 macro_rules! java_class {
     (
         package = $package:expr,
         class = $class:ident,
-        java_link = $java_link:expr,
+        link = $java_link:expr,
         rust_link = $rust_link:expr,
         extends = $($super_class:ident)::+,
         super_link = $rust_super_link:expr,
+        implements = ($(
+            name = $($implemented_interface:ident)::+,
+            link = $implemented_interface_link:expr,
+            methods = ($(
+                $interface_method_name:ident
+                    ($(
+                        $interface_method_argument_name:ident:
+                        $interface_method_argument_type:ty
+                    ),*) -> $interface_method_result:ty,
+            )*),
+        )*),
         constructors = ($(
             doc = $constructor_documentation:expr,
             link = $constructor_link:expr,
@@ -45,8 +175,19 @@ macro_rules! java_class {
         )*),
         super_classes = ($(
             $($super_super_class:ident)::+,
-            link = $super_super_class_link:expr,
+            link = $super_super_class_link:expr
         ),*),
+        super_interfaces = ($(
+            name = $($implemented_super_interface:ident)::+,
+            link = $implemented_super_interface_link:expr,
+            methods = ($(
+                $super_interface_method_name:ident
+                    ($(
+                        $super_interface_method_argument_name:ident:
+                        $super_interface_method_argument_type:ty
+                    ),*) -> $super_interface_method_result:ty,
+            )*),
+        )*),
     ) => {
         /// Rust wrapper type for the
         #[doc = $java_link]
@@ -269,6 +410,44 @@ macro_rules! java_class {
                 }
             )*
         }
+
+        $(
+            /// Implement
+            #[doc = $implemented_interface_link]
+            /// interface for
+            #[doc = $rust_link]
+            ///.
+            impl<'env> $($implemented_interface)::* <'env> for $class<'env> {
+                $(
+                    fn $interface_method_name(
+                        &self,
+                        $($interface_method_argument_name: $interface_method_argument_type),*,
+                        token: &::rust_jni::NoException<'env>,
+                    ) -> ::rust_jni::JavaResult<'env, $interface_method_result> {
+                            Self::$interface_method_name(
+                                self, $($interface_method_argument_name),*, token
+                            )
+                    }
+                )*
+            }
+        )*
+
+        __generate_super_interfaces!(
+            class = $class,
+            class_link = $rust_link,
+            extends = $($super_class)::+,
+            interfaces = ($(
+                link = $implemented_super_interface_link,
+                name = $($implemented_super_interface)::+,
+                methods = ($(
+                    $super_interface_method_name
+                        ($(
+                            $super_interface_method_argument_name:
+                            $super_interface_method_argument_type
+                        ),*) -> $super_interface_method_result,
+                )*),
+            )*),
+        );
 
         // Common traits for convenience.
 
