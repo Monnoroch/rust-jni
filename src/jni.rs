@@ -1648,7 +1648,24 @@ pub trait JavaMethodSignature<In: ?Sized, Out: ?Sized> {
 /// A macro for generating Java class boilerplate for Rust types, whcih is suitable for
 /// `Object` type.
 macro_rules! object_java_class {
-    ($class:ident, $link:expr) => {
+    (
+        $class:ident, $link:expr,
+        constructors = ($(
+            doc = $constructor_documentation:expr,
+            link = $constructor_link:expr,
+            $constructor_name:ident
+                ($($constructor_argument_name:ident: $constructor_argument_type:ty),*),
+        )*),
+        methods = ($(
+            doc = $method_documentation:expr,
+            link = $method_link:expr,
+            java_name = $java_method_name:expr,
+            $method_name:ident
+                ($($method_argument_name:ident: $method_argument_type:ty),*)
+                -> $method_result:ty,
+        )*
+    ),
+    ) => {
         /// Make
         #[doc = $link]
         /// mappable to [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
@@ -1703,14 +1720,99 @@ macro_rules! object_java_class {
                 -> JavaResult<'env, Class<'env>> {
                 Class::find(env, concat!("java/lang", "/", stringify!($class)), token)
             }
+
+            $(
+                #[doc = $constructor_documentation]
+                ///
+                #[doc = $constructor_link]
+                pub fn $constructor_name(
+                    env: &'env JniEnv<'env>,
+                    $($constructor_argument_name: $constructor_argument_type,)*
+                    token: &NoException<'env>,
+                ) -> JavaResult<'env, Self> {
+                    // Safe because method arguments are correct.
+                    unsafe {
+                        call_constructor::<Self, _, fn($($constructor_argument_type,)*)>
+                        (
+                            env,
+                            ($($constructor_argument_name,)*),
+                            token,
+                        )
+                    }
+                }
+            )*
+
+            $(
+                #[doc = $method_documentation]
+                ///
+                #[doc = $method_link]
+                pub fn $method_name(
+                    &self,
+                    $($method_argument_name: $method_argument_type,)*
+                    token: &NoException<'env>,
+                ) -> JavaResult<'env, $method_result> {
+                    // Safe because the method name and arguments are correct.
+                    unsafe {
+                        call_method::<_, _, _,
+                            fn($($method_argument_type,)*) -> $method_result
+                        >
+                        (
+                            self,
+                            $java_method_name,
+                            ($($method_argument_name,)*),
+                            token,
+                        )
+                    }
+                }
+            )*
         }
     };
 }
 
 /// A macro for generating Java class boilerplate for Rust types, except for the `Object` type.
 macro_rules! java_class {
-    ($class:ident, $link:expr) => {
-        object_java_class!($class, $link);
+    (
+        $class:ident, $link:expr,
+        constructors = ($(
+            doc = $constructor_documentation:expr,
+            link = $constructor_link:expr,
+            $constructor_name:ident
+                ($($constructor_argument_name:ident: $constructor_argument_type:ty),*),
+        )*),
+        methods = ($(
+            doc = $method_documentation:expr,
+            link = $method_link:expr,
+            java_name = $java_method_name:expr,
+            $method_name:ident
+                ($($method_argument_name:ident: $method_argument_type:ty),*)
+                -> $method_result:ty,
+        )*),
+        static_methods = ($(
+            doc = $static_method_documentation:expr,
+            link = $static_method_link:expr,
+            java_name = $java_static_method_name:expr,
+            $static_method_name:ident
+                ($($static_method_argument_name:ident: $static_method_argument_type:ty),*)
+                -> $static_method_result:ty,
+        )*),
+    ) => {
+        object_java_class!(
+            $class, $link,
+            constructors = ($(
+                doc = $constructor_documentation,
+                link = $constructor_link,
+                $constructor_name
+                    ($($constructor_argument_name: $constructor_argument_type),*),
+            )*),
+            methods = ($(
+                doc = $method_documentation,
+                link = $method_link,
+                java_name = $java_method_name,
+                $method_name
+                    ($($method_argument_name: $method_argument_type),*)
+                    -> $method_result,
+            )*),
+        );
 
         /// Make
         #[doc = $link]
@@ -1809,6 +1911,30 @@ macro_rules! java_class {
             pub fn to_string(&self, token: &NoException<'env>) -> JavaResult<'env, String<'env>> {
                 Object::cast(self).to_string(token)
             }
+
+            $(
+                #[doc = $static_method_documentation]
+                ///
+                #[doc = $static_method_link]
+                pub fn $static_method_name(
+                    env: &'env JniEnv<'env>,
+                    $($static_method_argument_name: $static_method_argument_type,)*
+                    token: &NoException<'env>,
+                ) -> JavaResult<'env, $static_method_result> {
+                    // Safe because the method name and arguments are correct.
+                    unsafe {
+                        call_static_method::<Self, _, _,
+                            fn($($static_method_argument_type,)*) -> $static_method_result
+                        >
+                        (
+                            env,
+                            $java_static_method_name,
+                            ($($static_method_argument_name,)*),
+                            token,
+                        )
+                    }
+                }
+            )*
         }
     };
 }
@@ -2555,14 +2681,6 @@ impl<'env> Object<'env> {
         Ok(unsafe { Self::from_raw(self.env, raw_object) })
     }
 
-    /// Convert the object to a string.
-    ///
-    /// [`Object::toString` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#toString())
-    pub fn to_string(&self, token: &NoException<'env>) -> JavaResult<'env, String<'env>> {
-        // Safe, because the method name and the signature are correct.
-        unsafe { call_method::<Self, _, _, fn() -> String<'env>>(self, "toString", (), token) }
-    }
-
     /// Construct from a raw pointer. Unsafe because an invalid pointer may be passed
     /// as the argument.
     /// Unsafe because an incorrect object reference can be passed.
@@ -2571,7 +2689,17 @@ impl<'env> Object<'env> {
     }
 }
 
-object_java_class!(Object, "[`Object`](struct.Object.html)");
+object_java_class!(
+    Object,
+    "[`Object`](struct.Object.html)",
+    constructors = (),
+    methods = (
+        doc = "Convert the object to a string.",
+        link = "[`Object::toString` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#toString())",
+        java_name = "toString",
+        to_string() -> String<'env>,
+    ),
+);
 
 /// Make [`Object`](struct.Object.html) convertible from
 /// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
@@ -3141,18 +3269,6 @@ pub struct Throwable<'env> {
 }
 
 impl<'env> Throwable<'env> {
-    /// Create a new [`Throwable`](struct.Throwable.html) with a message.
-    ///
-    /// [`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.String))
-    pub fn new<'a>(
-        env: &'a JniEnv<'a>,
-        message: String<'a>,
-        token: &NoException<'a>,
-    ) -> JavaResult<'a, Throwable<'a>> {
-        // Safe because the name and the signature are correct.
-        unsafe { call_constructor::<Throwable<'a>, _, fn(String)>(env, (message,), token) }
-    }
-
     /// Throw the exception. Transfers ownership of the object to Java.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#throw)
@@ -3170,7 +3286,17 @@ impl<'env> Throwable<'env> {
     }
 }
 
-java_class!(Throwable, "[`Throwable`](struct.Throwable.html)");
+java_class!(
+    Throwable,
+    "[`Throwable`](struct.Throwable.html)",
+    constructors = (
+        doc = "Create a new [`Throwable`](struct.Throwable.html) with a message.",
+        link = "[`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.String))",
+        new(message: &String<'env>),
+    ),
+    methods = (),
+    static_methods = (),
+);
 
 #[cfg(test)]
 mod throwable_tests {
@@ -3290,7 +3416,13 @@ impl<'env> Class<'env> {
     }
 }
 
-java_class!(Class, "[`Class`](struct.Class.html)");
+java_class!(
+    Class,
+    "[`Class`](struct.Class.html)",
+    constructors = (),
+    methods = (),
+    static_methods = (),
+);
 
 #[cfg(test)]
 pub fn test_class<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Class<'env> {
@@ -3507,25 +3639,6 @@ impl<'env> String<'env> {
         from_java_string(buffer.as_slice()).unwrap().into_owned()
     }
 
-    /// Get the string value of an integer.
-    ///
-    /// [`String::valueOf(int)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/String.html#valueOf(int))
-    pub fn value_of_int(
-        env: &'env JniEnv<'env>,
-        value: i32,
-        token: &NoException<'env>,
-    ) -> JavaResult<'env, String<'env>> {
-        // Safe because the name and the signature are correct.
-        unsafe {
-            call_static_method::<Self, _, _, fn(i32) -> String<'env>>(
-                env,
-                "valueOf",
-                (value,),
-                token,
-            )
-        }
-    }
-
     /// Unsafe because an incorrect object reference can be passed.
     unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, raw_string: jni_sys::jstring) -> String<'a> {
         String {
@@ -3534,7 +3647,18 @@ impl<'env> String<'env> {
     }
 }
 
-java_class!(String, "[`String`](struct.String.html)");
+java_class!(
+    String,
+    "[`String`](struct.String.html)",
+    constructors = (),
+    methods = (),
+    static_methods = (
+        doc = "Get the string value of an integer.",
+        link = "[`String::valueOf(int)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/String.html#valueOf(int))",
+        java_name = "valueOf",
+        value_of_int(value: i32) -> String<'env>,
+    ),
+);
 
 #[cfg(test)]
 mod string_tests {
