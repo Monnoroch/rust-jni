@@ -26,6 +26,11 @@ mod strings {
             &java::lang::Class::find(&env, "java/lang/String", &token).unwrap(),
             &token
         ));
+        assert!(string.class(&token).is_same_as(
+            &java::lang::String::get_class(&env, &token).unwrap(),
+            &token
+        ));
+
         assert_eq!(
             string.class(&token),
             java::lang::Class::find(&env, "java/lang/String", &token).unwrap()

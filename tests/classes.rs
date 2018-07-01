@@ -24,6 +24,10 @@ mod classes {
             .unwrap()
             .class(&token);
         assert!(string_class.is_same_as(&string_class_from_string, &token));
+        assert!(string_class.is_same_as(
+            &java::lang::String::get_class(&env, &token).unwrap(),
+            &token
+        ));
 
         let class_class = java::lang::Class::find(&env, "java/lang/Class", &token).unwrap();
         assert!(string_class.is_instance_of(&class_class, &token));
