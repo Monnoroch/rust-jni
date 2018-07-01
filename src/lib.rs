@@ -19,6 +19,7 @@ extern crate lazy_static;
 mod testing;
 
 mod attach_arguments;
+mod generate;
 mod init_arguments;
 mod java_string;
 mod jni;
@@ -29,7 +30,7 @@ mod version;
 
 pub use attach_arguments::AttachArguments;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
-pub use jni::{Cast, Exception, JavaType, JavaVM, JniEnv, JniError, NoException};
+pub use jni::{Cast, Exception, JavaResult, JavaType, JavaVM, JniEnv, JniError, NoException};
 pub use version::JniVersion;
 
 pub mod java {
@@ -39,4 +40,16 @@ pub mod java {
         pub use jni::String;
         pub use jni::Throwable;
     }
+}
+
+/// Tools used by the Java class wrapper code generator.
+///
+/// SHOULD NOT BE USED MANUALLY.
+#[doc(hidden)]
+pub mod __generator {
+    pub use jni::method_calls::call_constructor;
+    pub use jni::method_calls::call_method;
+    pub use jni::method_calls::call_static_method;
+    pub use jni::FromJni;
+    pub use jni::ToJni;
 }

@@ -1,0 +1,14 @@
+[package]
+name = "rust-jni-java-lib"
+version = "0.1.0"
+authors = ["Monnoroch <monnoroch@gmail.com>"]
+
+[dependencies]
+jni-sys = "0.3.0"
+rust-jni = { path = "../../../rust-jni" }
+
+[build-dependencies]
+walkdir = "2"
+
+[features]
+libjvm = []
