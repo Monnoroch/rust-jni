@@ -146,20 +146,20 @@ mod call_method_tests {
         };
         let calls = test_raw_jni_env!(
             vec![
-                JniCall::GetObjectClass(GetObjectClassCall {
+                JniCall::GetObjectClass(GetObjectClass {
                     object: RAW_OBJECT,
                     result: RAW_CLASS,
                 }),
-                JniCall::GetMethodID(GetMethodIDCall {
+                JniCall::GetMethodID(GetMethodID {
                     class: RAW_CLASS,
                     name: "test-method".to_owned(),
                     signature: "(ID)Z".to_owned(),
                     result: METHOD_ID,
                 }),
-                JniCall::ExceptionOccurred(ExceptionOccurredCall {
+                JniCall::ExceptionOccurred(ExceptionOccurred {
                     result: ptr::null_mut(),
                 }),
-                JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
+                JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
             ],
             raw_jni_env
         );
@@ -189,18 +189,18 @@ mod call_method_tests {
         const RAW_CLASS: jni_sys::jobject = 0x239875 as jni_sys::jobject;
         const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::GetObjectClass(GetObjectClassCall {
+            JniCall::GetObjectClass(GetObjectClass {
                 object: RAW_OBJECT,
                 result: RAW_CLASS,
             }),
-            JniCall::GetMethodID(GetMethodIDCall {
+            JniCall::GetMethodID(GetMethodID {
                 class: RAW_CLASS,
                 name: "test-method".to_owned(),
                 signature: "()Z".to_owned(),
                 result: ptr::null_mut(),
             }),
-            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClearCall {}),
+            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClear {}),
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
@@ -246,19 +246,19 @@ mod call_method_tests {
         };
         let calls = test_raw_jni_env!(
             vec![
-                JniCall::GetObjectClass(GetObjectClassCall {
+                JniCall::GetObjectClass(GetObjectClass {
                     object: RAW_OBJECT,
                     result: RAW_CLASS,
                 }),
-                JniCall::GetMethodID(GetMethodIDCall {
+                JniCall::GetMethodID(GetMethodID {
                     class: RAW_CLASS,
                     name: "test-method".to_owned(),
                     signature: "()Z".to_owned(),
                     result: METHOD_ID,
                 }),
-                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-                JniCall::ExceptionClear(ExceptionClearCall {}),
-                JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
+                JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClear {}),
+                JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
             ],
             raw_jni_env
         );
@@ -351,20 +351,20 @@ mod call_static_method_tests {
         };
         let calls = test_raw_jni_env!(
             vec![
-                JniCall::FindClass(FindClassCall {
+                JniCall::FindClass(FindClass {
                     name: "java/lang/Object".to_owned(),
                     result: RAW_CLASS,
                 }),
-                JniCall::GetStaticMethodID(GetStaticMethodIDCall {
+                JniCall::GetStaticMethodID(GetStaticMethodID {
                     class: RAW_CLASS,
                     name: "test-method".to_owned(),
                     signature: "(ID)Z".to_owned(),
                     result: METHOD_ID,
                 }),
-                JniCall::ExceptionOccurred(ExceptionOccurredCall {
+                JniCall::ExceptionOccurred(ExceptionOccurred {
                     result: ptr::null_mut(),
                 }),
-                JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
+                JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
             ],
             raw_jni_env
         );
@@ -391,12 +391,12 @@ mod call_static_method_tests {
     fn no_such_class() {
         const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::FindClass(FindClassCall {
+            JniCall::FindClass(FindClass {
                 name: "java/lang/Object".to_owned(),
                 result: ptr::null_mut(),
             }),
-            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClearCall {}),
+            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClear {}),
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
@@ -416,18 +416,18 @@ mod call_static_method_tests {
         const RAW_CLASS: jni_sys::jobject = 0x239875 as jni_sys::jobject;
         const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::FindClass(FindClassCall {
+            JniCall::FindClass(FindClass {
                 name: "java/lang/Object".to_owned(),
                 result: RAW_CLASS,
             }),
-            JniCall::GetStaticMethodID(GetStaticMethodIDCall {
+            JniCall::GetStaticMethodID(GetStaticMethodID {
                 class: RAW_CLASS,
                 name: "test-method".to_owned(),
                 signature: "()Z".to_owned(),
                 result: ptr::null_mut(),
             }),
-            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClearCall {}),
+            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClear {}),
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
@@ -472,19 +472,19 @@ mod call_static_method_tests {
         };
         let calls = test_raw_jni_env!(
             vec![
-                JniCall::FindClass(FindClassCall {
+                JniCall::FindClass(FindClass {
                     name: "java/lang/Object".to_owned(),
                     result: RAW_CLASS,
                 }),
-                JniCall::GetStaticMethodID(GetStaticMethodIDCall {
+                JniCall::GetStaticMethodID(GetStaticMethodID {
                     class: RAW_CLASS,
                     name: "test-method".to_owned(),
                     signature: "()Z".to_owned(),
                     result: METHOD_ID,
                 }),
-                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-                JniCall::ExceptionClear(ExceptionClearCall {}),
-                JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
+                JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClear {}),
+                JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
             ],
             raw_jni_env
         );
@@ -574,20 +574,20 @@ mod call_constructor_tests {
         };
         let calls = test_raw_jni_env!(
             vec![
-                JniCall::FindClass(FindClassCall {
+                JniCall::FindClass(FindClass {
                     name: "java/lang/Object".to_owned(),
                     result: RAW_CLASS,
                 }),
-                JniCall::GetMethodID(GetMethodIDCall {
+                JniCall::GetMethodID(GetMethodID {
                     class: RAW_CLASS,
                     name: "<init>".to_owned(),
                     signature: "(ID)V".to_owned(),
                     result: METHOD_ID,
                 }),
-                JniCall::ExceptionOccurred(ExceptionOccurredCall {
+                JniCall::ExceptionOccurred(ExceptionOccurred {
                     result: ptr::null_mut(),
                 }),
-                JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
+                JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
             ],
             raw_jni_env
         );
@@ -612,12 +612,12 @@ mod call_constructor_tests {
     fn no_such_class() {
         const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::FindClass(FindClassCall {
+            JniCall::FindClass(FindClass {
                 name: "java/lang/Object".to_owned(),
                 result: ptr::null_mut(),
             }),
-            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClearCall {}),
+            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClear {}),
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
@@ -634,18 +634,18 @@ mod call_constructor_tests {
         const RAW_CLASS: jni_sys::jobject = 0x239875 as jni_sys::jobject;
         const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::FindClass(FindClassCall {
+            JniCall::FindClass(FindClass {
                 name: "java/lang/Object".to_owned(),
                 result: RAW_CLASS,
             }),
-            JniCall::GetMethodID(GetMethodIDCall {
+            JniCall::GetMethodID(GetMethodID {
                 class: RAW_CLASS,
                 name: "<init>".to_owned(),
                 signature: "()V".to_owned(),
                 result: ptr::null_mut(),
             }),
-            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClearCall {}),
+            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClear {}),
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
@@ -690,19 +690,19 @@ mod call_constructor_tests {
         };
         let calls = test_raw_jni_env!(
             vec![
-                JniCall::FindClass(FindClassCall {
+                JniCall::FindClass(FindClass {
                     name: "java/lang/Object".to_owned(),
                     result: RAW_CLASS,
                 }),
-                JniCall::GetMethodID(GetMethodIDCall {
+                JniCall::GetMethodID(GetMethodID {
                     class: RAW_CLASS,
                     name: "<init>".to_owned(),
                     signature: "(ID)V".to_owned(),
                     result: METHOD_ID,
                 }),
-                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-                JniCall::ExceptionClear(ExceptionClearCall {}),
-                JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
+                JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClear {}),
+                JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
             ],
             raw_jni_env
         );

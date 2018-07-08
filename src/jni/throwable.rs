@@ -80,7 +80,7 @@ mod throwable_tests {
     #[test]
     fn throw() {
         const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::Throw(ThrowCall {
+        let calls = test_raw_jni_env!(vec![JniCall::Throw(Throw {
             object: RAW_OBJECT,
             result: jni_sys::JNI_OK,
         })]);
@@ -94,7 +94,7 @@ mod throwable_tests {
     #[should_panic(expected = "Throwing an exception has failed with status -1.")]
     fn throw_failed() {
         const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::Throw(ThrowCall {
+        let calls = test_raw_jni_env!(vec![JniCall::Throw(Throw {
             object: RAW_OBJECT,
             result: jni_sys::JNI_ERR,
         })]);
