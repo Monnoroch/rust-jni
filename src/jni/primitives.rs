@@ -1,8 +1,11 @@
+use jni::class::*;
 use jni::*;
 use jni_sys;
 use std::char;
 use std::iter;
 use std::ptr;
+
+include!("call_jni_method.rs");
 
 /// A macro for generating [`JniType`](trait.JniType.html) implementation for primitive types.
 macro_rules! jni_type_trait {
@@ -79,8 +82,8 @@ macro_rules! generate_jni_type_tests {
         #[cfg(test)]
         mod $module {
             use super::*;
+            use jni::testing::*;
             use std::mem;
-            use testing::*;
 
             #[test]
             fn default() {
@@ -436,16 +439,6 @@ pub trait ToJniTuple {
     ) -> jni_sys::jdouble;
 }
 
-macro_rules! call_jni_method {
-    ($env:expr, $method:ident, $($argument:expr),*) => {
-        {
-            let raw_env = $env.raw_env();
-            let jni_fn = ((**raw_env).$method).unwrap();
-            jni_fn(raw_env, $($argument),*)
-        }
-    };
-}
-
 macro_rules! jni_method_call {
     ($name:ident, $type:ty, $method:ident, $return_type:ty, $($argument:ident,)*) => {
         unsafe fn $name(
@@ -660,8 +653,8 @@ macro_rules! generate_to_jni_tuple_tests {
 #[cfg(test)]
 mod to_jni_tuple_tests {
     use super::*;
+    use jni::testing::*;
     use std::mem;
-    use testing::*;
 
     generate_to_jni_tuple_tests!(
         jni_sys::jobject,

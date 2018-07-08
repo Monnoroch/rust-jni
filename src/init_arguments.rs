@@ -448,7 +448,7 @@ pub unsafe fn from_raw(raw_arguments: &jni_sys::JavaVMInitArgs) -> InitArguments
 }
 
 #[cfg(test)]
-pub fn new(version: JniVersion) -> InitArguments {
+pub fn test(version: JniVersion) -> InitArguments {
     InitArguments {
         version: version,
         options: vec![],
