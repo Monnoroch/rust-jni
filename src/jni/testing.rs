@@ -20,9 +20,10 @@ pub fn empty_raw_java_vm() -> jni_sys::JNIInvokeInterface_ {
     }
 }
 
-macro_rules! __generate_method_check_impl {
-    ($method:ident, $type:ident, fn($($argument_name:ident: $argument_type:ty),*) -> $resutl_type:ty, $code:expr) => {
-        impl $type {
+macro_rules! generate_method_check_impl {
+    ($method:ident, fn($($argument_name:ident: $argument_type:ty),*) -> $resutl_type:ty, $code:expr) => {
+        impl $method {
+            #[doc(hidden)]
             pub unsafe fn __check_call(
                 calls: &mut JniCalls,
                 env: *mut jni_sys::JNIEnv,
@@ -40,7 +41,7 @@ macro_rules! __generate_method_check_impl {
                 }
             }
 
-            pub unsafe fn __check_call_impl(
+            unsafe fn __check_call_impl(
                 &self,
                 $($argument_name: $argument_type,)*
             ) -> $resutl_type {
@@ -48,18 +49,19 @@ macro_rules! __generate_method_check_impl {
             }
         }
     };
-    ($method:ident, $type:ident, fn($($argument_name:ident: $argument_type:ty,)*) -> $resutl_type:ty, $code:expr) => {
-        __generate_method_check_impl!($method, $type, fn($($argument_name: $argument_type),*) -> $resutl_type, $code);
+    ($method:ident, fn($($argument_name:ident: $argument_type:ty,)*) -> $resutl_type:ty, $code:expr) => {
+        generate_method_check_impl!($method, fn($($argument_name: $argument_type),*) -> $resutl_type, $code);
     };
 }
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct DeleteLocalRefCall {
+pub struct DeleteLocalRef {
     pub object: jni_sys::jobject,
 }
 
-impl DeleteLocalRefCall {
+impl DeleteLocalRef {
+    #[doc(hidden)]
     pub unsafe fn __check_call(
         calls: &mut JniCalls,
         env: *mut jni_sys::JNIEnv,
@@ -83,21 +85,20 @@ impl DeleteLocalRefCall {
         }
     }
 
-    pub unsafe fn __check_call_impl(&self, object: jni_sys::jobject) {
+    unsafe fn __check_call_impl(&self, object: jni_sys::jobject) {
         assert_eq!(object, self.object);
     }
 }
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct NewLocalRefCall {
+pub struct NewLocalRef {
     pub object: jni_sys::jobject,
     pub result: jni_sys::jobject,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     NewLocalRef,
-    NewLocalRefCall,
     fn(object: jni_sys::jobject) -> jni_sys::jobject,
     |call: &Self| {
         assert_eq!(object, call.object);
@@ -107,47 +108,42 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct ExceptionOccurredCall {
+pub struct ExceptionOccurred {
     pub result: jni_sys::jobject,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     ExceptionOccurred,
-    ExceptionOccurredCall,
     fn() -> jni_sys::jobject,
     |call: &Self| call.result
 );
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct ExceptionClearCall {}
+pub struct ExceptionClear {}
 
-__generate_method_check_impl!(ExceptionClear, ExceptionClearCall, fn() -> (), |_| ());
+generate_method_check_impl!(ExceptionClear, fn() -> (), |_| ());
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct ExceptionCheckCall {
+pub struct ExceptionCheck {
     pub result: jni_sys::jboolean,
 }
 
-__generate_method_check_impl!(
-    ExceptionCheck,
-    ExceptionCheckCall,
-    fn() -> jni_sys::jboolean,
-    |call: &Self| call.result
-);
+generate_method_check_impl!(ExceptionCheck, fn() -> jni_sys::jboolean, |call: &Self| {
+    call.result
+});
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct IsSameObjectCall {
+pub struct IsSameObject {
     pub object1: jni_sys::jobject,
     pub object2: jni_sys::jobject,
     pub result: jni_sys::jboolean,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     IsSameObject,
-    IsSameObjectCall,
     fn(object1: jni_sys::jobject, object2: jni_sys::jobject) -> jni_sys::jboolean,
     |call: &Self| {
         assert_eq!(object1, call.object1);
@@ -158,14 +154,13 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GetObjectClassCall {
+pub struct GetObjectClass {
     pub object: jni_sys::jobject,
     pub result: jni_sys::jobject,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     GetObjectClass,
-    GetObjectClassCall,
     fn(object: jni_sys::jobject) -> jni_sys::jobject,
     |call: &Self| {
         assert_eq!(object, call.object);
@@ -175,15 +170,14 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct IsInstanceOfCall {
+pub struct IsInstanceOf {
     pub object: jni_sys::jobject,
     pub class: jni_sys::jobject,
     pub result: jni_sys::jboolean,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     IsInstanceOf,
-    IsInstanceOfCall,
     fn(object: jni_sys::jobject, class: jni_sys::jobject) -> jni_sys::jboolean,
     |call: &Self| {
         assert_eq!(object, call.object);
@@ -194,14 +188,13 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct ThrowCall {
+pub struct Throw {
     pub object: jni_sys::jobject,
     pub result: jni_sys::jint,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     Throw,
-    ThrowCall,
     fn(object: jni_sys::jobject) -> jni_sys::jint,
     |call: &Self| {
         assert_eq!(object, call.object);
@@ -211,15 +204,14 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct ThrowNewCall {
+pub struct ThrowNew {
     pub class: jni_sys::jobject,
     pub message: String,
     pub result: jni_sys::jint,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     ThrowNew,
-    ThrowNewCall,
     fn(class: jni_sys::jobject, message: *const c_char) -> jni_sys::jint,
     |call: &Self| {
         assert_eq!(class, call.class);
@@ -233,14 +225,13 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct FindClassCall {
+pub struct FindClass {
     pub name: String,
     pub result: jni_sys::jobject,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     FindClass,
-    FindClassCall,
     fn(name: *const c_char) -> jni_sys::jobject,
     |call: &Self| {
         assert_eq!(
@@ -253,16 +244,15 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct DefineClassCall {
+pub struct DefineClass {
     pub name: *const c_char,
     pub loader: jni_sys::jobject,
     pub buffer: Vec<i8>,
     pub result: jni_sys::jobject,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     DefineClass,
-    DefineClassCall,
     fn(
         name: *const c_char,
         loader: jni_sys::jobject,
@@ -286,15 +276,14 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct IsAssignableFromCall {
+pub struct IsAssignableFrom {
     pub class1: jni_sys::jobject,
     pub class2: jni_sys::jobject,
     pub result: jni_sys::jboolean,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     IsAssignableFrom,
-    IsAssignableFromCall,
     fn(class1: jni_sys::jobject, class2: jni_sys::jobject) -> jni_sys::jboolean,
     |call: &Self| {
         assert_eq!(class1, call.class1);
@@ -305,14 +294,13 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GetSuperclassCall {
+pub struct GetSuperclass {
     pub class: jni_sys::jobject,
     pub result: jni_sys::jobject,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     GetSuperclass,
-    GetSuperclassCall,
     fn(class: jni_sys::jobject) -> jni_sys::jobject,
     |call: &Self| {
         assert_eq!(class, call.class);
@@ -322,15 +310,14 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct NewStringCall {
+pub struct NewString {
     pub name: *const jni_sys::jchar,
     pub size: jni_sys::jsize,
     pub result: jni_sys::jobject,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     NewString,
-    NewStringCall,
     fn(name: *const jni_sys::jchar, size: jni_sys::jsize) -> jni_sys::jobject,
     |call: &Self| {
         assert_eq!(name, call.name);
@@ -341,14 +328,13 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct NewStringUTFCall {
+pub struct NewStringUTF {
     pub string: String,
     pub result: jni_sys::jobject,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     NewStringUTF,
-    NewStringUTFCall,
     fn(string: *const c_char) -> jni_sys::jobject,
     |call: &Self| {
         assert_eq!(
@@ -361,14 +347,13 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GetStringLengthCall {
+pub struct GetStringLength {
     pub string: jni_sys::jobject,
     pub result: jni_sys::jsize,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     GetStringLength,
-    GetStringLengthCall,
     fn(string: jni_sys::jobject) -> jni_sys::jsize,
     |call: &Self| {
         assert_eq!(string, call.string);
@@ -378,14 +363,13 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GetStringUTFLengthCall {
+pub struct GetStringUTFLength {
     pub string: jni_sys::jobject,
     pub result: jni_sys::jsize,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     GetStringUTFLength,
-    GetStringUTFLengthCall,
     fn(string: jni_sys::jobject) -> jni_sys::jsize,
     |call: &Self| {
         assert_eq!(string, call.string);
@@ -395,16 +379,15 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GetMethodIDCall {
+pub struct GetMethodID {
     pub class: jni_sys::jclass,
     pub name: String,
     pub signature: String,
     pub result: jni_sys::jmethodID,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     GetMethodID,
-    GetMethodIDCall,
     fn(class: jni_sys::jobject, name: *const c_char, signature: *const c_char)
         -> jni_sys::jmethodID,
     |call: &Self| {
@@ -423,16 +406,15 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GetStaticMethodIDCall {
+pub struct GetStaticMethodID {
     pub class: jni_sys::jclass,
     pub name: String,
     pub signature: String,
     pub result: jni_sys::jmethodID,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     GetStaticMethodID,
-    GetStaticMethodIDCall,
     fn(class: jni_sys::jobject, name: *const c_char, signature: *const c_char)
         -> jni_sys::jmethodID,
     |call: &Self| {
@@ -451,16 +433,15 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GetStringUTFRegionCall {
+pub struct GetStringUTFRegion {
     pub string: jni_sys::jstring,
     pub start: jni_sys::jsize,
     pub len: jni_sys::jsize,
     pub buffer: String,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     GetStringUTFRegion,
-    GetStringUTFRegionCall,
     fn(string: jni_sys::jstring, start: jni_sys::jsize, len: jni_sys::jsize, buffer: *mut c_char)
         -> (),
     |call: &Self| {
@@ -477,33 +458,29 @@ __generate_method_check_impl!(
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct ExceptionDescribeCall {}
+pub struct ExceptionDescribe {}
 
-__generate_method_check_impl!(ExceptionDescribe, ExceptionDescribeCall, fn() -> (), |_| ());
+generate_method_check_impl!(ExceptionDescribe, fn() -> (), |_| ());
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GetVersionCall {
+pub struct GetVersion {
     pub result: jni_sys::jint,
 }
 
-__generate_method_check_impl!(
-    GetVersion,
-    GetVersionCall,
-    fn() -> jni_sys::jint,
-    |call: &Self| call.result
-);
+generate_method_check_impl!(GetVersion, fn() -> jni_sys::jint, |call: &Self| {
+    call.result
+});
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct GetJavaVMCall {
+pub struct GetJavaVM {
     pub vm: *mut jni_sys::JavaVM,
     pub result: jni_sys::jint,
 }
 
-__generate_method_check_impl!(
+generate_method_check_impl!(
     GetJavaVM,
-    GetJavaVMCall,
     fn(vm: *mut *mut jni_sys::JavaVM) -> jni_sys::jint,
     |call: &Self| {
         assert_ne!(vm, ptr::null_mut());
@@ -515,30 +492,30 @@ __generate_method_check_impl!(
 #[doc(hidden)]
 #[derive(Debug)]
 pub enum JniCall {
-    DeleteLocalRef(DeleteLocalRefCall),
-    NewLocalRef(NewLocalRefCall),
-    ExceptionOccurred(ExceptionOccurredCall),
-    ExceptionClear(ExceptionClearCall),
-    ExceptionCheck(ExceptionCheckCall),
-    IsSameObject(IsSameObjectCall),
-    GetObjectClass(GetObjectClassCall),
-    IsInstanceOf(IsInstanceOfCall),
-    Throw(ThrowCall),
-    ThrowNew(ThrowNewCall),
-    FindClass(FindClassCall),
-    DefineClass(DefineClassCall),
-    IsAssignableFrom(IsAssignableFromCall),
-    GetSuperclass(GetSuperclassCall),
-    NewString(NewStringCall),
-    NewStringUTF(NewStringUTFCall),
-    GetStringLength(GetStringLengthCall),
-    GetStringUTFLength(GetStringUTFLengthCall),
-    GetMethodID(GetMethodIDCall),
-    GetStaticMethodID(GetStaticMethodIDCall),
-    GetStringUTFRegion(GetStringUTFRegionCall),
-    ExceptionDescribe(ExceptionDescribeCall),
-    GetJavaVM(GetJavaVMCall),
-    GetVersion(GetVersionCall),
+    DeleteLocalRef(DeleteLocalRef),
+    NewLocalRef(NewLocalRef),
+    ExceptionOccurred(ExceptionOccurred),
+    ExceptionClear(ExceptionClear),
+    ExceptionCheck(ExceptionCheck),
+    IsSameObject(IsSameObject),
+    GetObjectClass(GetObjectClass),
+    IsInstanceOf(IsInstanceOf),
+    Throw(Throw),
+    ThrowNew(ThrowNew),
+    FindClass(FindClass),
+    DefineClass(DefineClass),
+    IsAssignableFrom(IsAssignableFrom),
+    GetSuperclass(GetSuperclass),
+    NewString(NewString),
+    NewStringUTF(NewStringUTF),
+    GetStringLength(GetStringLength),
+    GetStringUTFLength(GetStringUTFLength),
+    GetMethodID(GetMethodID),
+    GetStaticMethodID(GetStaticMethodID),
+    GetStringUTFRegion(GetStringUTFRegion),
+    ExceptionDescribe(ExceptionDescribe),
+    GetJavaVM(GetJavaVM),
+    GetVersion(GetVersion),
 }
 
 #[doc(hidden)]
@@ -556,7 +533,11 @@ impl Drop for JniCalls {
     }
 }
 
+/// Make [`JniCalls`](struct.JniCalls.html) sendable between threads.
+/// Safe, because this type is only used for testing.
 unsafe impl Send for JniCalls {}
+/// Make [`JniCalls`](struct.JniCalls.html) shareable by multiple threads.
+/// Safe, because this type is only used for testing.
 unsafe impl Sync for JniCalls {}
 
 impl JniCalls {
@@ -613,65 +594,65 @@ macro_rules! test_raw_jni_env {
             env: *mut ::jni_sys::JNIEnv,
             object: ::jni_sys::jobject,
         ) {
-            DeleteLocalRefCall::__check_call(__to_static_ref(&CALLS), env, object)
+            DeleteLocalRef::__check_call(__to_static_ref(&CALLS), env, object)
         }
         unsafe extern "system" fn new_local_ref(
             env: *mut ::jni_sys::JNIEnv,
             object: ::jni_sys::jobject,
         ) -> ::jni_sys::jobject {
-            NewLocalRefCall::__check_call(__to_static_ref(&CALLS), env, object)
+            NewLocalRef::__check_call(__to_static_ref(&CALLS), env, object)
         }
         unsafe extern "system" fn exception_occured(
             env: *mut ::jni_sys::JNIEnv,
         ) -> ::jni_sys::jobject {
-            ExceptionOccurredCall::__check_call(__to_static_ref(&CALLS), env)
+            ExceptionOccurred::__check_call(__to_static_ref(&CALLS), env)
         }
         unsafe extern "system" fn exception_clear(env: *mut ::jni_sys::JNIEnv) {
-            ExceptionClearCall::__check_call(__to_static_ref(&CALLS), env)
+            ExceptionClear::__check_call(__to_static_ref(&CALLS), env)
         }
         unsafe extern "system" fn exception_check(
             env: *mut ::jni_sys::JNIEnv,
         ) -> ::jni_sys::jboolean {
-            ExceptionCheckCall::__check_call(__to_static_ref(&CALLS), env)
+            ExceptionCheck::__check_call(__to_static_ref(&CALLS), env)
         }
         unsafe extern "system" fn is_same_object(
             env: *mut ::jni_sys::JNIEnv,
             object1: ::jni_sys::jobject,
             object2: ::jni_sys::jobject,
         ) -> ::jni_sys::jboolean {
-            IsSameObjectCall::__check_call(__to_static_ref(&CALLS), env, object1, object2)
+            IsSameObject::__check_call(__to_static_ref(&CALLS), env, object1, object2)
         }
         unsafe extern "system" fn get_object_class(
             env: *mut ::jni_sys::JNIEnv,
             object: ::jni_sys::jobject,
         ) -> ::jni_sys::jobject {
-            GetObjectClassCall::__check_call(__to_static_ref(&CALLS), env, object)
+            GetObjectClass::__check_call(__to_static_ref(&CALLS), env, object)
         }
         unsafe extern "system" fn is_instance_of(
             env: *mut ::jni_sys::JNIEnv,
             object: ::jni_sys::jobject,
             class: ::jni_sys::jobject,
         ) -> ::jni_sys::jboolean {
-            IsInstanceOfCall::__check_call(__to_static_ref(&CALLS), env, object, class)
+            IsInstanceOf::__check_call(__to_static_ref(&CALLS), env, object, class)
         }
         unsafe extern "system" fn throw(
             env: *mut ::jni_sys::JNIEnv,
             object: ::jni_sys::jobject,
         ) -> ::jni_sys::jint {
-            ThrowCall::__check_call(__to_static_ref(&CALLS), env, object)
+            Throw::__check_call(__to_static_ref(&CALLS), env, object)
         }
         unsafe extern "system" fn throw_new(
             env: *mut ::jni_sys::JNIEnv,
             class: ::jni_sys::jobject,
             message: *const ::std::os::raw::c_char,
         ) -> ::jni_sys::jint {
-            ThrowNewCall::__check_call(__to_static_ref(&CALLS), env, class, message)
+            ThrowNew::__check_call(__to_static_ref(&CALLS), env, class, message)
         }
         unsafe extern "system" fn find_class(
             env: *mut ::jni_sys::JNIEnv,
             name: *const ::std::os::raw::c_char,
         ) -> ::jni_sys::jobject {
-            FindClassCall::__check_call(__to_static_ref(&CALLS), env, name)
+            FindClass::__check_call(__to_static_ref(&CALLS), env, name)
         }
         unsafe extern "system" fn define_class(
             env: *mut ::jni_sys::JNIEnv,
@@ -680,7 +661,7 @@ macro_rules! test_raw_jni_env {
             buffer: *const ::jni_sys::jbyte,
             buffer_size: ::jni_sys::jsize,
         ) -> ::jni_sys::jobject {
-            DefineClassCall::__check_call(
+            DefineClass::__check_call(
                 __to_static_ref(&CALLS),
                 env,
                 name,
@@ -694,38 +675,38 @@ macro_rules! test_raw_jni_env {
             class1: ::jni_sys::jobject,
             class2: ::jni_sys::jobject,
         ) -> ::jni_sys::jboolean {
-            IsAssignableFromCall::__check_call(__to_static_ref(&CALLS), env, class1, class2)
+            IsAssignableFrom::__check_call(__to_static_ref(&CALLS), env, class1, class2)
         }
         unsafe extern "system" fn get_superclass(
             env: *mut ::jni_sys::JNIEnv,
             class: ::jni_sys::jobject,
         ) -> ::jni_sys::jobject {
-            GetSuperclassCall::__check_call(__to_static_ref(&CALLS), env, class)
+            GetSuperclass::__check_call(__to_static_ref(&CALLS), env, class)
         }
         unsafe extern "system" fn new_string(
             env: *mut ::jni_sys::JNIEnv,
             name: *const ::jni_sys::jchar,
             size: ::jni_sys::jsize,
         ) -> ::jni_sys::jobject {
-            NewStringCall::__check_call(__to_static_ref(&CALLS), env, name, size)
+            NewString::__check_call(__to_static_ref(&CALLS), env, name, size)
         }
         unsafe extern "system" fn new_string_utf(
             env: *mut ::jni_sys::JNIEnv,
             string: *const ::std::os::raw::c_char,
         ) -> ::jni_sys::jobject {
-            NewStringUTFCall::__check_call(__to_static_ref(&CALLS), env, string)
+            NewStringUTF::__check_call(__to_static_ref(&CALLS), env, string)
         }
         unsafe extern "system" fn get_string_length(
             env: *mut ::jni_sys::JNIEnv,
             string: ::jni_sys::jobject,
         ) -> ::jni_sys::jsize {
-            GetStringLengthCall::__check_call(__to_static_ref(&CALLS), env, string)
+            GetStringLength::__check_call(__to_static_ref(&CALLS), env, string)
         }
         unsafe extern "system" fn get_string_utf_length(
             env: *mut ::jni_sys::JNIEnv,
             string: ::jni_sys::jobject,
         ) -> ::jni_sys::jsize {
-            GetStringUTFLengthCall::__check_call(__to_static_ref(&CALLS), env, string)
+            GetStringUTFLength::__check_call(__to_static_ref(&CALLS), env, string)
         }
         unsafe extern "system" fn get_method_id(
             env: *mut ::jni_sys::JNIEnv,
@@ -733,7 +714,7 @@ macro_rules! test_raw_jni_env {
             name: *const ::std::os::raw::c_char,
             signature: *const ::std::os::raw::c_char,
         ) -> ::jni_sys::jmethodID {
-            GetMethodIDCall::__check_call(__to_static_ref(&CALLS), env, class, name, signature)
+            GetMethodID::__check_call(__to_static_ref(&CALLS), env, class, name, signature)
         }
         unsafe extern "system" fn get_static_method_id(
             env: *mut ::jni_sys::JNIEnv,
@@ -741,13 +722,7 @@ macro_rules! test_raw_jni_env {
             name: *const ::std::os::raw::c_char,
             signature: *const ::std::os::raw::c_char,
         ) -> ::jni_sys::jmethodID {
-            GetStaticMethodIDCall::__check_call(
-                __to_static_ref(&CALLS),
-                env,
-                class,
-                name,
-                signature,
-            )
+            GetStaticMethodID::__check_call(__to_static_ref(&CALLS), env, class, name, signature)
         }
         unsafe extern "system" fn get_string_utf_region(
             env: *mut ::jni_sys::JNIEnv,
@@ -756,7 +731,7 @@ macro_rules! test_raw_jni_env {
             len: ::jni_sys::jsize,
             buffer: *mut ::std::os::raw::c_char,
         ) {
-            GetStringUTFRegionCall::__check_call(
+            GetStringUTFRegion::__check_call(
                 __to_static_ref(&CALLS),
                 env,
                 string,
@@ -766,16 +741,16 @@ macro_rules! test_raw_jni_env {
             )
         }
         unsafe extern "system" fn exception_describe(env: *mut ::jni_sys::JNIEnv) {
-            ExceptionDescribeCall::__check_call(__to_static_ref(&CALLS), env)
+            ExceptionDescribe::__check_call(__to_static_ref(&CALLS), env)
         }
         unsafe extern "system" fn get_java_vm(
             env: *mut jni_sys::JNIEnv,
             vm: *mut *mut jni_sys::JavaVM,
         ) -> jni_sys::jint {
-            GetJavaVMCall::__check_call(__to_static_ref(&CALLS), env, vm)
+            GetJavaVM::__check_call(__to_static_ref(&CALLS), env, vm)
         }
         unsafe extern "system" fn get_version(env: *mut jni_sys::JNIEnv) -> jni_sys::jint {
-            GetVersionCall::__check_call(__to_static_ref(&CALLS), env)
+            GetVersion::__check_call(__to_static_ref(&CALLS), env)
         }
         let raw_env = ::jni_sys::JNINativeInterface_ {
             GetJavaVM: Some(get_java_vm),

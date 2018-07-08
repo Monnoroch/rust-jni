@@ -153,7 +153,7 @@ mod string_tests {
     #[test]
     fn empty() {
         const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::NewString(NewStringCall {
+        let calls = test_raw_jni_env!(vec![JniCall::NewString(NewString {
             name: ptr::null(),
             size: 0,
             result: RAW_STRING,
@@ -168,13 +168,13 @@ mod string_tests {
     fn empty_exception() {
         const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::NewString(NewStringCall {
+            JniCall::NewString(NewString {
                 name: ptr::null(),
                 size: 0,
                 result: ptr::null_mut(),
             }),
-            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClearCall {}),
+            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClear {}),
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
@@ -185,7 +185,7 @@ mod string_tests {
     #[test]
     fn new_empty() {
         const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::NewString(NewStringCall {
+        let calls = test_raw_jni_env!(vec![JniCall::NewString(NewString {
             name: ptr::null(),
             size: 0,
             result: RAW_STRING,
@@ -200,13 +200,13 @@ mod string_tests {
     fn new_empty_exception() {
         const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::NewString(NewStringCall {
+            JniCall::NewString(NewString {
                 name: ptr::null(),
                 size: 0,
                 result: ptr::null_mut(),
             }),
-            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClearCall {}),
+            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClear {}),
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
@@ -217,7 +217,7 @@ mod string_tests {
     #[test]
     fn new() {
         const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::NewStringUTF(NewStringUTFCall {
+        let calls = test_raw_jni_env!(vec![JniCall::NewStringUTF(NewStringUTF {
             string: "test-string".to_owned(),
             result: RAW_STRING,
         })]);
@@ -231,12 +231,12 @@ mod string_tests {
     fn new_exception() {
         const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::NewStringUTF(NewStringUTFCall {
+            JniCall::NewStringUTF(NewStringUTF {
                 string: "test-string".to_owned(),
                 result: ptr::null_mut(),
             }),
-            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClearCall {}),
+            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClear {}),
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
@@ -248,7 +248,7 @@ mod string_tests {
     fn len() {
         const LENGTH: usize = 17;
         const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::GetStringLength(GetStringLengthCall {
+        let calls = test_raw_jni_env!(vec![JniCall::GetStringLength(GetStringLength {
             string: RAW_STRING,
             result: 17 as jni_sys::jsize,
         })]);
@@ -262,7 +262,7 @@ mod string_tests {
     fn size() {
         const LENGTH: usize = 17;
         const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::GetStringUTFLength(GetStringUTFLengthCall {
+        let calls = test_raw_jni_env!(vec![JniCall::GetStringUTFLength(GetStringUTFLength {
             string: RAW_STRING,
             result: 17 as jni_sys::jsize,
         })]);
@@ -278,15 +278,15 @@ mod string_tests {
         const SIZE: usize = 11; // `"test-string".len()`.
         const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::GetStringLength(GetStringLengthCall {
+            JniCall::GetStringLength(GetStringLength {
                 string: RAW_STRING,
                 result: LENGTH as jni_sys::jsize,
             }),
-            JniCall::GetStringUTFLength(GetStringUTFLengthCall {
+            JniCall::GetStringUTFLength(GetStringUTFLength {
                 string: RAW_STRING,
                 result: SIZE as jni_sys::jsize,
             }),
-            JniCall::GetStringUTFRegion(GetStringUTFRegionCall {
+            JniCall::GetStringUTFRegion(GetStringUTFRegion {
                 string: RAW_STRING,
                 start: 0,
                 len: LENGTH as jni_sys::jsize,
@@ -302,7 +302,7 @@ mod string_tests {
     #[test]
     fn as_string_empty() {
         const RAW_STRING: jni_sys::jobject = 0x2835 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::GetStringLength(GetStringLengthCall {
+        let calls = test_raw_jni_env!(vec![JniCall::GetStringLength(GetStringLength {
             string: RAW_STRING,
             result: 0,
         })]);

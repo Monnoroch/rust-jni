@@ -140,7 +140,7 @@ mod class_tests {
     #[test]
     fn find() {
         const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::FindClass(FindClassCall {
+        let calls = test_raw_jni_env!(vec![JniCall::FindClass(FindClass {
             name: "test-class".to_owned(),
             result: RAW_OBJECT,
         })]);
@@ -154,12 +154,12 @@ mod class_tests {
     fn find_not_found() {
         const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::FindClass(FindClassCall {
+            JniCall::FindClass(FindClass {
                 name: "test-class".to_owned(),
                 result: ptr::null_mut(),
             }),
-            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClearCall {}),
+            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClear {}),
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
@@ -170,7 +170,7 @@ mod class_tests {
     #[test]
     fn define() {
         const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::DefineClass(DefineClassCall {
+        let calls = test_raw_jni_env!(vec![JniCall::DefineClass(DefineClass {
             name: ptr::null(),
             loader: ptr::null_mut(),
             buffer: vec![17, (230 as u8) as i8],
@@ -186,14 +186,14 @@ mod class_tests {
     fn define_not_found() {
         const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![
-            JniCall::DefineClass(DefineClassCall {
+            JniCall::DefineClass(DefineClass {
                 name: ptr::null(),
                 loader: ptr::null_mut(),
                 buffer: vec![17, (230 as u8) as i8],
                 result: ptr::null_mut(),
             }),
-            JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClearCall {}),
+            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+            JniCall::ExceptionClear(ExceptionClear {}),
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
@@ -205,7 +205,7 @@ mod class_tests {
     fn is_subtype_of() {
         const RAW_CLASS1: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         const RAW_CLASS2: jni_sys::jobject = 0x294875 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::IsAssignableFrom(IsAssignableFromCall {
+        let calls = test_raw_jni_env!(vec![JniCall::IsAssignableFrom(IsAssignableFrom {
             class1: RAW_CLASS1,
             class2: RAW_CLASS2,
             result: jni_sys::JNI_TRUE,
@@ -221,7 +221,7 @@ mod class_tests {
     fn is_not_subtype_of() {
         const RAW_CLASS1: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         const RAW_CLASS2: jni_sys::jobject = 0x294875 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::IsAssignableFrom(IsAssignableFromCall {
+        let calls = test_raw_jni_env!(vec![JniCall::IsAssignableFrom(IsAssignableFrom {
             class1: RAW_CLASS1,
             class2: RAW_CLASS2,
             result: jni_sys::JNI_FALSE,
@@ -237,7 +237,7 @@ mod class_tests {
     fn parent() {
         const RAW_CLASS1: jni_sys::jobject = 0x2835 as jni_sys::jobject;
         const RAW_CLASS2: jni_sys::jobject = 0x294875 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::GetSuperclass(GetSuperclassCall {
+        let calls = test_raw_jni_env!(vec![JniCall::GetSuperclass(GetSuperclass {
             class: RAW_CLASS1,
             result: RAW_CLASS2,
         })]);
@@ -251,7 +251,7 @@ mod class_tests {
     #[test]
     fn no_parent() {
         const RAW_CLASS: jni_sys::jobject = 0x2835 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![JniCall::GetSuperclass(GetSuperclassCall {
+        let calls = test_raw_jni_env!(vec![JniCall::GetSuperclass(GetSuperclass {
             class: RAW_CLASS,
             result: ptr::null_mut(),
         })]);

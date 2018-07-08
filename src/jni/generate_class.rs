@@ -363,7 +363,7 @@ macro_rules! generate_object_tests {
         #[test]
         fn drop() {
             const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
-            let calls = test_raw_jni_env!(vec![JniCall::DeleteLocalRef(DeleteLocalRefCall {
+            let calls = test_raw_jni_env!(vec![JniCall::DeleteLocalRef(DeleteLocalRef {
                 object: RAW_OBJECT,
             })]);
             let vm = test_vm(ptr::null_mut());
@@ -379,7 +379,7 @@ macro_rules! generate_object_tests {
         fn clone() {
             const RAW_OBJECT1: jni_sys::jobject = 0x91011 as jni_sys::jobject;
             const RAW_OBJECT2: jni_sys::jobject = 0x1234 as jni_sys::jobject;
-            let calls = test_raw_jni_env!(vec![JniCall::NewLocalRef(NewLocalRefCall {
+            let calls = test_raw_jni_env!(vec![JniCall::NewLocalRef(NewLocalRef {
                 object: RAW_OBJECT1,
                 result: RAW_OBJECT2,
             })]);
@@ -395,12 +395,12 @@ macro_rules! generate_object_tests {
             const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
             const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
             let calls = test_raw_jni_env!(vec![
-                JniCall::NewLocalRef(NewLocalRefCall {
+                JniCall::NewLocalRef(NewLocalRef {
                     object: RAW_OBJECT,
                     result: ptr::null_mut() as jni_sys::jobject,
                 }),
-                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-                JniCall::ExceptionClear(ExceptionClearCall {}),
+                JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClear {}),
             ]);
             let vm = test_vm(ptr::null_mut());
             let env = test_env(&vm, calls.env);
@@ -414,10 +414,10 @@ macro_rules! generate_object_tests {
             const RAW_OBJECT1: jni_sys::jobject = 0x91011 as jni_sys::jobject;
             const RAW_OBJECT2: jni_sys::jobject = 0x93486 as jni_sys::jobject;
             let calls = test_raw_jni_env!(vec![
-                JniCall::ExceptionCheck(ExceptionCheckCall {
+                JniCall::ExceptionCheck(ExceptionCheck {
                     result: jni_sys::JNI_FALSE,
                 }),
-                JniCall::IsSameObject(IsSameObjectCall {
+                JniCall::IsSameObject(IsSameObject {
                     object1: RAW_OBJECT1,
                     object2: RAW_OBJECT2,
                     result: jni_sys::JNI_TRUE,
@@ -435,10 +435,10 @@ macro_rules! generate_object_tests {
             const RAW_OBJECT1: jni_sys::jobject = 0x91011 as jni_sys::jobject;
             const RAW_OBJECT2: jni_sys::jobject = 0x93486 as jni_sys::jobject;
             let calls = test_raw_jni_env!(vec![
-                JniCall::ExceptionCheck(ExceptionCheckCall {
+                JniCall::ExceptionCheck(ExceptionCheck {
                     result: jni_sys::JNI_FALSE,
                 }),
-                JniCall::IsSameObject(IsSameObjectCall {
+                JniCall::IsSameObject(IsSameObject {
                     object1: RAW_OBJECT1,
                     object2: RAW_OBJECT2,
                     result: jni_sys::JNI_FALSE,
@@ -458,7 +458,7 @@ macro_rules! generate_object_tests {
         fn eq_pending_exception() {
             const RAW_OBJECT1: jni_sys::jobject = 0x91011 as jni_sys::jobject;
             const RAW_OBJECT2: jni_sys::jobject = 0x93486 as jni_sys::jobject;
-            let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+            let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheck {
                 result: jni_sys::JNI_TRUE,
             })]);
             let vm = test_vm(ptr::null_mut());
@@ -504,20 +504,20 @@ macro_rules! generate_object_tests {
             };
             let calls = test_raw_jni_env!(
                 vec![
-                    JniCall::GetObjectClass(GetObjectClassCall {
+                    JniCall::GetObjectClass(GetObjectClass {
                         object: RAW_OBJECT,
                         result: RAW_CLASS,
                     }),
-                    JniCall::GetMethodID(GetMethodIDCall {
+                    JniCall::GetMethodID(GetMethodID {
                         class: RAW_CLASS,
                         name: "toString".to_owned(),
                         signature: "()Ljava/lang/String;".to_owned(),
                         result: METHOD_ID,
                     }),
-                    JniCall::ExceptionOccurred(ExceptionOccurredCall {
+                    JniCall::ExceptionOccurred(ExceptionOccurred {
                         result: ptr::null_mut(),
                     }),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
+                    JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
                 ],
                 raw_jni_env
             );
@@ -562,19 +562,19 @@ macro_rules! generate_object_tests {
             };
             let calls = test_raw_jni_env!(
                 vec![
-                    JniCall::GetObjectClass(GetObjectClassCall {
+                    JniCall::GetObjectClass(GetObjectClass {
                         object: RAW_OBJECT,
                         result: RAW_CLASS,
                     }),
-                    JniCall::GetMethodID(GetMethodIDCall {
+                    JniCall::GetMethodID(GetMethodID {
                         class: RAW_CLASS,
                         name: "toString".to_owned(),
                         signature: "()Ljava/lang/String;".to_owned(),
                         result: METHOD_ID,
                     }),
-                    JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-                    JniCall::ExceptionClear(ExceptionClearCall {}),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
+                    JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+                    JniCall::ExceptionClear(ExceptionClear {}),
+                    JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
                 ],
                 raw_jni_env
             );
@@ -623,38 +623,38 @@ macro_rules! generate_object_tests {
             };
             let calls = test_raw_jni_env!(
                 vec![
-                    JniCall::ExceptionCheck(ExceptionCheckCall {
+                    JniCall::ExceptionCheck(ExceptionCheck {
                         result: jni_sys::JNI_FALSE,
                     }),
-                    JniCall::GetObjectClass(GetObjectClassCall {
+                    JniCall::GetObjectClass(GetObjectClass {
                         object: RAW_OBJECT,
                         result: RAW_CLASS,
                     }),
-                    JniCall::GetMethodID(GetMethodIDCall {
+                    JniCall::GetMethodID(GetMethodID {
                         class: RAW_CLASS,
                         name: "toString".to_owned(),
                         signature: "()Ljava/lang/String;".to_owned(),
                         result: METHOD_ID,
                     }),
-                    JniCall::ExceptionOccurred(ExceptionOccurredCall {
+                    JniCall::ExceptionOccurred(ExceptionOccurred {
                         result: ptr::null_mut(),
                     }),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
-                    JniCall::GetStringLength(GetStringLengthCall {
+                    JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
+                    JniCall::GetStringLength(GetStringLength {
                         string: RAW_STRING,
                         result: LENGTH as jni_sys::jsize,
                     }),
-                    JniCall::GetStringUTFLength(GetStringUTFLengthCall {
+                    JniCall::GetStringUTFLength(GetStringUTFLength {
                         string: RAW_STRING,
                         result: SIZE as jni_sys::jsize,
                     }),
-                    JniCall::GetStringUTFRegion(GetStringUTFRegionCall {
+                    JniCall::GetStringUTFRegion(GetStringUTFRegion {
                         string: RAW_STRING,
                         start: 0,
                         len: LENGTH as jni_sys::jsize,
                         buffer: "test-string".to_owned(),
                     }),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_STRING }),
+                    JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_STRING }),
                 ],
                 raw_jni_env
             );
@@ -669,7 +669,7 @@ macro_rules! generate_object_tests {
             expected = "Displaying a Java object with a pending exception in the current thread"
         )]
         fn display_exception_pending() {
-            let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheckCall {
+            let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheck {
                 result: jni_sys::JNI_TRUE,
             })]);
             let vm = test_vm(ptr::null_mut());
@@ -725,54 +725,54 @@ macro_rules! generate_object_tests {
             };
             let calls = test_raw_jni_env!(
                 vec![
-                    JniCall::ExceptionCheck(ExceptionCheckCall {
+                    JniCall::ExceptionCheck(ExceptionCheck {
                         result: jni_sys::JNI_FALSE,
                     }),
-                    JniCall::GetObjectClass(GetObjectClassCall {
+                    JniCall::GetObjectClass(GetObjectClass {
                         object: RAW_OBJECT,
                         result: RAW_CLASS,
                     }),
-                    JniCall::GetMethodID(GetMethodIDCall {
+                    JniCall::GetMethodID(GetMethodID {
                         class: RAW_CLASS,
                         name: "toString".to_owned(),
                         signature: "()Ljava/lang/String;".to_owned(),
                         result: METHOD_ID,
                     }),
-                    JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-                    JniCall::ExceptionClear(ExceptionClearCall {}),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
-                    JniCall::GetObjectClass(GetObjectClassCall {
+                    JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+                    JniCall::ExceptionClear(ExceptionClear {}),
+                    JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
+                    JniCall::GetObjectClass(GetObjectClass {
                         object: EXCEPTION,
                         result: RAW_EXCEPTION_CLASS,
                     }),
-                    JniCall::GetMethodID(GetMethodIDCall {
+                    JniCall::GetMethodID(GetMethodID {
                         class: RAW_EXCEPTION_CLASS,
                         name: "toString".to_owned(),
                         signature: "()Ljava/lang/String;".to_owned(),
                         result: EXCEPTION_METHOD_ID,
                     }),
-                    JniCall::ExceptionOccurred(ExceptionOccurredCall {
+                    JniCall::ExceptionOccurred(ExceptionOccurred {
                         result: ptr::null_mut(),
                     }),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall {
+                    JniCall::DeleteLocalRef(DeleteLocalRef {
                         object: RAW_EXCEPTION_CLASS,
                     }),
-                    JniCall::GetStringLength(GetStringLengthCall {
+                    JniCall::GetStringLength(GetStringLength {
                         string: RAW_STRING,
                         result: LENGTH as jni_sys::jsize,
                     }),
-                    JniCall::GetStringUTFLength(GetStringUTFLengthCall {
+                    JniCall::GetStringUTFLength(GetStringUTFLength {
                         string: RAW_STRING,
                         result: SIZE as jni_sys::jsize,
                     }),
-                    JniCall::GetStringUTFRegion(GetStringUTFRegionCall {
+                    JniCall::GetStringUTFRegion(GetStringUTFRegion {
                         string: RAW_STRING,
                         start: 0,
                         len: LENGTH as jni_sys::jsize,
                         buffer: "test-string".to_owned(),
                     }),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_STRING }),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: EXCEPTION }),
+                    JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_STRING }),
+                    JniCall::DeleteLocalRef(DeleteLocalRef { object: EXCEPTION }),
                 ],
                 raw_jni_env
             );
@@ -830,39 +830,39 @@ macro_rules! generate_object_tests {
             };
             let calls = test_raw_jni_env!(
                 vec![
-                    JniCall::ExceptionCheck(ExceptionCheckCall {
+                    JniCall::ExceptionCheck(ExceptionCheck {
                         result: jni_sys::JNI_FALSE,
                     }),
-                    JniCall::GetObjectClass(GetObjectClassCall {
+                    JniCall::GetObjectClass(GetObjectClass {
                         object: RAW_OBJECT,
                         result: RAW_CLASS,
                     }),
-                    JniCall::GetMethodID(GetMethodIDCall {
+                    JniCall::GetMethodID(GetMethodID {
                         class: RAW_CLASS,
                         name: "toString".to_owned(),
                         signature: "()Ljava/lang/String;".to_owned(),
                         result: METHOD_ID,
                     }),
-                    JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-                    JniCall::ExceptionClear(ExceptionClearCall {}),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: RAW_CLASS }),
-                    JniCall::GetObjectClass(GetObjectClassCall {
+                    JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+                    JniCall::ExceptionClear(ExceptionClear {}),
+                    JniCall::DeleteLocalRef(DeleteLocalRef { object: RAW_CLASS }),
+                    JniCall::GetObjectClass(GetObjectClass {
                         object: EXCEPTION,
                         result: RAW_EXCEPTION_CLASS,
                     }),
-                    JniCall::GetMethodID(GetMethodIDCall {
+                    JniCall::GetMethodID(GetMethodID {
                         class: RAW_EXCEPTION_CLASS,
                         name: "toString".to_owned(),
                         signature: "()Ljava/lang/String;".to_owned(),
                         result: EXCEPTION_METHOD_ID,
                     }),
-                    JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION2 }),
-                    JniCall::ExceptionClear(ExceptionClearCall {}),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall {
+                    JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION2 }),
+                    JniCall::ExceptionClear(ExceptionClear {}),
+                    JniCall::DeleteLocalRef(DeleteLocalRef {
                         object: RAW_EXCEPTION_CLASS,
                     }),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: EXCEPTION2 }),
-                    JniCall::DeleteLocalRef(DeleteLocalRefCall { object: EXCEPTION }),
+                    JniCall::DeleteLocalRef(DeleteLocalRef { object: EXCEPTION2 }),
+                    JniCall::DeleteLocalRef(DeleteLocalRef { object: EXCEPTION }),
                 ],
                 raw_jni_env
             );
@@ -878,7 +878,7 @@ macro_rules! generate_object_tests {
         #[test]
         fn get_class() {
             const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
-            let calls = test_raw_jni_env!(vec![JniCall::FindClass(FindClassCall {
+            let calls = test_raw_jni_env!(vec![JniCall::FindClass(FindClass {
                 name: concat!("java/lang/", stringify!($class)).to_owned(),
                 result: RAW_OBJECT,
             })]);
@@ -892,12 +892,12 @@ macro_rules! generate_object_tests {
         fn get_class_not_found() {
             const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
             let calls = test_raw_jni_env!(vec![
-                JniCall::FindClass(FindClassCall {
+                JniCall::FindClass(FindClass {
                     name: concat!("java/lang/", stringify!($class)).to_owned(),
                     result: ptr::null_mut(),
                 }),
-                JniCall::ExceptionOccurred(ExceptionOccurredCall { result: EXCEPTION }),
-                JniCall::ExceptionClear(ExceptionClearCall {}),
+                JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
+                JniCall::ExceptionClear(ExceptionClear {}),
             ]);
             let vm = test_vm(ptr::null_mut());
             let env = test_env(&vm, calls.env);
