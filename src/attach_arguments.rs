@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn new() {
-        let init_arguments = init_arguments::new(JniVersion::V4);
+        let init_arguments = init_arguments::test(JniVersion::V4);
         assert_eq!(
             AttachArguments::new(&init_arguments),
             AttachArguments {
@@ -74,7 +74,7 @@ mod tests {
 
     #[test]
     fn named() {
-        let init_arguments = init_arguments::new(JniVersion::V4);
+        let init_arguments = init_arguments::test(JniVersion::V4);
         assert_eq!(
             AttachArguments::named(&init_arguments, "test-name"),
             AttachArguments {
@@ -134,7 +134,7 @@ mod to_raw_tests {
 
     #[test]
     fn to_raw() {
-        let init_arguments = init_arguments::new(JniVersion::V8);
+        let init_arguments = init_arguments::test(JniVersion::V8);
         let arguments = AttachArguments::new(&init_arguments);
         let mut buffer: Vec<u8> = vec![];
         let raw_arguments = super::to_raw(&arguments, &mut buffer);
@@ -148,7 +148,7 @@ mod to_raw_tests {
 
     #[test]
     fn to_raw_named() {
-        let init_arguments = init_arguments::new(JniVersion::V8);
+        let init_arguments = init_arguments::test(JniVersion::V8);
         let test_name = "test-name";
         let arguments = AttachArguments::named(&init_arguments, test_name);
         let mut buffer: Vec<u8> = vec![];
