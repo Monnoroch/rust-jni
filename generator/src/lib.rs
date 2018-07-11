@@ -6,6 +6,9 @@ extern crate quote;
 extern crate proc_macro2;
 
 use proc_macro2::*;
+use quote::ToTokens;
+use std::iter::FromIterator;
+use std::ops::Deref;
 
 /// Generate `rust-jni` wrappers for Java classes and interfaces.
 ///
@@ -20,9 +23,108 @@ fn java_generate_impl(input: TokenStream) -> TokenStream {
     generate(to_generator_data(parse_java_definition(input)))
 }
 
+#[derive(Debug, Clone)]
+struct JavaName(TokenStream);
+
+impl Deref for JavaName {
+    type Target = TokenStream;
+
+    fn deref(&self) -> &TokenStream {
+        &self.0
+    }
+}
+
+impl ToTokens for JavaName {
+    fn to_tokens(&self, stream: &mut TokenStream) {
+        self.0.to_tokens(stream)
+    }
+}
+
+impl PartialEq for JavaName {
+    fn eq(&self, other: &Self) -> bool {
+        format!("{:?}", self) == format!("{:?}", other)
+    }
+}
+
+#[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
+struct FlatMapThreaded<I, F, S> {
+    iterator: I,
+    function: F,
+    state: S,
+}
+
+impl<I, F, S, T> Iterator for FlatMapThreaded<I, F, S>
+where
+    I: Iterator<Item = T>,
+    F: FnMut(&T, &S) -> S,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        match self.iterator.next() {
+            None => None,
+            Some(value) => {
+                self.state = (self.function)(&value, &self.state);
+                Some(value)
+            }
+        }
+    }
+}
+
+fn flat_map_threaded<I, T, F, S>(iterator: I, initial: S, function: F) -> FlatMapThreaded<I, F, S>
+where
+    I: Iterator<Item = T>,
+    F: FnMut(&T, &S) -> S,
+{
+    FlatMapThreaded {
+        iterator,
+        function,
+        state: initial,
+    }
+}
+
+impl Eq for JavaName {}
+
+impl JavaName {
+    fn from_tokens<'a>(tokens: impl Iterator<Item = &'a TokenTree>) -> JavaName {
+        let tokens = flat_map_threaded(tokens, false, |token, was_identifier| {
+            match (token, was_identifier) {
+                (TokenTree::Ident(_), false) => true,
+                (TokenTree::Punct(punct), true) => {
+                    if punct.as_char() != '.' {
+                        panic!("Expected a dot, got {:?}.", punct);
+                    }
+                    false
+                }
+                (token, true) => {
+                    panic!("Expected a dot, got {:?}.", token);
+                }
+                (token, false) => {
+                    panic!("Expected an identifier, got {:?}.", token);
+                }
+            }
+        }).filter(|token| match token {
+            TokenTree::Ident(_) => true,
+            _ => false,
+        });
+        let tokens = TokenStream::from_iter(tokens.cloned());
+        if tokens.is_empty() {
+            panic!("Expected a Java name, got no tokens.");
+        }
+        JavaName(tokens)
+    }
+
+    fn name(self) -> Ident {
+        match self.0.into_iter().last().unwrap() {
+            TokenTree::Ident(identifier) => identifier,
+            token => panic!("Expected an identifier, got {:?}", token),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct JavaDefinition {
-    class: Ident,
+    class: JavaName,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -36,20 +138,12 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
         .split(is_definition)
         .filter(|tokens| !tokens.is_empty())
         .map(|header| {
-            if header.len() < 2 {
-                panic!("Expected a class definition, got {:?}.", header);
-            }
-
             let (token, header) = header.split_first().unwrap();
             if !is_identifier(&token, "class") {
                 panic!("Expected \"class\", got {:?}.", token);
             }
 
-            let (class, _) = header.split_first().unwrap();
-            let class = match class.clone() {
-                TokenTree::Ident(identifier) => identifier,
-                token => panic!("Expected an identifier, got {:?}.", token),
-            };
+            let class = JavaName::from_tokens(header.iter());
             JavaDefinition { class }
         })
         .collect();
@@ -94,7 +188,22 @@ mod parse_tests {
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    class: Ident::new("TestClass1", Span::call_site()),
+                    class: JavaName(quote!{TestClass1}),
+                }],
+            }
+        );
+    }
+
+    #[test]
+    fn one_packaged() {
+        let input = quote!{
+            class a.b.TestClass1 {}
+        };
+        assert_eq!(
+            parse_java_definition(input),
+            JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    class: JavaName(quote!{a b TestClass1}),
                 }],
             }
         );
@@ -111,10 +220,10 @@ mod parse_tests {
             JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        class: Ident::new("TestClass1", Span::call_site()),
+                        class: JavaName(quote!{TestClass1}),
                     },
                     JavaDefinition {
-                        class: Ident::new("TestClass2", Span::call_site()),
+                        class: JavaName(quote!{TestClass2}),
                     },
                 ],
             }
@@ -132,20 +241,41 @@ mod parse_tests {
     }
 
     #[test]
-    #[should_panic(expected = "Expected a class definition")]
+    #[should_panic(expected = "Expected a Java name")]
     fn too_few_tokens() {
         let input = quote!{
             class test {}
-            invalid
+            class
         };
         parse_java_definition(input);
     }
 
     #[test]
     #[should_panic(expected = "Expected an identifier")]
-    fn definition_name_not_identifier() {
+    fn definition_name_not_identifier_after_dot() {
         let input = quote!{
-            class 1 {}
+            class test {}
+            class a.1 {}
+        };
+        parse_java_definition(input);
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected a dot")]
+    fn definition_name_no_dot_after_identifier() {
+        let input = quote!{
+            class test {}
+            class a b {}
+        };
+        parse_java_definition(input);
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected a dot")]
+    fn definition_name_not_dot_punctuation() {
+        let input = quote!{
+            class test {}
+            class a,b {}
         };
         parse_java_definition(input);
     }
@@ -166,8 +296,10 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
         definitions: definitions
             .definitions
             .into_iter()
-            .map(|definition| GeneratorDefinition {
-                class: definition.class,
+            .map(|definition| {
+                let JavaDefinition { class, .. } = definition;
+                let class = class.name();
+                GeneratorDefinition { class }
             })
             .collect(),
     }
@@ -194,7 +326,7 @@ mod to_generator_data_tests {
         assert_eq!(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    class: Ident::new("test1", Span::call_site()),
+                    class: JavaName(quote!{a b test1}),
                 }],
             }),
             GeneratorData {
@@ -211,10 +343,10 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        class: Ident::new("test1", Span::call_site()),
+                        class: JavaName(quote!{a b test1}),
                     },
                     JavaDefinition {
-                        class: Ident::new("test2", Span::call_site()),
+                        class: JavaName(quote!{test2}),
                     },
                 ],
             }),

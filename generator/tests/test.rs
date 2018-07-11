@@ -7,7 +7,7 @@ mod tests {
     use rust_jni_generator::*;
 
     java_generate!{
-        class TestClass1 {}
+        class a.b.TestClass1 {}
         class TestClass2 {}
     }
 
