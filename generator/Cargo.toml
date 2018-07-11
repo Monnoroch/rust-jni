@@ -1,0 +1,11 @@
+[package]
+name = "rust-jni-generator"
+version = "0.1.0"
+authors = ["Monnoroch <monnoroch@gmail.com>"]
+
+[dependencies]
+quote = "0.6.3"
+proc-macro2 = "0.4.6"
+
+[lib]
+proc-macro = true
