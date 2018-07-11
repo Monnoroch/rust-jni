@@ -15,7 +15,7 @@ before_script:
 install:
   - rustup component add rustfmt-preview
 script:
-  - if [[ ${TRAVIS_RUST_VERSION} == "stable" ]]; then rustfmt --error-on-unformatted --write-mode diff src/lib.rs; fi
+  - ci/check-format.sh
   - cargo test --verbose --features libjvm
   - (cd examples/java-lib && ./test.sh)
 matrix:

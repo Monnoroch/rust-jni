@@ -317,7 +317,6 @@ pub mod rustjni {
             super_interfaces = (),
         );
 
-
         impl<'env> TestMethodsClass<'env> {
             pub fn test_native_function_test(
                 &self,
