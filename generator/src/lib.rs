@@ -150,7 +150,9 @@ struct JavaClass {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-struct JavaInterface {}
+struct JavaInterface {
+    extends: Vec<JavaName>,
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 enum JavaDefinitionKind {
@@ -168,6 +170,18 @@ struct JavaDefinition {
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct JavaDefinitions {
     definitions: Vec<JavaDefinition>,
+}
+
+fn comma_separated_names(tokens: impl Iterator<Item = TokenTree>) -> Vec<JavaName> {
+    let tokens = tokens.collect::<Vec<_>>();
+    tokens
+        .split(|token| match token {
+            TokenTree::Punct(punct) => punct.spacing() == Spacing::Alone && punct.as_char() == ',',
+            _ => false,
+        })
+        .filter(|slice| slice.len() > 0)
+        .map(|slice| JavaName::from_tokens(slice.iter()))
+        .collect()
 }
 
 fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
@@ -190,11 +204,22 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
             }
 
             if is_interface {
-                let name = JavaName::from_tokens(header.iter());
+                let name = JavaName::from_tokens(
+                    header
+                        .iter()
+                        .take_while(|token| !is_identifier(&token, "extends")),
+                );
+                let extends = comma_separated_names(
+                    header
+                        .iter()
+                        .skip_while(|token| !is_identifier(&token, "extends"))
+                        .skip(1)
+                        .cloned(),
+                );
                 JavaDefinition {
                     name,
                     public,
-                    definition: JavaDefinitionKind::Interface(JavaInterface {}),
+                    definition: JavaDefinitionKind::Interface(JavaInterface { extends }),
                 }
             } else {
                 let name = JavaName::from_tokens(
@@ -316,7 +341,7 @@ mod parse_tests {
                 definitions: vec![JavaDefinition {
                     name: JavaName(quote!{TestInterface1}),
                     public: false,
-                    definition: JavaDefinitionKind::Interface(JavaInterface {}),
+                    definition: JavaDefinitionKind::Interface(JavaInterface { extends: vec![] }),
                 }],
             }
         );
@@ -333,7 +358,7 @@ mod parse_tests {
                 definitions: vec![JavaDefinition {
                     name: JavaName(quote!{TestInterface1}),
                     public: true,
-                    definition: JavaDefinitionKind::Interface(JavaInterface {}),
+                    definition: JavaDefinitionKind::Interface(JavaInterface { extends: vec![] }),
                 }],
             }
         );
@@ -350,7 +375,29 @@ mod parse_tests {
                 definitions: vec![JavaDefinition {
                     name: JavaName(quote!{a b TestInterface1}),
                     public: false,
-                    definition: JavaDefinitionKind::Interface(JavaInterface {}),
+                    definition: JavaDefinitionKind::Interface(JavaInterface { extends: vec![] }),
+                }],
+            }
+        );
+    }
+
+    #[test]
+    fn one_interface_extends() {
+        let input = quote!{
+            interface TestInterface1 extends TestInterface2, a.b.TestInterface3 {}
+        };
+        assert_eq!(
+            parse_java_definition(input),
+            JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    name: JavaName(quote!{TestInterface1}),
+                    public: false,
+                    definition: JavaDefinitionKind::Interface(JavaInterface {
+                        extends: vec![
+                            JavaName(quote!{TestInterface2}),
+                            JavaName(quote!{a b TestInterface3}),
+                        ],
+                    }),
                 }],
             }
         );
@@ -360,7 +407,7 @@ mod parse_tests {
     fn multiple() {
         let input = quote!{
             interface TestInterface1 {}
-            interface TestInterface2 {}
+            interface TestInterface2 extends TestInterface3 {}
             class TestClass1 extends test1 {}
             class TestClass2 extends test2 {}
         };
@@ -371,12 +418,16 @@ mod parse_tests {
                     JavaDefinition {
                         name: JavaName(quote!{TestInterface1}),
                         public: false,
-                        definition: JavaDefinitionKind::Interface(JavaInterface {}),
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            extends: vec![],
+                        }),
                     },
                     JavaDefinition {
                         name: JavaName(quote!{TestInterface2}),
                         public: false,
-                        definition: JavaDefinitionKind::Interface(JavaInterface {}),
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            extends: vec![JavaName(quote!{TestInterface3})],
+                        }),
                     },
                     JavaDefinition {
                         name: JavaName(quote!{TestClass1}),
@@ -465,6 +516,7 @@ struct ClassGeneratorDefinition {
 struct InterfaceGeneratorDefinition {
     interface: Ident,
     public: TokenStream,
+    extends: Vec<TokenStream>,
 }
 
 #[derive(Debug, Clone)]
@@ -509,7 +561,7 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                         let string_signature = name.with_slashes();
                         let signature = Literal::string(&string_signature);
                         let full_signature = Literal::string(&format!("L{};", string_signature));
-                        let JavaClass { extends } = class;
+                        let JavaClass { extends, .. } = class;
                         let super_class = extends.with_double_colons();
                         GeneratorDefinition::Class(ClassGeneratorDefinition {
                             class: definition_name,
@@ -519,10 +571,15 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             full_signature,
                         })
                     }
-                    JavaDefinitionKind::Interface(_interface) => {
+                    JavaDefinitionKind::Interface(interface) => {
+                        let JavaInterface { extends, .. } = interface;
                         GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
                             interface: definition_name,
                             public,
+                            extends: extends
+                                .into_iter()
+                                .map(|name| name.with_double_colons())
+                                .collect(),
                         })
                     }
                 }
@@ -602,7 +659,9 @@ mod to_generator_data_tests {
                 definitions: vec![JavaDefinition {
                     name: JavaName(quote!{a b test1}),
                     public: false,
-                    definition: JavaDefinitionKind::Interface(JavaInterface {}),
+                    definition: JavaDefinitionKind::Interface(JavaInterface {
+                        extends: vec![JavaName(quote!{c d test2}), JavaName(quote!{e f test3})],
+                    }),
                 }],
             }),
             GeneratorData {
@@ -610,6 +669,7 @@ mod to_generator_data_tests {
                     InterfaceGeneratorDefinition {
                         interface: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
+                        extends: vec![quote!{c::d::test2}, quote!{e::f::test3}],
                     },
                 )],
             }
@@ -623,7 +683,7 @@ mod to_generator_data_tests {
                 definitions: vec![JavaDefinition {
                     name: JavaName(quote!{a b test1}),
                     public: true,
-                    definition: JavaDefinitionKind::Interface(JavaInterface {}),
+                    definition: JavaDefinitionKind::Interface(JavaInterface { extends: vec![] }),
                 }],
             }),
             GeneratorData {
@@ -631,6 +691,7 @@ mod to_generator_data_tests {
                     InterfaceGeneratorDefinition {
                         interface: Ident::new("test1", Span::call_site()),
                         public: quote!{pub},
+                        extends: vec![],
                     },
                 )],
             }
@@ -645,12 +706,16 @@ mod to_generator_data_tests {
                     JavaDefinition {
                         name: JavaName(quote!{e f test_if1}),
                         public: false,
-                        definition: JavaDefinitionKind::Interface(JavaInterface {}),
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            extends: vec![],
+                        }),
                     },
                     JavaDefinition {
                         name: JavaName(quote!{e f test_if2}),
                         public: false,
-                        definition: JavaDefinitionKind::Interface(JavaInterface {}),
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            extends: vec![],
+                        }),
                     },
                     JavaDefinition {
                         name: JavaName(quote!{a b test1}),
@@ -673,10 +738,12 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
                         interface: Ident::new("test_if1", Span::call_site()),
                         public: TokenStream::new(),
+                        extends: vec![],
                     }),
                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
                         interface: Ident::new("test_if2", Span::call_site()),
                         public: TokenStream::new(),
+                        extends: vec![],
                     }),
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
@@ -813,10 +880,18 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
 
 fn generate_interface_definition(definition: InterfaceGeneratorDefinition) -> TokenStream {
     let InterfaceGeneratorDefinition {
-        interface, public, ..
+        interface,
+        public,
+        extends,
+        ..
     } = definition;
+    let extends = if extends.is_empty() {
+        TokenStream::new()
+    } else {
+        quote!{: #(#extends)+*}
+    };
     quote! {
-        #public trait #interface {
+        #public trait #interface #extends {
         }
     }
 }
@@ -942,11 +1017,30 @@ mod generate_tests {
                 InterfaceGeneratorDefinition {
                     interface: Ident::new("test1", Span::call_site()),
                     public: quote!{test_public},
+                    extends: vec![],
                 },
             )],
         };
         let expected = quote!{
             test_public trait test1 {
+            }
+        };
+        assert_tokens_equals(generate(input), expected);
+    }
+
+    #[test]
+    fn one_interface_extends() {
+        let input = GeneratorData {
+            definitions: vec![GeneratorDefinition::Interface(
+                InterfaceGeneratorDefinition {
+                    interface: Ident::new("test1", Span::call_site()),
+                    public: TokenStream::new(),
+                    extends: vec![quote!{c::d::test2}, quote!{e::f::test3}],
+                },
+            )],
+        };
+        let expected = quote!{
+            trait test1 : c::d::test2 + e::f::test3 {
             }
         };
         assert_tokens_equals(generate(input), expected);
@@ -959,10 +1053,12 @@ mod generate_tests {
                 GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
                     interface: Ident::new("test_if1", Span::call_site()),
                     public: TokenStream::new(),
+                    extends: vec![],
                 }),
                 GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
                     interface: Ident::new("test_if2", Span::call_site()),
                     public: TokenStream::new(),
+                    extends: vec![quote!{e::f::test2}],
                 }),
                 GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test1", Span::call_site()),
@@ -984,7 +1080,7 @@ mod generate_tests {
             trait test_if1 {
             }
 
-            trait test_if2 {
+            trait test_if2 : e::f::test2 {
             }
 
             #[derive(Debug)]
@@ -1496,10 +1592,22 @@ mod java_generate_tests {
     }
 
     #[test]
+    fn one_interface_extends() {
+        let input = quote!{
+            interface TestInterface1 extends TestInterface2 {}
+        };
+        let expected = quote!{
+            trait TestInterface1: TestInterface2 {
+            }
+        };
+        assert_tokens_equals(java_generate_impl(input), expected);
+    }
+
+    #[test]
     fn multiple() {
         let input = quote!{
             interface TestInterface1 {}
-            interface TestInterface2 {}
+            interface TestInterface2 extends TestInterface3 {}
             class TestClass1 extends TestClass3 {}
             class TestClass2 extends TestClass4 {}
         };
@@ -1507,7 +1615,7 @@ mod java_generate_tests {
             trait TestInterface1 {
             }
 
-            trait TestInterface2 {
+            trait TestInterface2: TestInterface3 {
             }
 
             #[derive(Debug)]
@@ -1689,12 +1797,24 @@ mod java_generate_tests {
     fn integration() {
         let input = quote!{
             public interface a.b.TestInterface1 {}
+            public interface a.b.TestInterface2 extends TestInterface1 {}
+            public interface a.b.TestInterface3 {}
+            public interface a.b.TestInterface4 extends TestInterface2, TestInterface3 {}
 
             public class a.b.TestClass1 extends java.lang.Object {}
             public class a.b.TestClass2 extends TestClass1 {}
         };
         let expected = quote!{
             pub trait TestInterface1 {
+            }
+
+            pub trait TestInterface2: TestInterface1 {
+            }
+
+            pub trait TestInterface3 {
+            }
+
+            pub trait TestInterface4: TestInterface2 + TestInterface3 {
             }
 
             #[derive(Debug)]
