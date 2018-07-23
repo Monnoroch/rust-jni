@@ -360,6 +360,7 @@ struct GeneratorDefinition {
     class: Ident,
     class_public: TokenStream,
     super_class: TokenStream,
+    class_signature: Literal,
     class_full_signature: Literal,
 }
 
@@ -388,8 +389,9 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                     extends,
                     ..
                 } = definition;
-                let class_full_signature =
-                    Literal::string(&format!("L{};", class.clone().with_slashes()));
+                let signature = class.clone().with_slashes();
+                let class_signature = Literal::string(&signature);
+                let class_full_signature = Literal::string(&format!("L{};", signature));
                 let class = class.name();
                 let class_public = if public {
                     quote!{pub}
@@ -401,6 +403,7 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                     class,
                     class_public,
                     super_class,
+                    class_signature,
                     class_full_signature,
                 }
             })
@@ -439,6 +442,7 @@ mod to_generator_data_tests {
                     class: Ident::new("test1", Span::call_site()),
                     class_public: TokenStream::new(),
                     super_class: quote!{c::d::test2},
+                    class_signature: Literal::string("a/b/test1"),
                     class_full_signature: Literal::string("La/b/test1;"),
                 }],
             }
@@ -460,6 +464,7 @@ mod to_generator_data_tests {
                     class: Ident::new("test1", Span::call_site()),
                     class_public: quote!{pub},
                     super_class: quote!{c::d::test2},
+                    class_signature: Literal::string("a/b/test1"),
                     class_full_signature: Literal::string("La/b/test1;"),
                 }],
             }
@@ -489,12 +494,14 @@ mod to_generator_data_tests {
                         class: Ident::new("test1", Span::call_site()),
                         class_public: TokenStream::new(),
                         super_class: quote!{c::d::test3},
+                        class_signature: Literal::string("a/b/test1"),
                         class_full_signature: Literal::string("La/b/test1;"),
                     },
                     GeneratorDefinition {
                         class: Ident::new("test2", Span::call_site()),
                         class_public: TokenStream::new(),
                         super_class: quote!{c::d::test4},
+                        class_signature: Literal::string("test2"),
                         class_full_signature: Literal::string("Ltest2;"),
                     },
                 ],
@@ -516,6 +523,7 @@ fn generate_definition(definition: GeneratorDefinition) -> TokenStream {
         class,
         class_public,
         super_class,
+        class_signature,
         class_full_signature,
         ..
     } = definition;
@@ -570,6 +578,41 @@ fn generate_definition(definition: GeneratorDefinition) -> TokenStream {
                 &self.object
             }
         }
+
+        impl<'a> #class<'a> {
+            pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                ::rust_jni::java::lang::Class::find(env, #class_signature, token)
+            }
+
+            pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+            where
+                Self: Sized,
+            {
+                self.object
+                    .clone(token)
+                    .map(|object| Self { object })
+            }
+
+            pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                self.object.to_string(token)
+            }
+        }
+
+        impl<'a> ::std::fmt::Display for #class<'a> {
+            fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                self.object.fmt(formatter)
+            }
+        }
+
+        impl<'a, T> PartialEq<T> for #class<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+            fn eq(&self, other: &T) -> bool {
+                self.object.eq(other)
+            }
+        }
+
+        impl<'a> Eq for #class<'a> {}
     }
 }
 
@@ -593,6 +636,7 @@ mod generate_tests {
                 class: Ident::new("test1", Span::call_site()),
                 class_public: quote!{test_public},
                 super_class: quote!{c::d::test2},
+                class_signature: Literal::string("test/sign1"),
                 class_full_signature: Literal::string("test/signature1"),
             }],
         };
@@ -647,6 +691,41 @@ mod generate_tests {
                     &self.object
                 }
             }
+
+            impl<'a> test1<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "test/sign1", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for test1<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for test1<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for test1<'a> {}
         };
         assert_tokens_equals(generate(input), expected);
     }
@@ -659,12 +738,14 @@ mod generate_tests {
                     class: Ident::new("test1", Span::call_site()),
                     class_public: TokenStream::new(),
                     super_class: quote!{c::d::test3},
+                    class_signature: Literal::string("test/sign1"),
                     class_full_signature: Literal::string("test/signature1"),
                 },
                 GeneratorDefinition {
                     class: Ident::new("test2", Span::call_site()),
                     class_public: TokenStream::new(),
                     super_class: quote!{c::d::test4},
+                    class_signature: Literal::string("test/sign2"),
                     class_full_signature: Literal::string("test/signature2"),
                 },
             ],
@@ -721,6 +802,41 @@ mod generate_tests {
                 }
             }
 
+            impl<'a> test1<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "test/sign1", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for test1<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for test1<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for test1<'a> {}
+
             #[derive(Debug)]
             struct test2<'env> {
                 object: c::d::test4<'env>,
@@ -771,6 +887,41 @@ mod generate_tests {
                     &self.object
                 }
             }
+
+            impl<'a> test2<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "test/sign2", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for test2<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for test2<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for test2<'a> {}
         };
         assert_tokens_equals(generate(input), expected);
     }
@@ -843,6 +994,41 @@ mod java_generate_tests {
                     &self.object
                 }
             }
+
+            impl<'a> TestClass1<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "TestClass1", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for TestClass1<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for TestClass1<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for TestClass1<'a> {}
         };
         assert_tokens_equals(java_generate_impl(input), expected);
     }
@@ -903,6 +1089,41 @@ mod java_generate_tests {
                     &self.object
                 }
             }
+
+            impl<'a> TestClass1<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "a/b/TestClass1", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for TestClass1<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for TestClass1<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for TestClass1<'a> {}
         };
         assert_tokens_equals(java_generate_impl(input), expected);
     }
@@ -963,6 +1184,41 @@ mod java_generate_tests {
                     &self.object
                 }
             }
+
+            impl<'a> TestClass1<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "TestClass1", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for TestClass1<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for TestClass1<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for TestClass1<'a> {}
         };
         assert_tokens_equals(java_generate_impl(input), expected);
     }
@@ -1025,6 +1281,41 @@ mod java_generate_tests {
                 }
             }
 
+            impl<'a> TestClass1<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "TestClass1", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for TestClass1<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for TestClass1<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for TestClass1<'a> {}
+
             #[derive(Debug)]
             struct TestClass2<'env> {
                 object: TestClass4<'env>,
@@ -1075,6 +1366,41 @@ mod java_generate_tests {
                     &self.object
                 }
             }
+
+            impl<'a> TestClass2<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "TestClass2", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for TestClass2<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for TestClass2<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for TestClass2<'a> {}
         };
         assert_tokens_equals(java_generate_impl(input), expected);
     }
@@ -1137,6 +1463,41 @@ mod java_generate_tests {
                 }
             }
 
+            impl<'a> TestClass1<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "a/b/TestClass1", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for TestClass1<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for TestClass1<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for TestClass1<'a> {}
+
             #[derive(Debug)]
             pub struct TestClass2<'env> {
                 object: TestClass1<'env>,
@@ -1187,6 +1548,41 @@ mod java_generate_tests {
                     &self.object
                 }
             }
+
+            impl<'a> TestClass2<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "a/b/TestClass2", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for TestClass2<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for TestClass2<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for TestClass2<'a> {}
         };
         assert_tokens_equals(java_generate_impl(input), expected);
     }
