@@ -17,7 +17,7 @@ mod a {
             public interface a.b.TestInterface4 extends TestInterface2, TestInterface3 {}
 
             public class a.b.TestClass1 extends java.lang.Object {}
-            public class a.b.TestClass2 extends TestClass1 {}
+            public class a.b.TestClass2 extends TestClass1 implements TestInterface1, TestInterface3 {}
         }
 
         // TODO(#76): generate this.
