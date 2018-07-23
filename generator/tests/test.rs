@@ -8,7 +8,7 @@ mod tests {
 
     java_generate!{
         class a.b.TestClass1 {}
-        class TestClass2 {}
+        public class TestClass2 {}
     }
 
     #[test]

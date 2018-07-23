@@ -46,6 +46,8 @@ impl PartialEq for JavaName {
     }
 }
 
+impl Eq for JavaName {}
+
 #[must_use = "iterator adaptors are lazy and do nothing unless consumed"]
 struct FlatMapThreaded<I, F, S> {
     iterator: I,
@@ -82,8 +84,6 @@ where
         state: initial,
     }
 }
-
-impl Eq for JavaName {}
 
 impl JavaName {
     fn from_tokens<'a>(tokens: impl Iterator<Item = &'a TokenTree>) -> JavaName {
@@ -125,6 +125,7 @@ impl JavaName {
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct JavaDefinition {
     class: JavaName,
+    public: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -139,12 +140,18 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
         .filter(|tokens| !tokens.is_empty())
         .map(|header| {
             let (token, header) = header.split_first().unwrap();
+            let public = is_identifier(&token, "public");
+            let (token, header) = if public {
+                header.split_first().unwrap()
+            } else {
+                (token, header)
+            };
             if !is_identifier(&token, "class") {
                 panic!("Expected \"class\", got {:?}.", token);
             }
 
             let class = JavaName::from_tokens(header.iter());
-            JavaDefinition { class }
+            JavaDefinition { class, public }
         })
         .collect();
     JavaDefinitions { definitions }
@@ -189,6 +196,23 @@ mod parse_tests {
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
                     class: JavaName(quote!{TestClass1}),
+                    public: false,
+                }],
+            }
+        );
+    }
+
+    #[test]
+    fn one_public() {
+        let input = quote!{
+            public class TestClass1 {}
+        };
+        assert_eq!(
+            parse_java_definition(input),
+            JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    class: JavaName(quote!{TestClass1}),
+                    public: true,
                 }],
             }
         );
@@ -204,6 +228,7 @@ mod parse_tests {
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
                     class: JavaName(quote!{a b TestClass1}),
+                    public: false,
                 }],
             }
         );
@@ -213,7 +238,7 @@ mod parse_tests {
     fn multiple() {
         let input = quote!{
             class TestClass1 {}
-            class TestClass2 {}
+            public class TestClass2 {}
         };
         assert_eq!(
             parse_java_definition(input),
@@ -221,9 +246,11 @@ mod parse_tests {
                 definitions: vec![
                     JavaDefinition {
                         class: JavaName(quote!{TestClass1}),
+                        public: false,
                     },
                     JavaDefinition {
                         class: JavaName(quote!{TestClass2}),
+                        public: true,
                     },
                 ],
             }
@@ -281,10 +308,19 @@ mod parse_tests {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone)]
 struct GeneratorDefinition {
     class: Ident,
+    class_public: TokenStream,
 }
+
+impl PartialEq for GeneratorDefinition {
+    fn eq(&self, other: &Self) -> bool {
+        format!("{:?}", self) == format!("{:?}", other)
+    }
+}
+
+impl Eq for GeneratorDefinition {}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct GeneratorData {
@@ -297,9 +333,17 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
             .definitions
             .into_iter()
             .map(|definition| {
-                let JavaDefinition { class, .. } = definition;
+                let JavaDefinition { class, public, .. } = definition;
                 let class = class.name();
-                GeneratorDefinition { class }
+                let class_public = if public {
+                    quote!{pub}
+                } else {
+                    TokenStream::new()
+                };
+                GeneratorDefinition {
+                    class,
+                    class_public,
+                }
             })
             .collect(),
     }
@@ -327,11 +371,31 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
                     class: JavaName(quote!{a b test1}),
+                    public: false,
                 }],
             }),
             GeneratorData {
                 definitions: vec![GeneratorDefinition {
                     class: Ident::new("test1", Span::call_site()),
+                    class_public: TokenStream::new(),
+                }],
+            }
+        );
+    }
+
+    #[test]
+    fn one_public() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    class: JavaName(quote!{a b test1}),
+                    public: true,
+                }],
+            }),
+            GeneratorData {
+                definitions: vec![GeneratorDefinition {
+                    class: Ident::new("test1", Span::call_site()),
+                    class_public: quote!{pub},
                 }],
             }
         );
@@ -344,9 +408,11 @@ mod to_generator_data_tests {
                 definitions: vec![
                     JavaDefinition {
                         class: JavaName(quote!{a b test1}),
+                        public: false,
                     },
                     JavaDefinition {
                         class: JavaName(quote!{test2}),
+                        public: true,
                     },
                 ],
             }),
@@ -354,9 +420,11 @@ mod to_generator_data_tests {
                 definitions: vec![
                     GeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
+                        class_public: TokenStream::new(),
                     },
                     GeneratorDefinition {
                         class: Ident::new("test2", Span::call_site()),
+                        class_public: quote!{pub},
                     },
                 ],
             }
@@ -373,10 +441,14 @@ fn generate(data: GeneratorData) -> TokenStream {
 }
 
 fn generate_definition(definition: GeneratorDefinition) -> TokenStream {
-    let GeneratorDefinition { class, .. } = definition;
+    let GeneratorDefinition {
+        class,
+        class_public,
+        ..
+    } = definition;
     quote! {
         #[derive(Debug)]
-        pub struct #class {
+        #class_public struct #class {
         }
     }
 }
@@ -399,11 +471,12 @@ mod generate_tests {
         let input = GeneratorData {
             definitions: vec![GeneratorDefinition {
                 class: Ident::new("test1", Span::call_site()),
+                class_public: quote!{test_public},
             }],
         };
         let expected = quote!{
             #[derive(Debug)]
-            pub struct test1 {
+            test_public struct test1 {
             }
         };
         assert_tokens_equals(generate(input), expected);
@@ -415,19 +488,21 @@ mod generate_tests {
             definitions: vec![
                 GeneratorDefinition {
                     class: Ident::new("test1", Span::call_site()),
+                    class_public: TokenStream::new(),
                 },
                 GeneratorDefinition {
                     class: Ident::new("test2", Span::call_site()),
+                    class_public: quote!{test_public},
                 },
             ],
         };
         let expected = quote!{
             #[derive(Debug)]
-            pub struct test1 {
+            struct test1 {
             }
 
             #[derive(Debug)]
-            pub struct test2 {
+            test_public struct test2 {
             }
         };
         assert_tokens_equals(generate(input), expected);
@@ -452,6 +527,19 @@ mod java_generate_tests {
         };
         let expected = quote!{
             #[derive(Debug)]
+            struct TestClass1 {
+            }
+        };
+        assert_tokens_equals(java_generate_impl(input), expected);
+    }
+
+    #[test]
+    fn one_public() {
+        let input = quote!{
+            public class TestClass1 {}
+        };
+        let expected = quote!{
+            #[derive(Debug)]
             pub struct TestClass1 {
             }
         };
@@ -462,11 +550,11 @@ mod java_generate_tests {
     fn multiple() {
         let input = quote!{
             class TestClass1 {}
-            class TestClass2 {}
+            public class TestClass2 {}
         };
         let expected = quote!{
             #[derive(Debug)]
-            pub struct TestClass1 {
+            struct TestClass1 {
             }
 
             #[derive(Debug)]
