@@ -11,8 +11,16 @@ mod a {
         use rust_jni_generator::*;
 
         java_generate! {
-            class a.b.TestClass1 extends java.lang.Object {}
-            public class TestClass2 extends TestClass1 {}
+            public class a.b.TestClass1 extends java.lang.Object {}
+            public class a.b.TestClass2 extends TestClass1 {}
+        }
+
+        // TODO(#76): generate this.
+        impl<'a> ::rust_jni::Cast<'a, java::lang::Object<'a>> for TestClass2<'a> {
+            #[doc(hidden)]
+            fn cast<'b>(&'b self) -> &'b java::lang::Object<'a> {
+                self
+            }
         }
     }
 }
