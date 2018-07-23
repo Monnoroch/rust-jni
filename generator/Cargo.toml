@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["Monnoroch <monnoroch@gmail.com>"]
 
 [dependencies]
-quote = "0.6.3"
-proc-macro2 = "0.4.6"
+quote = "0.6.4"
+proc-macro2 = "0.4.9"
 
 [lib]
 proc-macro = true
