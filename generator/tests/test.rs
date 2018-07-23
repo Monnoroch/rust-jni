@@ -11,6 +11,8 @@ mod a {
         use rust_jni_generator::*;
 
         java_generate! {
+            public interface a.b.TestInterface1 {}
+
             public class a.b.TestClass1 extends java.lang.Object {}
             public class a.b.TestClass2 extends TestClass1 {}
         }
