@@ -3,6 +3,13 @@ extern crate rust_jni;
 extern crate rust_jni_generator;
 
 #[cfg(test)]
+mod java {
+    pub mod lang {
+        pub use rust_jni::java::lang::*;
+    }
+}
+
+#[cfg(test)]
 mod a {
     mod b {
         use rust_jni::java;
@@ -12,12 +19,12 @@ mod a {
 
         java_generate! {
             public interface a.b.TestInterface1 {}
-            public interface a.b.TestInterface2 extends TestInterface1 {}
+            public interface a.b.TestInterface2 extends a.b.TestInterface1 {}
             public interface a.b.TestInterface3 {}
-            public interface a.b.TestInterface4 extends TestInterface2, TestInterface3 {}
+            public interface a.b.TestInterface4 extends a.b.TestInterface2, a.b.TestInterface3 {}
 
             public class a.b.TestClass1 extends java.lang.Object {}
-            public class a.b.TestClass2 extends TestClass1 implements TestInterface1, TestInterface3 {}
+            public class a.b.TestClass2 extends a.b.TestClass1 implements a.b.TestInterface1, a.b.TestInterface3 {}
         }
 
         // TODO(#76): generate this.
