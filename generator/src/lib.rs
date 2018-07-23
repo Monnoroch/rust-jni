@@ -131,13 +131,8 @@ impl JavaName {
 
     fn with_double_colons(self) -> TokenStream {
         let mut tokens = vec![];
-        let mut first = true;
         for token in self.0.into_iter() {
-            if first {
-                first = false;
-            } else {
-                tokens.extend(quote!{::});
-            }
+            tokens.extend(quote!{::});
             tokens.push(token);
         }
         TokenStream::from_iter(tokens.iter().cloned())
@@ -668,8 +663,8 @@ mod to_generator_data_tests {
                 definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test1", Span::call_site()),
                     public: TokenStream::new(),
-                    super_class: quote!{c::d::test2},
-                    implements: vec![quote!{e::f::test3}, quote!{e::f::test4}],
+                    super_class: quote!{::c::d::test2},
+                    implements: vec![quote!{::e::f::test3}, quote!{::e::f::test4}],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
                 })],
@@ -694,7 +689,7 @@ mod to_generator_data_tests {
                 definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test1", Span::call_site()),
                     public: quote!{pub},
-                    super_class: quote!{c::d::test2},
+                    super_class: quote!{::c::d::test2},
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
@@ -720,7 +715,7 @@ mod to_generator_data_tests {
                     InterfaceGeneratorDefinition {
                         interface: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
-                        extends: vec![quote!{c::d::test2}, quote!{e::f::test3}],
+                        extends: vec![quote!{::c::d::test2}, quote!{::e::f::test3}],
                     },
                 )],
             }
@@ -801,7 +796,7 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
-                        super_class: quote!{c::d::test3},
+                        super_class: quote!{::c::d::test3},
                         implements: vec![],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
@@ -809,7 +804,7 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test2", Span::call_site()),
                         public: TokenStream::new(),
-                        super_class: quote!{c::d::test4},
+                        super_class: quote!{::c::d::test4},
                         implements: vec![],
                         signature: Literal::string("test2"),
                         full_signature: Literal::string("Ltest2;"),
@@ -1451,7 +1446,7 @@ mod java_generate_tests {
         let expected = quote!{
             #[derive(Debug)]
             struct TestClass1<'env> {
-                object: TestClass2<'env>,
+                object: ::TestClass2<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass1<'a> {
@@ -1473,7 +1468,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass1<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -1485,15 +1480,15 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, TestClass2<'a>> for TestClass1<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::TestClass2<'a>> for TestClass1<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b TestClass2<'a> {
+                fn cast<'b>(&'b self) -> &'b ::TestClass2<'a> {
                     self
                 }
             }
 
             impl<'a> ::std::ops::Deref for TestClass1<'a> {
-                type Target = TestClass2<'a>;
+                type Target = ::TestClass2<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -1546,7 +1541,7 @@ mod java_generate_tests {
         let expected = quote!{
             #[derive(Debug)]
             struct TestClass1<'env> {
-                object: TestClass2<'env>,
+                object: ::TestClass2<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass1<'a> {
@@ -1568,7 +1563,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass1<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -1580,15 +1575,15 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, TestClass2<'a>> for TestClass1<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::TestClass2<'a>> for TestClass1<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b TestClass2<'a> {
+                fn cast<'b>(&'b self) -> &'b ::TestClass2<'a> {
                     self
                 }
             }
 
             impl<'a> ::std::ops::Deref for TestClass1<'a> {
-                type Target = TestClass2<'a>;
+                type Target = ::TestClass2<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -1630,10 +1625,10 @@ mod java_generate_tests {
 
             impl<'a> Eq for TestClass1<'a> {}
 
-            impl<'env> a::b::TestInterface1 for TestClass1<'env> {
+            impl<'env> ::a::b::TestInterface1 for TestClass1<'env> {
             }
 
-            impl<'env> a::b::TestInterface2 for TestClass1<'env> {
+            impl<'env> ::a::b::TestInterface2 for TestClass1<'env> {
             }
         };
         assert_tokens_equals(java_generate_impl(input), expected);
@@ -1647,7 +1642,7 @@ mod java_generate_tests {
         let expected = quote!{
             #[derive(Debug)]
             struct TestClass1<'env> {
-                object: c::d::TestClass2<'env>,
+                object: ::c::d::TestClass2<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass1<'a> {
@@ -1669,7 +1664,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass1<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <c::d::TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::c::d::TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -1681,15 +1676,15 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, c::d::TestClass2<'a>> for TestClass1<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::c::d::TestClass2<'a>> for TestClass1<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b c::d::TestClass2<'a> {
+                fn cast<'b>(&'b self) -> &'b ::c::d::TestClass2<'a> {
                     self
                 }
             }
 
             impl<'a> ::std::ops::Deref for TestClass1<'a> {
-                type Target = c::d::TestClass2<'a>;
+                type Target = ::c::d::TestClass2<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -1742,7 +1737,7 @@ mod java_generate_tests {
         let expected = quote!{
             #[derive(Debug)]
             pub struct TestClass1<'env> {
-                object: TestClass2<'env>,
+                object: ::TestClass2<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass1<'a> {
@@ -1764,7 +1759,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass1<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -1776,15 +1771,15 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, TestClass2<'a>> for TestClass1<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::TestClass2<'a>> for TestClass1<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b TestClass2<'a> {
+                fn cast<'b>(&'b self) -> &'b ::TestClass2<'a> {
                     self
                 }
             }
 
             impl<'a> ::std::ops::Deref for TestClass1<'a> {
-                type Target = TestClass2<'a>;
+                type Target = ::TestClass2<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -1871,7 +1866,7 @@ mod java_generate_tests {
             interface TestInterface1 extends TestInterface2 {}
         };
         let expected = quote!{
-            trait TestInterface1: TestInterface2 {
+            trait TestInterface1: ::TestInterface2 {
             }
         };
         assert_tokens_equals(java_generate_impl(input), expected);
@@ -1894,7 +1889,7 @@ mod java_generate_tests {
 
             #[derive(Debug)]
             struct TestClass1<'env> {
-                object: TestClass3<'env>,
+                object: ::TestClass3<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass1<'a> {
@@ -1916,7 +1911,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass1<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <TestClass3 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::TestClass3 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -1928,15 +1923,15 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, TestClass3<'a>> for TestClass1<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::TestClass3<'a>> for TestClass1<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b TestClass3<'a> {
+                fn cast<'b>(&'b self) -> &'b ::TestClass3<'a> {
                     self
                 }
             }
 
             impl<'a> ::std::ops::Deref for TestClass1<'a> {
-                type Target = TestClass3<'a>;
+                type Target = ::TestClass3<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -1980,7 +1975,7 @@ mod java_generate_tests {
 
             #[derive(Debug)]
             struct TestClass2<'env> {
-                object: TestClass4<'env>,
+                object: ::TestClass4<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass2<'a> {
@@ -2002,7 +1997,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass2<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <TestClass4 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::TestClass4 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -2014,15 +2009,15 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, TestClass4<'a>> for TestClass2<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::TestClass4<'a>> for TestClass2<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b TestClass4<'a> {
+                fn cast<'b>(&'b self) -> &'b ::TestClass4<'a> {
                     self
                 }
             }
 
             impl<'a> ::std::ops::Deref for TestClass2<'a> {
-                type Target = TestClass4<'a>;
+                type Target = ::TestClass4<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -2071,29 +2066,29 @@ mod java_generate_tests {
     fn integration() {
         let input = quote!{
             public interface a.b.TestInterface1 {}
-            public interface a.b.TestInterface2 extends TestInterface1 {}
+            public interface a.b.TestInterface2 extends a.b.TestInterface1 {}
             public interface a.b.TestInterface3 {}
-            public interface a.b.TestInterface4 extends TestInterface2, TestInterface3 {}
+            public interface a.b.TestInterface4 extends a.b.TestInterface2, a.b.TestInterface3 {}
 
             public class a.b.TestClass1 extends java.lang.Object {}
-            public class a.b.TestClass2 extends TestClass1 implements TestInterface1, TestInterface3 {}
+            public class a.b.TestClass2 extends a.b.TestClass1 implements a.b.TestInterface1, a.b.TestInterface3 {}
         };
         let expected = quote!{
             pub trait TestInterface1 {
             }
 
-            pub trait TestInterface2: TestInterface1 {
+            pub trait TestInterface2: ::a::b::TestInterface1 {
             }
 
             pub trait TestInterface3 {
             }
 
-            pub trait TestInterface4: TestInterface2 + TestInterface3 {
+            pub trait TestInterface4: ::a::b::TestInterface2 + ::a::b::TestInterface3 {
             }
 
             #[derive(Debug)]
             pub struct TestClass1<'env> {
-                object: java::lang::Object<'env>,
+                object: ::java::lang::Object<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass1<'a> {
@@ -2115,7 +2110,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass1<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <java::lang::Object as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::java::lang::Object as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -2127,15 +2122,15 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, java::lang::Object<'a>> for TestClass1<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::java::lang::Object<'a>> for TestClass1<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b java::lang::Object<'a> {
+                fn cast<'b>(&'b self) -> &'b ::java::lang::Object<'a> {
                     self
                 }
             }
 
             impl<'a> ::std::ops::Deref for TestClass1<'a> {
-                type Target = java::lang::Object<'a>;
+                type Target = ::java::lang::Object<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -2179,7 +2174,7 @@ mod java_generate_tests {
 
             #[derive(Debug)]
             pub struct TestClass2<'env> {
-                object: TestClass1<'env>,
+                object: ::a::b::TestClass1<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass2<'a> {
@@ -2201,7 +2196,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass2<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <TestClass1 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::a::b::TestClass1 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -2213,15 +2208,15 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, TestClass1<'a>> for TestClass2<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::a::b::TestClass1<'a>> for TestClass2<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b TestClass1<'a> {
+                fn cast<'b>(&'b self) -> &'b ::a::b::TestClass1<'a> {
                     self
                 }
             }
 
             impl<'a> ::std::ops::Deref for TestClass2<'a> {
-                type Target = TestClass1<'a>;
+                type Target = ::a::b::TestClass1<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -2263,10 +2258,10 @@ mod java_generate_tests {
 
             impl<'a> Eq for TestClass2<'a> {}
 
-            impl<'env> TestInterface1 for TestClass2<'env> {
+            impl<'env> ::a::b::TestInterface1 for TestClass2<'env> {
             }
 
-            impl<'env> TestInterface3 for TestClass2<'env> {
+            impl<'env> ::a::b::TestInterface3 for TestClass2<'env> {
             }
         };
         assert_tokens_equals(java_generate_impl(input), expected);
