@@ -12,6 +12,9 @@ mod a {
 
         java_generate! {
             public interface a.b.TestInterface1 {}
+            public interface a.b.TestInterface2 extends TestInterface1 {}
+            public interface a.b.TestInterface3 {}
+            public interface a.b.TestInterface4 extends TestInterface2, TestInterface3 {}
 
             public class a.b.TestClass1 extends java.lang.Object {}
             public class a.b.TestClass2 extends TestClass1 {}
