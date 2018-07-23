@@ -146,10 +146,20 @@ impl JavaName {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-struct JavaDefinition {
-    class: JavaName,
-    public: bool,
+struct JavaClass {
     extends: JavaName,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+enum JavaDefinitionKind {
+    Class(JavaClass),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct JavaDefinition {
+    name: JavaName,
+    public: bool,
+    definition: JavaDefinitionKind,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -174,7 +184,7 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
                 panic!("Expected \"class\", got {:?}.", token);
             }
 
-            let class = JavaName::from_tokens(
+            let name = JavaName::from_tokens(
                 header
                     .iter()
                     .take_while(|token| !is_identifier(&token, "extends")),
@@ -186,9 +196,9 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
                     .skip(1),
             );
             JavaDefinition {
-                class,
+                name,
                 public,
-                extends,
+                definition: JavaDefinitionKind::Class(JavaClass { extends }),
             }
         })
         .collect();
@@ -233,9 +243,11 @@ mod parse_tests {
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    class: JavaName(quote!{TestClass1}),
+                    name: JavaName(quote!{TestClass1}),
                     public: false,
-                    extends: JavaName(quote!{test1}),
+                    definition: JavaDefinitionKind::Class(JavaClass {
+                        extends: JavaName(quote!{test1}),
+                    }),
                 }],
             }
         );
@@ -250,9 +262,11 @@ mod parse_tests {
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    class: JavaName(quote!{TestClass1}),
+                    name: JavaName(quote!{TestClass1}),
                     public: true,
-                    extends: JavaName(quote!{test1}),
+                    definition: JavaDefinitionKind::Class(JavaClass {
+                        extends: JavaName(quote!{test1}),
+                    }),
                 }],
             }
         );
@@ -267,9 +281,11 @@ mod parse_tests {
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    class: JavaName(quote!{a b TestClass1}),
+                    name: JavaName(quote!{a b TestClass1}),
                     public: false,
-                    extends: JavaName(quote!{c d test1}),
+                    definition: JavaDefinitionKind::Class(JavaClass {
+                        extends: JavaName(quote!{c d test1}),
+                    }),
                 }],
             }
         );
@@ -286,14 +302,18 @@ mod parse_tests {
             JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        class: JavaName(quote!{TestClass1}),
+                        name: JavaName(quote!{TestClass1}),
                         public: false,
-                        extends: JavaName(quote!{test1}),
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: JavaName(quote!{test1}),
+                        }),
                     },
                     JavaDefinition {
-                        class: JavaName(quote!{TestClass2}),
+                        name: JavaName(quote!{TestClass2}),
                         public: false,
-                        extends: JavaName(quote!{test2}),
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: JavaName(quote!{test2}),
+                        }),
                     },
                 ],
             }
@@ -356,12 +376,17 @@ mod parse_tests {
 }
 
 #[derive(Debug, Clone)]
-struct GeneratorDefinition {
+struct ClassGeneratorDefinition {
     class: Ident,
-    class_public: TokenStream,
+    public: TokenStream,
     super_class: TokenStream,
-    class_signature: Literal,
-    class_full_signature: Literal,
+    signature: Literal,
+    full_signature: Literal,
+}
+
+#[derive(Debug, Clone)]
+enum GeneratorDefinition {
+    Class(ClassGeneratorDefinition),
 }
 
 impl PartialEq for GeneratorDefinition {
@@ -384,28 +409,31 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
             .into_iter()
             .map(|definition| {
                 let JavaDefinition {
-                    class,
+                    name,
                     public,
-                    extends,
+                    definition,
                     ..
                 } = definition;
-                let signature = class.clone().with_slashes();
-                let class_signature = Literal::string(&signature);
-                let class_full_signature = Literal::string(&format!("L{};", signature));
-                let class = class.name();
-                let class_public = if public {
+                let JavaClass { extends } = match definition {
+                    JavaDefinitionKind::Class(class) => class,
+                };
+                let string_signature = name.clone().with_slashes();
+                let signature = Literal::string(&string_signature);
+                let full_signature = Literal::string(&format!("L{};", string_signature));
+                let class = name.name();
+                let public = if public {
                     quote!{pub}
                 } else {
                     TokenStream::new()
                 };
                 let super_class = extends.with_double_colons();
-                GeneratorDefinition {
+                GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class,
-                    class_public,
+                    public,
                     super_class,
-                    class_signature,
-                    class_full_signature,
-                }
+                    signature,
+                    full_signature,
+                })
             })
             .collect(),
     }
@@ -432,19 +460,21 @@ mod to_generator_data_tests {
         assert_eq!(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    class: JavaName(quote!{a b test1}),
+                    name: JavaName(quote!{a b test1}),
                     public: false,
-                    extends: JavaName(quote!{c d test2}),
+                    definition: JavaDefinitionKind::Class(JavaClass {
+                        extends: JavaName(quote!{c d test2}),
+                    }),
                 }],
             }),
             GeneratorData {
-                definitions: vec![GeneratorDefinition {
+                definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test1", Span::call_site()),
-                    class_public: TokenStream::new(),
+                    public: TokenStream::new(),
                     super_class: quote!{c::d::test2},
-                    class_signature: Literal::string("a/b/test1"),
-                    class_full_signature: Literal::string("La/b/test1;"),
-                }],
+                    signature: Literal::string("a/b/test1"),
+                    full_signature: Literal::string("La/b/test1;"),
+                })],
             }
         );
     }
@@ -454,19 +484,21 @@ mod to_generator_data_tests {
         assert_eq!(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    class: JavaName(quote!{a b test1}),
+                    name: JavaName(quote!{a b test1}),
                     public: true,
-                    extends: JavaName(quote!{c d test2}),
+                    definition: JavaDefinitionKind::Class(JavaClass {
+                        extends: JavaName(quote!{c d test2}),
+                    }),
                 }],
             }),
             GeneratorData {
-                definitions: vec![GeneratorDefinition {
+                definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test1", Span::call_site()),
-                    class_public: quote!{pub},
+                    public: quote!{pub},
                     super_class: quote!{c::d::test2},
-                    class_signature: Literal::string("a/b/test1"),
-                    class_full_signature: Literal::string("La/b/test1;"),
-                }],
+                    signature: Literal::string("a/b/test1"),
+                    full_signature: Literal::string("La/b/test1;"),
+                })],
             }
         );
     }
@@ -477,33 +509,37 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        class: JavaName(quote!{a b test1}),
+                        name: JavaName(quote!{a b test1}),
                         public: false,
-                        extends: JavaName(quote!{c d test3}),
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: JavaName(quote!{c d test3}),
+                        }),
                     },
                     JavaDefinition {
-                        class: JavaName(quote!{test2}),
+                        name: JavaName(quote!{test2}),
                         public: false,
-                        extends: JavaName(quote!{c d test4}),
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: JavaName(quote!{c d test4}),
+                        }),
                     },
                 ],
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition {
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
-                        class_public: TokenStream::new(),
+                        public: TokenStream::new(),
                         super_class: quote!{c::d::test3},
-                        class_signature: Literal::string("a/b/test1"),
-                        class_full_signature: Literal::string("La/b/test1;"),
-                    },
-                    GeneratorDefinition {
+                        signature: Literal::string("a/b/test1"),
+                        full_signature: Literal::string("La/b/test1;"),
+                    }),
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test2", Span::call_site()),
-                        class_public: TokenStream::new(),
+                        public: TokenStream::new(),
                         super_class: quote!{c::d::test4},
-                        class_signature: Literal::string("test2"),
-                        class_full_signature: Literal::string("Ltest2;"),
-                    },
+                        signature: Literal::string("test2"),
+                        full_signature: Literal::string("Ltest2;"),
+                    }),
                 ],
             }
         );
@@ -519,17 +555,23 @@ fn generate(data: GeneratorData) -> TokenStream {
 }
 
 fn generate_definition(definition: GeneratorDefinition) -> TokenStream {
-    let GeneratorDefinition {
+    match definition {
+        GeneratorDefinition::Class(class) => generate_class_definition(class),
+    }
+}
+
+fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStream {
+    let ClassGeneratorDefinition {
         class,
-        class_public,
+        public,
         super_class,
-        class_signature,
-        class_full_signature,
+        signature,
+        full_signature,
         ..
     } = definition;
     quote! {
         #[derive(Debug)]
-        #class_public struct #class<'env> {
+        #public struct #class<'env> {
             object: #super_class<'env>,
         }
 
@@ -539,7 +581,7 @@ fn generate_definition(definition: GeneratorDefinition) -> TokenStream {
 
             #[doc(hidden)]
             fn __signature() -> &'static str {
-                #class_full_signature
+                #full_signature
             }
         }
 
@@ -582,7 +624,7 @@ fn generate_definition(definition: GeneratorDefinition) -> TokenStream {
         impl<'a> #class<'a> {
             pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
                 -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
-                ::rust_jni::java::lang::Class::find(env, #class_signature, token)
+                ::rust_jni::java::lang::Class::find(env, #signature, token)
             }
 
             pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
@@ -632,13 +674,13 @@ mod generate_tests {
     #[test]
     fn one() {
         let input = GeneratorData {
-            definitions: vec![GeneratorDefinition {
+            definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
                 class: Ident::new("test1", Span::call_site()),
-                class_public: quote!{test_public},
+                public: quote!{test_public},
                 super_class: quote!{c::d::test2},
-                class_signature: Literal::string("test/sign1"),
-                class_full_signature: Literal::string("test/signature1"),
-            }],
+                signature: Literal::string("test/sign1"),
+                full_signature: Literal::string("test/signature1"),
+            })],
         };
         let expected = quote!{
             #[derive(Debug)]
@@ -734,20 +776,20 @@ mod generate_tests {
     fn multiple() {
         let input = GeneratorData {
             definitions: vec![
-                GeneratorDefinition {
+                GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test1", Span::call_site()),
-                    class_public: TokenStream::new(),
+                    public: TokenStream::new(),
                     super_class: quote!{c::d::test3},
-                    class_signature: Literal::string("test/sign1"),
-                    class_full_signature: Literal::string("test/signature1"),
-                },
-                GeneratorDefinition {
+                    signature: Literal::string("test/sign1"),
+                    full_signature: Literal::string("test/signature1"),
+                }),
+                GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test2", Span::call_site()),
-                    class_public: TokenStream::new(),
+                    public: TokenStream::new(),
                     super_class: quote!{c::d::test4},
-                    class_signature: Literal::string("test/sign2"),
-                    class_full_signature: Literal::string("test/signature2"),
-                },
+                    signature: Literal::string("test/sign2"),
+                    full_signature: Literal::string("test/signature2"),
+                }),
             ],
         };
         let expected = quote!{
