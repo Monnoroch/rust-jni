@@ -149,7 +149,7 @@ impl JavaName {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct JavaClass {
-    extends: JavaName,
+    extends: Option<JavaName>,
     implements: Vec<JavaName>,
 }
 
@@ -226,18 +226,9 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
                     definition: JavaDefinitionKind::Interface(JavaInterface { extends }),
                 }
             } else {
-                let name = JavaName::from_tokens(
-                    header
-                        .iter()
-                        .take_while(|token| !is_identifier(&token, "extends")),
-                );
-                let extends = JavaName::from_tokens(
-                    header
-                        .iter()
-                        .skip_while(|token| !is_identifier(&token, "extends"))
-                        .skip(1)
-                        .take_while(|token| !is_identifier(&token, "implements")),
-                );
+                let name = JavaName::from_tokens(header.iter().take_while(|token| {
+                    !is_identifier(&token, "extends") && !is_identifier(&token, "implements")
+                }));
                 let implements = comma_separated_names(
                     header
                         .iter()
@@ -245,6 +236,22 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
                         .skip(1)
                         .cloned(),
                 );
+                let has_extends = header
+                    .iter()
+                    .filter(|token| is_identifier(&token, "extends"))
+                    .next()
+                    .is_some();
+                let extends = if has_extends {
+                    Some(JavaName::from_tokens(
+                        header
+                            .iter()
+                            .skip_while(|token| !is_identifier(&token, "extends"))
+                            .skip(1)
+                            .take_while(|token| !is_identifier(&token, "implements")),
+                    ))
+                } else {
+                    None
+                };
                 JavaDefinition {
                     name,
                     public,
@@ -291,6 +298,26 @@ mod parse_tests {
     #[test]
     fn one_class() {
         let input = quote!{
+            class TestClass1 {}
+        };
+        assert_eq!(
+            parse_java_definition(input),
+            JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    name: JavaName(quote!{TestClass1}),
+                    public: false,
+                    definition: JavaDefinitionKind::Class(JavaClass {
+                        extends: None,
+                        implements: vec![],
+                    }),
+                }],
+            }
+        );
+    }
+
+    #[test]
+    fn one_class_extends() {
+        let input = quote!{
             class TestClass1 extends test1 {}
         };
         assert_eq!(
@@ -300,7 +327,7 @@ mod parse_tests {
                     name: JavaName(quote!{TestClass1}),
                     public: false,
                     definition: JavaDefinitionKind::Class(JavaClass {
-                        extends: JavaName(quote!{test1}),
+                        extends: Some(JavaName(quote!{test1})),
                         implements: vec![],
                     }),
                 }],
@@ -311,7 +338,7 @@ mod parse_tests {
     #[test]
     fn one_class_public() {
         let input = quote!{
-            public class TestClass1 extends test1 {}
+            public class TestClass1 {}
         };
         assert_eq!(
             parse_java_definition(input),
@@ -320,7 +347,7 @@ mod parse_tests {
                     name: JavaName(quote!{TestClass1}),
                     public: true,
                     definition: JavaDefinitionKind::Class(JavaClass {
-                        extends: JavaName(quote!{test1}),
+                        extends: None,
                         implements: vec![],
                     }),
                 }],
@@ -331,7 +358,7 @@ mod parse_tests {
     #[test]
     fn one_class_packaged() {
         let input = quote!{
-            class a.b.TestClass1 extends c.d.test1 {}
+            class a.b.TestClass1 {}
         };
         assert_eq!(
             parse_java_definition(input),
@@ -340,7 +367,7 @@ mod parse_tests {
                     name: JavaName(quote!{a b TestClass1}),
                     public: false,
                     definition: JavaDefinitionKind::Class(JavaClass {
-                        extends: JavaName(quote!{c d test1}),
+                        extends: None,
                         implements: vec![],
                     }),
                 }],
@@ -351,7 +378,7 @@ mod parse_tests {
     #[test]
     fn one_class_implements() {
         let input = quote!{
-            class TestClass1 extends test1 implements test2, a.b.test3 {}
+            class TestClass1 implements test2, a.b.test3 {}
         };
         assert_eq!(
             parse_java_definition(input),
@@ -360,7 +387,7 @@ mod parse_tests {
                     name: JavaName(quote!{TestClass1}),
                     public: false,
                     definition: JavaDefinitionKind::Class(JavaClass {
-                        extends: JavaName(quote!{test1}),
+                        extends: None,
                         implements: vec![JavaName(quote!{test2}), JavaName(quote!{a b test3})],
                     }),
                 }],
@@ -445,9 +472,9 @@ mod parse_tests {
     fn multiple() {
         let input = quote!{
             interface TestInterface1 {}
-            interface TestInterface2 extends TestInterface3 {}
-            class TestClass1 extends test1 {}
-            class TestClass2 extends test2 implements test3 {}
+            interface TestInterface2 {}
+            class TestClass1 {}
+            class TestClass2 {}
         };
         assert_eq!(
             parse_java_definition(input),
@@ -464,14 +491,14 @@ mod parse_tests {
                         name: JavaName(quote!{TestInterface2}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
-                            extends: vec![JavaName(quote!{TestInterface3})],
+                            extends: vec![],
                         }),
                     },
                     JavaDefinition {
                         name: JavaName(quote!{TestClass1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
-                            extends: JavaName(quote!{test1}),
+                            extends: None,
                             implements: vec![],
                         }),
                     },
@@ -479,8 +506,8 @@ mod parse_tests {
                         name: JavaName(quote!{TestClass2}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
-                            extends: JavaName(quote!{test2}),
-                            implements: vec![JavaName(quote!{test3})],
+                            extends: None,
+                            implements: vec![],
                         }),
                     },
                 ],
@@ -529,15 +556,6 @@ mod parse_tests {
     fn definition_name_not_dot_punctuation() {
         let input = quote!{
             class a,b {}
-        };
-        parse_java_definition(input);
-    }
-
-    #[test]
-    #[should_panic(expected = "Expected a Java name")]
-    fn no_extends() {
-        let input = quote!{
-            class a {}
         };
         parse_java_definition(input);
     }
@@ -653,7 +671,9 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             implements,
                             ..
                         } = class;
-                        let super_class = extends.with_double_colons();
+                        let super_class = extends
+                            .map(|name| name.with_double_colons())
+                            .unwrap_or(quote!{::java::lang::Object});
                         let implements = implements
                             .iter()
                             .flat_map(|name| interface_extends.get(&name).unwrap().iter())
@@ -715,7 +735,7 @@ mod to_generator_data_tests {
                     name: JavaName(quote!{a b test1}),
                     public: false,
                     definition: JavaDefinitionKind::Class(JavaClass {
-                        extends: JavaName(quote!{c d test2}),
+                        extends: Some(JavaName(quote!{c d test2})),
                         implements: vec![],
                     }),
                 }],
@@ -725,6 +745,32 @@ mod to_generator_data_tests {
                     class: Ident::new("test1", Span::call_site()),
                     public: TokenStream::new(),
                     super_class: quote!{::c::d::test2},
+                    implements: vec![],
+                    signature: Literal::string("a/b/test1"),
+                    full_signature: Literal::string("La/b/test1;"),
+                })],
+            }
+        );
+    }
+
+    #[test]
+    fn one_class_no_extends() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    name: JavaName(quote!{a b test1}),
+                    public: false,
+                    definition: JavaDefinitionKind::Class(JavaClass {
+                        extends: None,
+                        implements: vec![],
+                    }),
+                }],
+            }),
+            GeneratorData {
+                definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    class: Ident::new("test1", Span::call_site()),
+                    public: TokenStream::new(),
+                    super_class: quote!{::java::lang::Object},
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
@@ -756,7 +802,7 @@ mod to_generator_data_tests {
                         name: JavaName(quote!{a b test1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
-                            extends: JavaName(quote!{c d test2}),
+                            extends: None,
                             implements: vec![
                                 JavaName(quote!{e f test3}),
                                 JavaName(quote!{e f test4}),
@@ -780,7 +826,7 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
-                        super_class: quote!{::c::d::test2},
+                        super_class: quote!{::java::lang::Object},
                         implements: vec![quote!{::e::f::test3}, quote!{::e::f::test4}],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
@@ -820,7 +866,7 @@ mod to_generator_data_tests {
                         name: JavaName(quote!{a b test1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
-                            extends: JavaName(quote!{c d test2}),
+                            extends: None,
                             implements: vec![JavaName(quote!{e f test3})],
                         }),
                     },
@@ -846,7 +892,7 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
-                        super_class: quote!{::c::d::test2},
+                        super_class: quote!{::java::lang::Object},
                         implements: vec![
                             quote!{::e::f::test3},
                             quote!{::e::f::test4},
@@ -883,7 +929,7 @@ mod to_generator_data_tests {
                         name: JavaName(quote!{a b test1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
-                            extends: JavaName(quote!{c d test2}),
+                            extends: None,
                             implements: vec![
                                 JavaName(quote!{e f test3}),
                                 JavaName(quote!{g h test4}),
@@ -907,7 +953,7 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
-                        super_class: quote!{::c::d::test2},
+                        super_class: quote!{::java::lang::Object},
                         implements: vec![quote!{::e::f::test3}, quote!{::g::h::test4}],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
@@ -925,7 +971,7 @@ mod to_generator_data_tests {
                     name: JavaName(quote!{a b test1}),
                     public: true,
                     definition: JavaDefinitionKind::Class(JavaClass {
-                        extends: JavaName(quote!{c d test2}),
+                        extends: None,
                         implements: vec![],
                     }),
                 }],
@@ -934,7 +980,7 @@ mod to_generator_data_tests {
                 definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test1", Span::call_site()),
                     public: quote!{pub},
-                    super_class: quote!{::c::d::test2},
+                    super_class: quote!{::java::lang::Object},
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
@@ -1060,7 +1106,7 @@ mod to_generator_data_tests {
                         name: JavaName(quote!{a b test1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
-                            extends: JavaName(quote!{c d test3}),
+                            extends: None,
                             implements: vec![],
                         }),
                     },
@@ -1068,7 +1114,7 @@ mod to_generator_data_tests {
                         name: JavaName(quote!{test2}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
-                            extends: JavaName(quote!{c d test4}),
+                            extends: None,
                             implements: vec![],
                         }),
                     },
@@ -1089,7 +1135,7 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
-                        super_class: quote!{::c::d::test3},
+                        super_class: quote!{::java::lang::Object},
                         implements: vec![],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
@@ -1097,7 +1143,7 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test2", Span::call_site()),
                         public: TokenStream::new(),
-                        super_class: quote!{::c::d::test4},
+                        super_class: quote!{::java::lang::Object},
                         implements: vec![],
                         signature: Literal::string("test2"),
                         full_signature: Literal::string("Ltest2;"),
@@ -2379,7 +2425,7 @@ mod java_generate_tests {
             public interface a.b.TestInterface3 {}
             public interface a.b.TestInterface4 extends a.b.TestInterface2, a.b.TestInterface3 {}
 
-            public class a.b.TestClass1 extends java.lang.Object {}
+            public class a.b.TestClass1 {}
             public class a.b.TestClass2 extends a.b.TestClass1 implements a.b.TestInterface4, a.b.TestInterface3 {}
         };
         let expected = quote!{
