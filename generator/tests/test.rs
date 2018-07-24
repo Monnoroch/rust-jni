@@ -12,8 +12,6 @@ mod java {
 #[cfg(test)]
 mod a {
     mod b {
-        use rust_jni::java;
-
         #[allow(unused_imports)]
         use rust_jni_generator::*;
 
@@ -24,15 +22,8 @@ mod a {
             public interface a.b.TestInterface4 extends a.b.TestInterface2, a.b.TestInterface3 {}
 
             public class a.b.TestClass1 {}
-            public class a.b.TestClass2 extends a.b.TestClass1 implements a.b.TestInterface1, a.b.TestInterface3 {}
-        }
-
-        // TODO(#76): generate this.
-        impl<'a> ::rust_jni::Cast<'a, java::lang::Object<'a>> for TestClass2<'a> {
-            #[doc(hidden)]
-            fn cast<'b>(&'b self) -> &'b java::lang::Object<'a> {
-                self
-            }
+            public class a.b.TestClass2 extends a.b.TestClass1 implements a.b.TestInterface1 {}
+            public class a.b.TestClass3 extends a.b.TestClass2 implements a.b.TestInterface1, a.b.TestInterface4 {}
         }
     }
 }
