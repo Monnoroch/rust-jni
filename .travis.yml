@@ -17,8 +17,5 @@ install:
 script:
   - ci/check-format.sh
   - ci/test.sh
-matrix:
-  allow_failures:
-    - rust: nightly
 notifications:
   email: false
