@@ -566,6 +566,7 @@ struct ClassGeneratorDefinition {
     class: Ident,
     public: TokenStream,
     super_class: TokenStream,
+    transitive_extends: Vec<TokenStream>,
     implements: Vec<TokenStream>,
     signature: Literal,
     full_signature: Literal,
@@ -644,6 +645,27 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
             }
         });
     populate_interface_extends(&mut interface_extends);
+    let mut extends_map = HashMap::new();
+    definitions
+        .definitions
+        .clone()
+        .into_iter()
+        .filter(|definition| match definition.definition {
+            JavaDefinitionKind::Class(_) => true,
+            _ => false,
+        })
+        .for_each(|definition| {
+            let JavaDefinition {
+                name, definition, ..
+            } = definition;
+            match definition {
+                JavaDefinitionKind::Class(class) => {
+                    let JavaClass { extends, .. } = class;
+                    extends_map.insert(name, extends.unwrap_or(JavaName(quote!{java lang Object})));
+                }
+                _ => unreachable!(),
+            }
+        });
     GeneratorData {
         definitions: definitions
             .definitions
@@ -663,14 +685,25 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                 };
                 match definition {
                     JavaDefinitionKind::Class(class) => {
-                        let string_signature = name.with_slashes();
-                        let signature = Literal::string(&string_signature);
-                        let full_signature = Literal::string(&format!("L{};", string_signature));
                         let JavaClass {
                             extends,
                             implements,
                             ..
                         } = class;
+                        let mut transitive_extends = vec![];
+                        let mut current = name.clone();
+                        loop {
+                            let super_class = extends_map.get(&current);
+                            if super_class.is_none() {
+                                break;
+                            }
+                            let super_class = super_class.unwrap();
+                            transitive_extends.push(super_class.clone().with_double_colons());
+                            current = super_class.clone();
+                        }
+                        let string_signature = name.with_slashes();
+                        let signature = Literal::string(&string_signature);
+                        let full_signature = Literal::string(&format!("L{};", string_signature));
                         let super_class = extends
                             .map(|name| name.with_double_colons())
                             .unwrap_or(quote!{::java::lang::Object});
@@ -689,6 +722,7 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             class: definition_name,
                             public,
                             super_class,
+                            transitive_extends,
                             implements,
                             signature,
                             full_signature,
@@ -745,6 +779,7 @@ mod to_generator_data_tests {
                     class: Ident::new("test1", Span::call_site()),
                     public: TokenStream::new(),
                     super_class: quote!{::c::d::test2},
+                    transitive_extends: vec![quote!{::c::d::test2}],
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
@@ -771,10 +806,83 @@ mod to_generator_data_tests {
                     class: Ident::new("test1", Span::call_site()),
                     public: TokenStream::new(),
                     super_class: quote!{::java::lang::Object},
+                    transitive_extends: vec![quote!{::java::lang::Object}],
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
                 })],
+            }
+        );
+    }
+
+    #[test]
+    fn one_class_extends_recursive() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![
+                    JavaDefinition {
+                        name: JavaName(quote!{e f test3}),
+                        public: false,
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: None,
+                            implements: vec![],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{c d test2}),
+                        public: false,
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: Some(JavaName(quote!{e f test3})),
+                            implements: vec![],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{a b test1}),
+                        public: false,
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: Some(JavaName(quote!{c d test2})),
+                            implements: vec![],
+                        }),
+                    },
+                ],
+            }),
+            GeneratorData {
+                definitions: vec![
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        class: Ident::new("test3", Span::call_site()),
+                        public: TokenStream::new(),
+                        super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        implements: vec![],
+                        signature: Literal::string("e/f/test3"),
+                        full_signature: Literal::string("Le/f/test3;"),
+                    }),
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        class: Ident::new("test2", Span::call_site()),
+                        public: TokenStream::new(),
+                        super_class: quote!{::e::f::test3},
+                        transitive_extends: vec![
+                            quote!{::e::f::test3},
+                            quote!{::java::lang::Object},
+                        ],
+                        implements: vec![],
+                        signature: Literal::string("c/d/test2"),
+                        full_signature: Literal::string("Lc/d/test2;"),
+                    }),
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        class: Ident::new("test1", Span::call_site()),
+                        public: TokenStream::new(),
+                        super_class: quote!{::c::d::test2},
+                        transitive_extends: vec![
+                            quote!{::c::d::test2},
+                            quote!{::e::f::test3},
+                            quote!{::java::lang::Object},
+                        ],
+                        implements: vec![],
+                        signature: Literal::string("a/b/test1"),
+                        full_signature: Literal::string("La/b/test1;"),
+                    }),
+                ],
             }
         );
     }
@@ -827,6 +935,7 @@ mod to_generator_data_tests {
                         class: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
                         super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
                         implements: vec![quote!{::e::f::test3}, quote!{::e::f::test4}],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
@@ -893,6 +1002,7 @@ mod to_generator_data_tests {
                         class: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
                         super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
                         implements: vec![
                             quote!{::e::f::test3},
                             quote!{::e::f::test4},
@@ -954,6 +1064,7 @@ mod to_generator_data_tests {
                         class: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
                         super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
                         implements: vec![quote!{::e::f::test3}, quote!{::g::h::test4}],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
@@ -981,6 +1092,7 @@ mod to_generator_data_tests {
                     class: Ident::new("test1", Span::call_site()),
                     public: quote!{pub},
                     super_class: quote!{::java::lang::Object},
+                    transitive_extends: vec![quote!{::java::lang::Object}],
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
@@ -1136,6 +1248,7 @@ mod to_generator_data_tests {
                         class: Ident::new("test1", Span::call_site()),
                         public: TokenStream::new(),
                         super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
                         implements: vec![],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
@@ -1144,6 +1257,7 @@ mod to_generator_data_tests {
                         class: Ident::new("test2", Span::call_site()),
                         public: TokenStream::new(),
                         super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
                         implements: vec![],
                         signature: Literal::string("test2"),
                         full_signature: Literal::string("Ltest2;"),
@@ -1174,12 +1288,15 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
         class,
         public,
         super_class,
+        transitive_extends,
         implements,
         signature,
         full_signature,
         ..
     } = definition;
     let multiplied_class = iter::repeat(class.clone());
+    let multiplied_class_1 = multiplied_class.clone();
+    let transitive_extends_1 = transitive_extends.clone();
     quote! {
         #[derive(Debug)]
         #public struct #class<'env> {
@@ -1217,12 +1334,14 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
             }
         }
 
-        impl<'a> ::rust_jni::Cast<'a, #super_class<'a>> for #class<'a> {
-            #[doc(hidden)]
-            fn cast<'b>(&'b self) -> &'b #super_class<'a> {
-                self
+        #(
+            impl<'a> ::rust_jni::Cast<'a, #transitive_extends<'a>> for #multiplied_class_1<'a> {
+                #[doc(hidden)]
+                fn cast<'b>(&'b self) -> &'b #transitive_extends_1<'a> {
+                    self
+                }
             }
-        }
+        )*
 
         impl<'a> ::std::ops::Deref for #class<'a> {
             type Target = #super_class<'a>;
@@ -1312,6 +1431,7 @@ mod generate_tests {
                 class: Ident::new("test1", Span::call_site()),
                 public: quote!{test_public},
                 super_class: quote!{c::d::test2},
+                transitive_extends: vec![quote!{c::d::test2}],
                 implements: vec![],
                 signature: Literal::string("test/sign1"),
                 full_signature: Literal::string("test/signature1"),
@@ -1414,6 +1534,7 @@ mod generate_tests {
                 class: Ident::new("test1", Span::call_site()),
                 public: quote!{test_public},
                 super_class: quote!{c::d::test2},
+                transitive_extends: vec![quote!{c::d::test2}],
                 implements: vec![quote!{e::f::test3}, quote!{e::f::test4}],
                 signature: Literal::string("test/sign1"),
                 full_signature: Literal::string("test/signature1"),
@@ -1569,6 +1690,7 @@ mod generate_tests {
                     class: Ident::new("test1", Span::call_site()),
                     public: TokenStream::new(),
                     super_class: quote!{c::d::test3},
+                    transitive_extends: vec![quote!{c::d::test3}],
                     implements: vec![],
                     signature: Literal::string("test/sign1"),
                     full_signature: Literal::string("test/signature1"),
@@ -1577,6 +1699,7 @@ mod generate_tests {
                     class: Ident::new("test2", Span::call_site()),
                     public: TokenStream::new(),
                     super_class: quote!{c::d::test4},
+                    transitive_extends: vec![quote!{c::d::test4}],
                     implements: vec![],
                     signature: Literal::string("test/sign2"),
                     full_signature: Literal::string("test/signature2"),
@@ -2232,8 +2355,8 @@ mod java_generate_tests {
         let input = quote!{
             interface TestInterface1 {}
             interface TestInterface2 {}
-            class TestClass1 extends TestClass3 {}
-            class TestClass2 extends TestClass4 {}
+            class TestClass1 {}
+            class TestClass2 {}
         };
         let expected = quote!{
             trait TestInterface1 {
@@ -2244,7 +2367,7 @@ mod java_generate_tests {
 
             #[derive(Debug)]
             struct TestClass1<'env> {
-                object: ::TestClass3<'env>,
+                object: ::java::lang::Object<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass1<'a> {
@@ -2266,7 +2389,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass1<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <::TestClass3 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::java::lang::Object as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -2278,15 +2401,15 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, ::TestClass3<'a>> for TestClass1<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::java::lang::Object<'a>> for TestClass1<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b ::TestClass3<'a> {
+                fn cast<'b>(&'b self) -> &'b ::java::lang::Object<'a> {
                     self
                 }
             }
 
             impl<'a> ::std::ops::Deref for TestClass1<'a> {
-                type Target = ::TestClass3<'a>;
+                type Target = ::java::lang::Object<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -2330,7 +2453,7 @@ mod java_generate_tests {
 
             #[derive(Debug)]
             struct TestClass2<'env> {
-                object: ::TestClass4<'env>,
+                object: ::java::lang::Object<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass2<'a> {
@@ -2352,7 +2475,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass2<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <::TestClass4 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::java::lang::Object as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -2364,15 +2487,15 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, ::TestClass4<'a>> for TestClass2<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::java::lang::Object<'a>> for TestClass2<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b ::TestClass4<'a> {
+                fn cast<'b>(&'b self) -> &'b ::java::lang::Object<'a> {
                     self
                 }
             }
 
             impl<'a> ::std::ops::Deref for TestClass2<'a> {
-                type Target = ::TestClass4<'a>;
+                type Target = ::java::lang::Object<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -2426,7 +2549,8 @@ mod java_generate_tests {
             public interface a.b.TestInterface4 extends a.b.TestInterface2, a.b.TestInterface3 {}
 
             public class a.b.TestClass1 {}
-            public class a.b.TestClass2 extends a.b.TestClass1 implements a.b.TestInterface4, a.b.TestInterface3 {}
+            public class a.b.TestClass2 extends a.b.TestClass1 implements a.b.TestInterface1 {}
+            public class a.b.TestClass3 extends a.b.TestClass2 implements a.b.TestInterface1, a.b.TestInterface4 {}
         };
         let expected = quote!{
             pub trait TestInterface1 {
@@ -2570,6 +2694,13 @@ mod java_generate_tests {
                 }
             }
 
+            impl<'a> ::rust_jni::Cast<'a, ::java::lang::Object<'a>> for TestClass2<'a> {
+                #[doc(hidden)]
+                fn cast<'b>(&'b self) -> &'b ::java::lang::Object<'a> {
+                    self
+                }
+            }
+
             impl<'a> ::std::ops::Deref for TestClass2<'a> {
                 type Target = ::a::b::TestClass1<'a>;
 
@@ -2616,13 +2747,116 @@ mod java_generate_tests {
             impl<'env> ::a::b::TestInterface1 for TestClass2<'env> {
             }
 
-            impl<'env> ::a::b::TestInterface2 for TestClass2<'env> {
+            #[derive(Debug)]
+            pub struct TestClass3<'env> {
+                object: ::a::b::TestClass2<'env>,
             }
 
-            impl<'env> ::a::b::TestInterface3 for TestClass2<'env> {
+            impl<'a> ::rust_jni::JavaType for TestClass3<'a> {
+                #[doc(hidden)]
+                type __JniType = <::rust_jni::java::lang::Object<'a> as ::rust_jni::JavaType>::__JniType;
+
+                #[doc(hidden)]
+                fn __signature() -> &'static str {
+                    "La/b/TestClass3;"
+                }
             }
 
-            impl<'env> ::a::b::TestInterface4 for TestClass2<'env> {
+            impl<'a> ::rust_jni::__generator::ToJni for TestClass3<'a> {
+                unsafe fn __to_jni(&self) -> Self::__JniType {
+                    self.raw_object()
+                }
+            }
+
+            impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass3<'a> {
+                unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
+                    Self {
+                        object: <::a::b::TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                    }
+                }
+            }
+
+            impl<'a> ::rust_jni::Cast<'a, TestClass3<'a>> for TestClass3<'a> {
+                #[doc(hidden)]
+                fn cast<'b>(&'b self) -> &'b TestClass3<'a> {
+                    self
+                }
+            }
+
+            impl<'a> ::rust_jni::Cast<'a, ::a::b::TestClass2<'a>> for TestClass3<'a> {
+                #[doc(hidden)]
+                fn cast<'b>(&'b self) -> &'b ::a::b::TestClass2<'a> {
+                    self
+                }
+            }
+
+            impl<'a> ::rust_jni::Cast<'a, ::a::b::TestClass1<'a>> for TestClass3<'a> {
+                #[doc(hidden)]
+                fn cast<'b>(&'b self) -> &'b ::a::b::TestClass1<'a> {
+                    self
+                }
+            }
+
+            impl<'a> ::rust_jni::Cast<'a, ::java::lang::Object<'a>> for TestClass3<'a> {
+                #[doc(hidden)]
+                fn cast<'b>(&'b self) -> &'b ::java::lang::Object<'a> {
+                    self
+                }
+            }
+
+            impl<'a> ::std::ops::Deref for TestClass3<'a> {
+                type Target = ::a::b::TestClass2<'a>;
+
+                fn deref(&self) -> &Self::Target {
+                    &self.object
+                }
+            }
+
+            impl<'a> TestClass3<'a> {
+                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
+                    ::rust_jni::java::lang::Class::find(env, "a/b/TestClass3", token)
+                }
+
+                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
+                where
+                    Self: Sized,
+                {
+                    self.object
+                        .clone(token)
+                        .map(|object| Self { object })
+                }
+
+                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
+                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
+                    self.object.to_string(token)
+                }
+            }
+
+            impl<'a> ::std::fmt::Display for TestClass3<'a> {
+                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                    self.object.fmt(formatter)
+                }
+            }
+
+            impl<'a, T> PartialEq<T> for TestClass3<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
+                fn eq(&self, other: &T) -> bool {
+                    self.object.eq(other)
+                }
+            }
+
+            impl<'a> Eq for TestClass3<'a> {}
+
+            impl<'env> ::a::b::TestInterface1 for TestClass3<'env> {
+            }
+
+            impl<'env> ::a::b::TestInterface2 for TestClass3<'env> {
+            }
+
+            impl<'env> ::a::b::TestInterface3 for TestClass3<'env> {
+            }
+
+            impl<'env> ::a::b::TestInterface4 for TestClass3<'env> {
             }
         };
         assert_tokens_equals(java_generate_impl(input), expected);
