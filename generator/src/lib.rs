@@ -2883,28 +2883,28 @@ mod java_generate_tests {
     fn integration() {
         let input = quote!{
             public interface a.b.TestInterface3 {}
-            public interface a.b.TestInterface4 extends a.b.TestInterface2, a.b.TestInterface3 {}
+            public interface a.b.TestInterface4 extends c.d.TestInterface2, a.b.TestInterface3 {}
 
-            public class a.b.TestClass3 extends a.b.TestClass2 implements a.b.TestInterface1, a.b.TestInterface4 {}
+            public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {}
 
             metadata {
-                interface a.b.TestInterface1 {}
-                interface a.b.TestInterface2 extends a.b.TestInterface1 {}
+                interface e.f.TestInterface1 {}
+                interface c.d.TestInterface2 extends e.f.TestInterface1 {}
 
-                class a.b.TestClass1;
-                class a.b.TestClass2 extends a.b.TestClass1 implements a.b.TestInterface1;
+                class c.d.TestClass1;
+                class c.d.TestClass2 extends c.d.TestClass1 implements e.f.TestInterface1;
             }
         };
         let expected = quote!{
             pub trait TestInterface3 {
             }
 
-            pub trait TestInterface4: ::a::b::TestInterface2 + ::a::b::TestInterface3 {
+            pub trait TestInterface4: ::c::d::TestInterface2 + ::a::b::TestInterface3 {
             }
 
             #[derive(Debug)]
             pub struct TestClass3<'env> {
-                object: ::a::b::TestClass2<'env>,
+                object: ::c::d::TestClass2<'env>,
             }
 
             impl<'a> ::rust_jni::JavaType for TestClass3<'a> {
@@ -2926,7 +2926,7 @@ mod java_generate_tests {
             impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass3<'a> {
                 unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
                     Self {
-                        object: <::a::b::TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
+                        object: <::c::d::TestClass2 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
                     }
                 }
             }
@@ -2938,16 +2938,16 @@ mod java_generate_tests {
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, ::a::b::TestClass2<'a>> for TestClass3<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::c::d::TestClass2<'a>> for TestClass3<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b ::a::b::TestClass2<'a> {
+                fn cast<'b>(&'b self) -> &'b ::c::d::TestClass2<'a> {
                     self
                 }
             }
 
-            impl<'a> ::rust_jni::Cast<'a, ::a::b::TestClass1<'a>> for TestClass3<'a> {
+            impl<'a> ::rust_jni::Cast<'a, ::c::d::TestClass1<'a>> for TestClass3<'a> {
                 #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b ::a::b::TestClass1<'a> {
+                fn cast<'b>(&'b self) -> &'b ::c::d::TestClass1<'a> {
                     self
                 }
             }
@@ -2960,7 +2960,7 @@ mod java_generate_tests {
             }
 
             impl<'a> ::std::ops::Deref for TestClass3<'a> {
-                type Target = ::a::b::TestClass2<'a>;
+                type Target = ::c::d::TestClass2<'a>;
 
                 fn deref(&self) -> &Self::Target {
                     &self.object
@@ -3002,16 +3002,17 @@ mod java_generate_tests {
 
             impl<'a> Eq for TestClass3<'a> {}
 
-            impl<'env> ::a::b::TestInterface1 for TestClass3<'env> {
-            }
-
-            impl<'env> ::a::b::TestInterface2 for TestClass3<'env> {
-            }
 
             impl<'env> ::a::b::TestInterface3 for TestClass3<'env> {
             }
 
             impl<'env> ::a::b::TestInterface4 for TestClass3<'env> {
+            }
+
+            impl<'env> ::c::d::TestInterface2 for TestClass3<'env> {
+            }
+
+            impl<'env> ::e::f::TestInterface1 for TestClass3<'env> {
             }
         };
         assert_tokens_equals(java_generate_impl(input), expected);

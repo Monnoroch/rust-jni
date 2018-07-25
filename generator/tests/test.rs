@@ -10,17 +10,32 @@ mod java {
 }
 
 #[cfg(test)]
+mod e {
+    pub mod f {
+        #[allow(unused_imports)]
+        use rust_jni_generator::*;
+
+        java_generate! {
+            public interface e.f.TestInterface1 {}
+        }
+    }
+}
+
+#[cfg(test)]
 mod c {
     pub mod d {
         #[allow(unused_imports)]
         use rust_jni_generator::*;
 
         java_generate! {
-            public interface c.d.TestInterface1 {}
-            public interface c.d.TestInterface2 extends c.d.TestInterface1 {}
+            public interface c.d.TestInterface2 extends e.f.TestInterface1 {}
 
             public class c.d.TestClass1 {}
-            public class c.d.TestClass2 extends c.d.TestClass1 implements c.d.TestInterface1 {}
+            public class c.d.TestClass2 extends c.d.TestClass1 implements e.f.TestInterface1 {}
+
+            metadata {
+                interface e.f.TestInterface1 {}
+            }
         }
     }
 }
@@ -35,14 +50,14 @@ mod a {
             public interface a.b.TestInterface3 {}
             public interface a.b.TestInterface4 extends c.d.TestInterface2, a.b.TestInterface3 {}
 
-            public class a.b.TestClass3 extends c.d.TestClass2 implements c.d.TestInterface1, a.b.TestInterface4 {}
+            public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {}
 
             metadata {
-                interface c.d.TestInterface1 {}
-                interface c.d.TestInterface2 extends c.d.TestInterface1 {}
+                interface e.f.TestInterface1 {}
+                interface c.d.TestInterface2 extends e.f.TestInterface1 {}
 
                 class c.d.TestClass1;
-                class c.d.TestClass2 extends c.d.TestClass1 implements c.d.TestInterface1;
+                class c.d.TestClass2 extends c.d.TestClass1 implements e.f.TestInterface1;
             }
         }
     }
