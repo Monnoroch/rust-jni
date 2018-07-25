@@ -31,6 +31,8 @@ mod c {
             public interface c.d.TestInterface2 extends e.f.TestInterface1 {}
 
             public class c.d.TestClass1 {
+                public c.d.TestClass1(int arg);
+
                 public long primitiveFunc1(int arg1, char arg2);
                 c.d.TestClass1 objectFunc1(c.d.TestClass1 arg);
 
@@ -38,6 +40,8 @@ mod c {
                 static c.d.TestClass1 objectStaticFunc1(c.d.TestClass1 arg);
             }
             public class c.d.TestClass2 extends c.d.TestClass1 implements e.f.TestInterface1 {
+                public c.d.TestClass2(c.d.TestClass1 arg);
+
                 long primitiveFunc2(int arg1, char arg2);
                 public c.d.TestClass2 objectFunc2(c.d.TestClass1 arg);
 
@@ -63,6 +67,8 @@ mod a {
             public interface a.b.TestInterface4 extends c.d.TestInterface2, a.b.TestInterface3 {}
 
             public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {
+                public a.b.TestClass3(int arg1, a.b.TestClass3 arg2);
+
                 long primitiveFunc3(int arg1, char arg2);
                 public c.d.TestClass2 objectFunc3(a.b.TestClass3 arg);
 
