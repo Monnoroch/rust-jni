@@ -33,10 +33,16 @@ mod c {
             public class c.d.TestClass1 {
                 public long primitiveFunc1(int arg1, char arg2);
                 c.d.TestClass1 objectFunc1(c.d.TestClass1 arg);
+
+                public static long primitiveStaticFunc1(int arg1, char arg2);
+                static c.d.TestClass1 objectStaticFunc1(c.d.TestClass1 arg);
             }
             public class c.d.TestClass2 extends c.d.TestClass1 implements e.f.TestInterface1 {
                 long primitiveFunc2(int arg1, char arg2);
                 public c.d.TestClass2 objectFunc2(c.d.TestClass1 arg);
+
+                long static primitiveStaticFunc2(int arg1, char arg2);
+                public static c.d.TestClass2 objectStaticFunc2(c.d.TestClass1 arg);
             }
 
             metadata {
@@ -59,6 +65,9 @@ mod a {
             public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {
                 long primitiveFunc3(int arg1, char arg2);
                 public c.d.TestClass2 objectFunc3(a.b.TestClass3 arg);
+
+                public static long primitiveStaticFunc3(int arg1, char arg2);
+                static c.d.TestClass1 objectStaticFunc3(c.d.TestClass1 arg);
             }
 
             metadata {
