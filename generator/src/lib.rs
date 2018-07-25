@@ -197,6 +197,7 @@ struct JavaClassMethod {
     return_type: JavaName,
     arguments: Vec<MethodArgument>,
     public: bool,
+    is_static: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -354,9 +355,10 @@ fn parse_metadata(tokens: TokenStream) -> Metadata {
 
 fn parse_method(tokens: &[TokenTree]) -> JavaClassMethod {
     let public = tokens.iter().any(|token| is_identifier(token, "public"));
+    let is_static = tokens.iter().any(|token| is_identifier(token, "static"));
     let tokens = tokens
         .iter()
-        .filter(|token| !is_identifier(token, "public"))
+        .filter(|token| !is_identifier(token, "public") && !is_identifier(token, "static"))
         .cloned()
         .collect::<Vec<_>>();
     let name = match tokens[tokens.len() - 2].clone() {
@@ -393,6 +395,7 @@ fn parse_method(tokens: &[TokenTree]) -> JavaClassMethod {
         name,
         return_type,
         arguments,
+        is_static,
     }
 }
 
@@ -955,6 +958,7 @@ struct ClassGeneratorDefinition {
     signature: Literal,
     full_signature: Literal,
     methods: Vec<ClassMethodGeneratorDefinition>,
+    static_methods: Vec<ClassMethodGeneratorDefinition>,
 }
 
 #[derive(Debug, Clone)]
@@ -1009,6 +1013,32 @@ fn public_token(public: bool) -> TokenStream {
         quote!{pub}
     } else {
         TokenStream::new()
+    }
+}
+
+fn to_generator_method(method: JavaClassMethod) -> ClassMethodGeneratorDefinition {
+    let JavaClassMethod {
+        name,
+        public,
+        return_type,
+        arguments,
+        ..
+    } = method;
+    let public = public_token(public);
+    let java_name = Literal::string(&name.to_string());
+    ClassMethodGeneratorDefinition {
+        name,
+        java_name,
+        public,
+        return_type: return_type.as_rust_type(),
+        argument_names: arguments
+            .iter()
+            .map(|argument| argument.name.clone())
+            .collect(),
+        argument_types: arguments
+            .iter()
+            .map(|argument| argument.data_type.clone().as_rust_type_reference())
+            .collect(),
     }
 }
 
@@ -1153,35 +1183,17 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             .map(|name| name.with_double_colons())
                             .collect::<Vec<_>>();
                         implements.sort_by(|left, right| left.to_string().cmp(&right.to_string()));
+                        let static_methods = methods
+                            .iter()
+                            .filter(|method| method.is_static)
+                            .cloned()
+                            .map(to_generator_method)
+                            .collect();
                         let methods = methods
-                            .into_iter()
-                            .map(|method| {
-                                let JavaClassMethod {
-                                    name,
-                                    public,
-                                    return_type,
-                                    arguments,
-                                    ..
-                                } = method;
-                                let public = public_token(public);
-                                let java_name = Literal::string(&name.to_string());
-                                ClassMethodGeneratorDefinition {
-                                    name,
-                                    java_name,
-                                    public,
-                                    return_type: return_type.as_rust_type(),
-                                    argument_names: arguments
-                                        .iter()
-                                        .map(|argument| argument.name.clone())
-                                        .collect(),
-                                    argument_types: arguments
-                                        .iter()
-                                        .map(|argument| {
-                                            argument.data_type.clone().as_rust_type_reference()
-                                        })
-                                        .collect(),
-                                }
-                            })
+                            .iter()
+                            .filter(|method| !method.is_static)
+                            .cloned()
+                            .map(to_generator_method)
                             .collect();
                         GeneratorDefinition::Class(ClassGeneratorDefinition {
                             class: definition_name,
@@ -1192,6 +1204,7 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             signature,
                             full_signature,
                             methods,
+                            static_methods,
                         })
                     }
                     JavaDefinitionKind::Interface(interface) => {
@@ -1286,6 +1299,7 @@ mod to_generator_data_tests {
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
                     methods: vec![],
+                    static_methods: vec![],
                 })],
             }
         );
@@ -1318,6 +1332,7 @@ mod to_generator_data_tests {
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
                     methods: vec![],
+                    static_methods: vec![],
                 })],
             }
         );
@@ -1381,6 +1396,7 @@ mod to_generator_data_tests {
                         signature: Literal::string("c/d/test2"),
                         full_signature: Literal::string("Lc/d/test2;"),
                         methods: vec![],
+                        static_methods: vec![],
                     }),
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
@@ -1396,6 +1412,7 @@ mod to_generator_data_tests {
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
+                        static_methods: vec![],
                     }),
                 ],
             }
@@ -1452,6 +1469,7 @@ mod to_generator_data_tests {
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
+                        static_methods: vec![],
                     }),
                 ],
             }
@@ -1519,6 +1537,7 @@ mod to_generator_data_tests {
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
+                        static_methods: vec![],
                     }),
                 ],
             }
@@ -1582,6 +1601,7 @@ mod to_generator_data_tests {
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
+                        static_methods: vec![],
                     }),
                 ],
             }
@@ -1615,6 +1635,7 @@ mod to_generator_data_tests {
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
                     methods: vec![],
+                    static_methods: vec![],
                 })],
             }
         );
@@ -1789,6 +1810,7 @@ mod to_generator_data_tests {
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
+                        static_methods: vec![],
                     }),
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test2", Span::call_site()),
@@ -1799,6 +1821,7 @@ mod to_generator_data_tests {
                         signature: Literal::string("test2"),
                         full_signature: Literal::string("Ltest2;"),
                         methods: vec![],
+                        static_methods: vec![],
                     }),
                 ],
             }
@@ -1854,6 +1877,39 @@ fn generate_class_method(method: ClassMethodGeneratorDefinition) -> TokenStream 
     }
 }
 
+fn generate_static_class_method(method: ClassMethodGeneratorDefinition) -> TokenStream {
+    let ClassMethodGeneratorDefinition {
+        name,
+        java_name,
+        return_type,
+        public,
+        argument_names,
+        argument_types,
+    } = method;
+    let argument_names_1 = argument_names.clone();
+    let argument_types_1 = argument_types.clone();
+    quote!{
+        #public fn #name(
+            env: &'a ::rust_jni::JniEnv<'a>,
+            #(#argument_names: #argument_types,)*
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, #return_type> {
+            // Safe because the method name and arguments are correct.
+            unsafe {
+                ::rust_jni::__generator::call_static_method::<Self, _, _,
+                    fn(#(#argument_types_1,)*) -> #return_type
+                >
+                (
+                    env,
+                    #java_name,
+                    (#(#argument_names_1,)*),
+                    token,
+                )
+            }
+        }
+    }
+}
+
 fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStream {
     let ClassGeneratorDefinition {
         class,
@@ -1864,6 +1920,7 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
         signature,
         full_signature,
         methods,
+        static_methods,
         ..
     } = definition;
     let multiplied_class = iter::repeat(class.clone());
@@ -1872,6 +1929,10 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
     let methods = methods
         .into_iter()
         .map(generate_class_method)
+        .collect::<Vec<_>>();
+    let static_methods = static_methods
+        .into_iter()
+        .map(generate_static_class_method)
         .collect::<Vec<_>>();
     quote! {
         #[derive(Debug)]
@@ -1950,6 +2011,10 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
             #(
                 #methods
             )*
+
+            #(
+                #static_methods
+            )*
         }
 
         impl<'a> ::std::fmt::Display for #class<'a> {
@@ -2016,6 +2081,7 @@ mod generate_tests {
                 signature: Literal::string("test/sign1"),
                 full_signature: Literal::string("test/signature1"),
                 methods: vec![],
+                static_methods: vec![],
             })],
         };
         let expected = quote!{
@@ -2120,6 +2186,7 @@ mod generate_tests {
                 signature: Literal::string("test/sign1"),
                 full_signature: Literal::string("test/signature1"),
                 methods: vec![],
+                static_methods: vec![],
             })],
         };
         let expected = quote!{
@@ -2277,6 +2344,7 @@ mod generate_tests {
                     signature: Literal::string("test/sign1"),
                     full_signature: Literal::string("test/signature1"),
                     methods: vec![],
+                    static_methods: vec![],
                 }),
                 GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test2", Span::call_site()),
@@ -2287,6 +2355,7 @@ mod generate_tests {
                     signature: Literal::string("test/sign2"),
                     full_signature: Literal::string("test/signature2"),
                     methods: vec![],
+                    static_methods: vec![],
                 }),
             ],
         };
@@ -3138,6 +3207,9 @@ mod java_generate_tests {
             public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {
                 long primitiveFunc3(int arg1, char arg2);
                 public c.d.TestClass2 objectFunc3(a.b.TestClass3 arg);
+
+                static long primitiveStaticFunc3(int arg1, char arg2);
+                public static c.d.TestClass2 objectStaticFunc3(a.b.TestClass3 arg);
             }
 
             metadata {
@@ -3273,6 +3345,45 @@ mod java_generate_tests {
                         (
                             self,
                             "objectFunc3",
+                            (arg,),
+                            token,
+                        )
+                    }
+                }
+
+                fn primitiveStaticFunc3(
+                    env: &'a ::rust_jni::JniEnv<'a>,
+                    arg1: i32,
+                    arg2: char,
+                    token: &::rust_jni::NoException<'a>,
+                ) -> ::rust_jni::JavaResult<'a, i64> {
+                    // Safe because the method name and arguments are correct.
+                    unsafe {
+                        ::rust_jni::__generator::call_static_method::<Self, _, _,
+                            fn(i32, char,) -> i64
+                        >
+                        (
+                            env,
+                            "primitiveStaticFunc3",
+                            (arg1, arg2,),
+                            token,
+                        )
+                    }
+                }
+
+                pub fn objectStaticFunc3(
+                    env: &'a ::rust_jni::JniEnv<'a>,
+                    arg: &::a::b::TestClass3,
+                    token: &::rust_jni::NoException<'a>,
+                ) -> ::rust_jni::JavaResult<'a, ::c::d::TestClass2<'a> > {
+                    // Safe because the method name and arguments are correct.
+                    unsafe {
+                        ::rust_jni::__generator::call_static_method::<Self, _, _,
+                            fn(&::a::b::TestClass3,) -> ::c::d::TestClass2<'a>
+                        >
+                        (
+                            env,
+                            "objectStaticFunc3",
                             (arg,),
                             token,
                         )
