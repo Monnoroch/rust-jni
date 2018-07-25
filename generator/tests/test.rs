@@ -30,8 +30,14 @@ mod c {
         java_generate! {
             public interface c.d.TestInterface2 extends e.f.TestInterface1 {}
 
-            public class c.d.TestClass1 {}
-            public class c.d.TestClass2 extends c.d.TestClass1 implements e.f.TestInterface1 {}
+            public class c.d.TestClass1 {
+                public long primitiveFunc1(int arg1, char arg2);
+                c.d.TestClass1 objectFunc1(c.d.TestClass1 arg);
+            }
+            public class c.d.TestClass2 extends c.d.TestClass1 implements e.f.TestInterface1 {
+                long primitiveFunc2(int arg1, char arg2);
+                public c.d.TestClass2 objectFunc2(c.d.TestClass1 arg);
+            }
 
             metadata {
                 interface e.f.TestInterface1 {}
@@ -50,7 +56,10 @@ mod a {
             public interface a.b.TestInterface3 {}
             public interface a.b.TestInterface4 extends c.d.TestInterface2, a.b.TestInterface3 {}
 
-            public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {}
+            public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {
+                long primitiveFunc3(int arg1, char arg2);
+                public c.d.TestClass2 objectFunc3(a.b.TestClass3 arg);
+            }
 
             metadata {
                 interface e.f.TestInterface1 {}

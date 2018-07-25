@@ -145,12 +145,65 @@ impl JavaName {
         }
         TokenStream::from_iter(tokens.iter().cloned())
     }
+
+    fn as_primitive_type(&self) -> Option<TokenStream> {
+        let tokens = self.clone().0.into_iter().collect::<Vec<_>>();
+        if tokens.len() == 1 {
+            let token = &tokens[0];
+            if is_identifier(&token, "int") {
+                Some(quote!{i32})
+            } else if is_identifier(&token, "long") {
+                Some(quote!{i64})
+            } else if is_identifier(&token, "char") {
+                Some(quote!{char})
+            } else if is_identifier(&token, "byte") {
+                Some(quote!{u8})
+            } else if is_identifier(&token, "boolean") {
+                Some(quote!{bool})
+            } else if is_identifier(&token, "float") {
+                Some(quote!{f32})
+            } else if is_identifier(&token, "double") {
+                Some(quote!{f64})
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn as_rust_type(self) -> TokenStream {
+        let primitive = self.as_primitive_type();
+        let with_double_colons = self.with_double_colons();
+        primitive.unwrap_or(quote!{#with_double_colons <'a>})
+    }
+
+    fn as_rust_type_reference(self) -> TokenStream {
+        let primitive = self.as_primitive_type();
+        let with_double_colons = self.with_double_colons();
+        primitive.unwrap_or(quote!{& #with_double_colons})
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct MethodArgument {
+    name: Ident,
+    data_type: JavaName,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct JavaClassMethod {
+    name: Ident,
+    return_type: JavaName,
+    arguments: Vec<MethodArgument>,
+    public: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct JavaClass {
     extends: Option<JavaName>,
     implements: Vec<JavaName>,
+    methods: Vec<JavaClassMethod>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -299,6 +352,50 @@ fn parse_metadata(tokens: TokenStream) -> Metadata {
     Metadata { definitions }
 }
 
+fn parse_method(tokens: &[TokenTree]) -> JavaClassMethod {
+    let public = tokens.iter().any(|token| is_identifier(token, "public"));
+    let tokens = tokens
+        .iter()
+        .filter(|token| !is_identifier(token, "public"))
+        .cloned()
+        .collect::<Vec<_>>();
+    let name = match tokens[tokens.len() - 2].clone() {
+        TokenTree::Ident(ident) => ident,
+        token => panic!("Expected method name, got {:?}.", token),
+    };
+    let return_type = JavaName::from_tokens(tokens[0..tokens.len() - 2].iter());
+    let arguments = match tokens[tokens.len() - 1].clone() {
+        TokenTree::Group(group) => {
+            if group.delimiter() != Delimiter::Parenthesis {
+                panic!("Expected method arguments in parenthesis, got {:?}.", group);
+            }
+            let arguments = group.stream().into_iter().collect::<Vec<_>>();
+            arguments
+                .split(|token| is_punctuation(token, ','))
+                .filter(|tokens| !tokens.is_empty())
+                .map(|tokens| tokens.split_last().unwrap())
+                .map(|(last, others)| {
+                    let name = match last {
+                        TokenTree::Ident(ident) => ident.clone(),
+                        token => panic!("Expected argument name, got {:?}.", token),
+                    };
+                    MethodArgument {
+                        name,
+                        data_type: JavaName::from_tokens(others.iter()),
+                    }
+                })
+                .collect::<Vec<_>>()
+        }
+        token => panic!("Expected method arguments, got {:?}.", token),
+    };
+    JavaClassMethod {
+        public,
+        name,
+        return_type,
+        arguments,
+    }
+}
+
 fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
     let mut definitions = input.clone().into_iter().collect::<Vec<_>>();
     let metadata = if definitions.len() > 1
@@ -353,14 +450,47 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends,
                         implements,
+                        methods: vec![],
                     }),
                 }
+            }
+        })
+        .zip(definitions.iter().cloned().filter(is_definition))
+        .map(|(definition, token)| match token {
+            TokenTree::Group(group) => (definition, group.stream()),
+            _ => unreachable!(),
+        })
+        .map(|(definition, tokens)| {
+            let methods = tokens.into_iter().collect::<Vec<_>>();
+            let java_definition = match definition.definition.clone() {
+                JavaDefinitionKind::Class(class) => {
+                    let methods = methods
+                        .split(|token| is_punctuation(token, ';'))
+                        .filter(|tokens| !tokens.is_empty())
+                        .map(parse_method)
+                        .collect::<Vec<_>>();
+                    JavaDefinitionKind::Class(JavaClass { methods, ..class })
+                }
+                JavaDefinitionKind::Interface(interface) => {
+                    JavaDefinitionKind::Interface(JavaInterface { ..interface })
+                }
+            };
+            JavaDefinition {
+                definition: java_definition,
+                ..definition
             }
         })
         .collect();
     JavaDefinitions {
         definitions,
         metadata,
+    }
+}
+
+fn is_punctuation(token: &TokenTree, value: char) -> bool {
+    match token {
+        TokenTree::Punct(punct) => punct.spacing() == Spacing::Alone && punct.as_char() == value,
+        _ => false,
     }
 }
 
@@ -418,6 +548,7 @@ mod parse_tests {
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
                         implements: vec![],
+                        methods: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -441,6 +572,7 @@ mod parse_tests {
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: Some(JavaName(quote!{test1})),
                         implements: vec![],
+                        methods: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -464,6 +596,7 @@ mod parse_tests {
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
                         implements: vec![],
+                        methods: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -487,6 +620,7 @@ mod parse_tests {
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
                         implements: vec![],
+                        methods: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -510,6 +644,7 @@ mod parse_tests {
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
                         implements: vec![JavaName(quote!{test2}), JavaName(quote!{a b test3})],
+                        methods: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -636,6 +771,7 @@ mod parse_tests {
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
                             implements: vec![],
+                            methods: vec![],
                         }),
                     },
                     JavaDefinition {
@@ -644,6 +780,7 @@ mod parse_tests {
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
                             implements: vec![],
+                            methods: vec![],
                         }),
                     },
                 ],
@@ -799,6 +936,16 @@ mod parse_tests {
 }
 
 #[derive(Debug, Clone)]
+struct ClassMethodGeneratorDefinition {
+    name: Ident,
+    java_name: Literal,
+    return_type: TokenStream,
+    argument_names: Vec<Ident>,
+    argument_types: Vec<TokenStream>,
+    public: TokenStream,
+}
+
+#[derive(Debug, Clone)]
 struct ClassGeneratorDefinition {
     class: Ident,
     public: TokenStream,
@@ -807,6 +954,7 @@ struct ClassGeneratorDefinition {
     implements: Vec<TokenStream>,
     signature: Literal,
     full_signature: Literal,
+    methods: Vec<ClassMethodGeneratorDefinition>,
 }
 
 #[derive(Debug, Clone)]
@@ -853,6 +1001,14 @@ fn populate_interface_extends_rec(
 fn populate_interface_extends(interface_extends: &mut HashMap<JavaName, HashSet<JavaName>>) {
     for key in interface_extends.keys().cloned().collect::<Vec<_>>() {
         populate_interface_extends_rec(interface_extends, &key);
+    }
+}
+
+fn public_token(public: bool) -> TokenStream {
+    if public {
+        quote!{pub}
+    } else {
+        TokenStream::new()
     }
 }
 
@@ -960,16 +1116,13 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                     ..
                 } = definition;
                 let definition_name = name.clone().name();
-                let public = if public {
-                    quote!{pub}
-                } else {
-                    TokenStream::new()
-                };
+                let public = public_token(public);
                 match definition {
                     JavaDefinitionKind::Class(class) => {
                         let JavaClass {
                             extends,
                             implements,
+                            methods,
                             ..
                         } = class;
                         let mut transitive_extends = vec![];
@@ -1000,6 +1153,36 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             .map(|name| name.with_double_colons())
                             .collect::<Vec<_>>();
                         implements.sort_by(|left, right| left.to_string().cmp(&right.to_string()));
+                        let methods = methods
+                            .into_iter()
+                            .map(|method| {
+                                let JavaClassMethod {
+                                    name,
+                                    public,
+                                    return_type,
+                                    arguments,
+                                    ..
+                                } = method;
+                                let public = public_token(public);
+                                let java_name = Literal::string(&name.to_string());
+                                ClassMethodGeneratorDefinition {
+                                    name,
+                                    java_name,
+                                    public,
+                                    return_type: return_type.as_rust_type(),
+                                    argument_names: arguments
+                                        .iter()
+                                        .map(|argument| argument.name.clone())
+                                        .collect(),
+                                    argument_types: arguments
+                                        .iter()
+                                        .map(|argument| {
+                                            argument.data_type.clone().as_rust_type_reference()
+                                        })
+                                        .collect(),
+                                }
+                            })
+                            .collect();
                         GeneratorDefinition::Class(ClassGeneratorDefinition {
                             class: definition_name,
                             public,
@@ -1008,6 +1191,7 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             implements,
                             signature,
                             full_signature,
+                            methods,
                         })
                     }
                     JavaDefinitionKind::Interface(interface) => {
@@ -1085,6 +1269,7 @@ mod to_generator_data_tests {
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: Some(JavaName(quote!{c d test2})),
                         implements: vec![],
+                        methods: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -1100,6 +1285,7 @@ mod to_generator_data_tests {
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
+                    methods: vec![],
                 })],
             }
         );
@@ -1115,6 +1301,7 @@ mod to_generator_data_tests {
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
                         implements: vec![],
+                        methods: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -1130,6 +1317,7 @@ mod to_generator_data_tests {
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
+                    methods: vec![],
                 })],
             }
         );
@@ -1146,6 +1334,7 @@ mod to_generator_data_tests {
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: Some(JavaName(quote!{e f test3})),
                             implements: vec![],
+                            methods: vec![],
                         }),
                     },
                     JavaDefinition {
@@ -1154,6 +1343,7 @@ mod to_generator_data_tests {
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: Some(JavaName(quote!{c d test2})),
                             implements: vec![],
+                            methods: vec![],
                         }),
                     },
                 ],
@@ -1190,6 +1380,7 @@ mod to_generator_data_tests {
                         implements: vec![],
                         signature: Literal::string("c/d/test2"),
                         full_signature: Literal::string("Lc/d/test2;"),
+                        methods: vec![],
                     }),
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
@@ -1204,6 +1395,7 @@ mod to_generator_data_tests {
                         implements: vec![],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
+                        methods: vec![],
                     }),
                 ],
             }
@@ -1231,6 +1423,7 @@ mod to_generator_data_tests {
                                 JavaName(quote!{e f test3}),
                                 JavaName(quote!{e f test4}),
                             ],
+                            methods: vec![],
                         }),
                     },
                 ],
@@ -1258,6 +1451,7 @@ mod to_generator_data_tests {
                         implements: vec![quote!{::e::f::test3}, quote!{::e::f::test4}],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
+                        methods: vec![],
                     }),
                 ],
             }
@@ -1282,6 +1476,7 @@ mod to_generator_data_tests {
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
                             implements: vec![JavaName(quote!{e f test3})],
+                            methods: vec![],
                         }),
                     },
                 ],
@@ -1323,6 +1518,7 @@ mod to_generator_data_tests {
                         ],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
+                        methods: vec![],
                     }),
                 ],
             }
@@ -1357,6 +1553,7 @@ mod to_generator_data_tests {
                                 JavaName(quote!{e f test3}),
                                 JavaName(quote!{g h test4}),
                             ],
+                            methods: vec![],
                         }),
                     },
                 ],
@@ -1384,6 +1581,7 @@ mod to_generator_data_tests {
                         implements: vec![quote!{::e::f::test3}, quote!{::g::h::test4}],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
+                        methods: vec![],
                     }),
                 ],
             }
@@ -1400,6 +1598,7 @@ mod to_generator_data_tests {
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
                         implements: vec![],
+                        methods: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -1415,6 +1614,7 @@ mod to_generator_data_tests {
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
+                    methods: vec![],
                 })],
             }
         );
@@ -1551,6 +1751,7 @@ mod to_generator_data_tests {
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
                             implements: vec![],
+                            methods: vec![],
                         }),
                     },
                     JavaDefinition {
@@ -1559,6 +1760,7 @@ mod to_generator_data_tests {
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
                             implements: vec![],
+                            methods: vec![],
                         }),
                     },
                 ],
@@ -1586,6 +1788,7 @@ mod to_generator_data_tests {
                         implements: vec![],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
+                        methods: vec![],
                     }),
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test2", Span::call_site()),
@@ -1595,6 +1798,7 @@ mod to_generator_data_tests {
                         implements: vec![],
                         signature: Literal::string("test2"),
                         full_signature: Literal::string("Ltest2;"),
+                        methods: vec![],
                     }),
                 ],
             }
@@ -1617,6 +1821,39 @@ fn generate_definition(definition: GeneratorDefinition) -> TokenStream {
     }
 }
 
+fn generate_class_method(method: ClassMethodGeneratorDefinition) -> TokenStream {
+    let ClassMethodGeneratorDefinition {
+        name,
+        java_name,
+        return_type,
+        public,
+        argument_names,
+        argument_types,
+    } = method;
+    let argument_names_1 = argument_names.clone();
+    let argument_types_1 = argument_types.clone();
+    quote!{
+        #public fn #name(
+            &self,
+            #(#argument_names: #argument_types,)*
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, #return_type> {
+            // Safe because the method name and arguments are correct.
+            unsafe {
+                ::rust_jni::__generator::call_method::<_, _, _,
+                    fn(#(#argument_types_1,)*) -> #return_type
+                >
+                (
+                    self,
+                    #java_name,
+                    (#(#argument_names_1,)*),
+                    token,
+                )
+            }
+        }
+    }
+}
+
 fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStream {
     let ClassGeneratorDefinition {
         class,
@@ -1626,11 +1863,16 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
         implements,
         signature,
         full_signature,
+        methods,
         ..
     } = definition;
     let multiplied_class = iter::repeat(class.clone());
     let multiplied_class_1 = multiplied_class.clone();
     let transitive_extends_1 = transitive_extends.clone();
+    let methods = methods
+        .into_iter()
+        .map(generate_class_method)
+        .collect::<Vec<_>>();
     quote! {
         #[derive(Debug)]
         #public struct #class<'env> {
@@ -1704,6 +1946,10 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
                 -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
                 self.object.to_string(token)
             }
+
+            #(
+                #methods
+            )*
         }
 
         impl<'a> ::std::fmt::Display for #class<'a> {
@@ -1721,7 +1967,7 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
         impl<'a> Eq for #class<'a> {}
 
         #(
-            impl<'env> #implements for #multiplied_class<'env> {
+            impl<'a> #implements for #multiplied_class<'a> {
             }
         )*
     }
@@ -1769,6 +2015,7 @@ mod generate_tests {
                 implements: vec![],
                 signature: Literal::string("test/sign1"),
                 full_signature: Literal::string("test/signature1"),
+                methods: vec![],
             })],
         };
         let expected = quote!{
@@ -1872,6 +2119,7 @@ mod generate_tests {
                 implements: vec![quote!{e::f::test3}, quote!{e::f::test4}],
                 signature: Literal::string("test/sign1"),
                 full_signature: Literal::string("test/signature1"),
+                methods: vec![],
             })],
         };
         let expected = quote!{
@@ -1961,10 +2209,10 @@ mod generate_tests {
 
             impl<'a> Eq for test1<'a> {}
 
-            impl<'env> e::f::test3 for test1<'env> {
+            impl<'a> e::f::test3 for test1<'a> {
             }
 
-            impl<'env> e::f::test4 for test1<'env> {
+            impl<'a> e::f::test4 for test1<'a> {
             }
         };
         assert_tokens_equals(generate(input), expected);
@@ -2028,6 +2276,7 @@ mod generate_tests {
                     implements: vec![],
                     signature: Literal::string("test/sign1"),
                     full_signature: Literal::string("test/signature1"),
+                    methods: vec![],
                 }),
                 GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test2", Span::call_site()),
@@ -2037,6 +2286,7 @@ mod generate_tests {
                     implements: vec![],
                     signature: Literal::string("test/sign2"),
                     full_signature: Literal::string("test/signature2"),
+                    methods: vec![],
                 }),
             ],
         };
@@ -2429,10 +2679,10 @@ mod java_generate_tests {
 
             impl<'a> Eq for TestClass1<'a> {}
 
-            impl<'env> ::a::b::TestInterface1 for TestClass1<'env> {
+            impl<'a> ::a::b::TestInterface1 for TestClass1<'a> {
             }
 
-            impl<'env> ::a::b::TestInterface2 for TestClass1<'env> {
+            impl<'a> ::a::b::TestInterface2 for TestClass1<'a> {
             }
         };
         assert_tokens_equals(java_generate_impl(input), expected);
@@ -2885,7 +3135,10 @@ mod java_generate_tests {
             public interface a.b.TestInterface3 {}
             public interface a.b.TestInterface4 extends c.d.TestInterface2, a.b.TestInterface3 {}
 
-            public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {}
+            public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {
+                long primitiveFunc3(int arg1, char arg2);
+                public c.d.TestClass2 objectFunc3(a.b.TestClass3 arg);
+            }
 
             metadata {
                 interface e.f.TestInterface1 {}
@@ -2986,6 +3239,45 @@ mod java_generate_tests {
                     -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
                     self.object.to_string(token)
                 }
+
+                fn primitiveFunc3(
+                    &self,
+                    arg1: i32,
+                    arg2: char,
+                    token: &::rust_jni::NoException<'a>,
+                ) -> ::rust_jni::JavaResult<'a, i64> {
+                    // Safe because the method name and arguments are correct.
+                    unsafe {
+                        ::rust_jni::__generator::call_method::<_, _, _,
+                            fn(i32, char,) -> i64
+                        >
+                        (
+                            self,
+                            "primitiveFunc3",
+                            (arg1, arg2,),
+                            token,
+                        )
+                    }
+                }
+
+                pub fn objectFunc3(
+                    &self,
+                    arg: &::a::b::TestClass3,
+                    token: &::rust_jni::NoException<'a>,
+                ) -> ::rust_jni::JavaResult<'a, ::c::d::TestClass2<'a> > {
+                    // Safe because the method name and arguments are correct.
+                    unsafe {
+                        ::rust_jni::__generator::call_method::<_, _, _,
+                            fn(&::a::b::TestClass3,) -> ::c::d::TestClass2<'a>
+                        >
+                        (
+                            self,
+                            "objectFunc3",
+                            (arg,),
+                            token,
+                        )
+                    }
+                }
             }
 
             impl<'a> ::std::fmt::Display for TestClass3<'a> {
@@ -3003,16 +3295,16 @@ mod java_generate_tests {
             impl<'a> Eq for TestClass3<'a> {}
 
 
-            impl<'env> ::a::b::TestInterface3 for TestClass3<'env> {
+            impl<'a> ::a::b::TestInterface3 for TestClass3<'a> {
             }
 
-            impl<'env> ::a::b::TestInterface4 for TestClass3<'env> {
+            impl<'a> ::a::b::TestInterface4 for TestClass3<'a> {
             }
 
-            impl<'env> ::c::d::TestInterface2 for TestClass3<'env> {
+            impl<'a> ::c::d::TestInterface2 for TestClass3<'a> {
             }
 
-            impl<'env> ::e::f::TestInterface1 for TestClass3<'env> {
+            impl<'a> ::e::f::TestInterface1 for TestClass3<'a> {
             }
         };
         assert_tokens_equals(java_generate_impl(input), expected);
