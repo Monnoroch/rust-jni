@@ -172,8 +172,37 @@ struct JavaDefinition {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+struct JavaClassMetadata {
+    extends: Option<JavaName>,
+    implements: Vec<JavaName>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct JavaInterfaceMetadata {
+    extends: Vec<JavaName>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+enum JavaDefinitionMetadataKind {
+    Class(JavaClassMetadata),
+    Interface(JavaInterfaceMetadata),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct JavaDefinitionMetadata {
+    name: JavaName,
+    definition: JavaDefinitionMetadataKind,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+struct Metadata {
+    definitions: Vec<JavaDefinitionMetadata>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct JavaDefinitions {
     definitions: Vec<JavaDefinition>,
+    metadata: Metadata,
 }
 
 fn comma_separated_names(tokens: impl Iterator<Item = TokenTree>) -> Vec<JavaName> {
@@ -188,8 +217,110 @@ fn comma_separated_names(tokens: impl Iterator<Item = TokenTree>) -> Vec<JavaNam
         .collect()
 }
 
+fn parse_interface_header(header: &[TokenTree]) -> (JavaName, Vec<JavaName>) {
+    let name = JavaName::from_tokens(
+        header
+            .iter()
+            .take_while(|token| !is_identifier(&token, "extends")),
+    );
+    let extends = comma_separated_names(
+        header
+            .iter()
+            .skip_while(|token| !is_identifier(&token, "extends"))
+            .skip(1)
+            .cloned(),
+    );
+    (name, extends)
+}
+
+fn parse_class_header(header: &[TokenTree]) -> (JavaName, Option<JavaName>, Vec<JavaName>) {
+    let name = JavaName::from_tokens(header.iter().take_while(|token| {
+        !is_identifier(&token, "extends") && !is_identifier(&token, "implements")
+    }));
+    let implements = comma_separated_names(
+        header
+            .iter()
+            .skip_while(|token| !is_identifier(&token, "implements"))
+            .skip(1)
+            .cloned(),
+    );
+    let has_extends = header
+        .iter()
+        .filter(|token| is_identifier(&token, "extends"))
+        .next()
+        .is_some();
+    let extends = if has_extends {
+        Some(JavaName::from_tokens(
+            header
+                .iter()
+                .skip_while(|token| !is_identifier(&token, "extends"))
+                .skip(1)
+                .take_while(|token| !is_identifier(&token, "implements")),
+        ))
+    } else {
+        None
+    };
+    (name, extends, implements)
+}
+
+fn parse_metadata(tokens: TokenStream) -> Metadata {
+    let definitions = tokens.clone().into_iter().collect::<Vec<_>>();
+    let definitions = definitions
+        .split(is_metadata_definition)
+        .filter(|tokens| !tokens.is_empty())
+        .map(|header| {
+            let (token, header) = header.split_first().unwrap();
+            let is_class = is_identifier(&token, "class");
+            let is_interface = is_identifier(&token, "interface");
+            if !is_class && !is_interface {
+                panic!("Expected \"class\" or \"interface\", got {:?}.", token);
+            }
+
+            if is_interface {
+                let (name, extends) = parse_interface_header(header);
+                JavaDefinitionMetadata {
+                    name,
+                    definition: JavaDefinitionMetadataKind::Interface(JavaInterfaceMetadata {
+                        extends,
+                    }),
+                }
+            } else {
+                let (name, extends, implements) = parse_class_header(header);
+                JavaDefinitionMetadata {
+                    name,
+                    definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
+                        extends,
+                        implements,
+                    }),
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+    Metadata { definitions }
+}
+
 fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
-    let definitions = input.clone().into_iter().collect::<Vec<_>>();
+    let mut definitions = input.clone().into_iter().collect::<Vec<_>>();
+    let metadata = if definitions.len() > 1
+        && is_identifier(&definitions[definitions.len() - 2], "metadata")
+    {
+        match definitions.pop().unwrap() {
+            TokenTree::Group(group) => {
+                if group.delimiter() == Delimiter::Brace {
+                    let metadata = parse_metadata(group.stream());
+                    definitions.pop().unwrap();
+                    metadata
+                } else {
+                    panic!("Expected braces, got {:?}.", group)
+                }
+            }
+            token => panic!("Expected braces, got {:?}.", token),
+        }
+    } else {
+        Metadata {
+            definitions: vec![],
+        }
+    };
     let definitions = definitions
         .split(is_definition)
         .filter(|tokens| !tokens.is_empty())
@@ -208,50 +339,14 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
             }
 
             if is_interface {
-                let name = JavaName::from_tokens(
-                    header
-                        .iter()
-                        .take_while(|token| !is_identifier(&token, "extends")),
-                );
-                let extends = comma_separated_names(
-                    header
-                        .iter()
-                        .skip_while(|token| !is_identifier(&token, "extends"))
-                        .skip(1)
-                        .cloned(),
-                );
+                let (name, extends) = parse_interface_header(header);
                 JavaDefinition {
                     name,
                     public,
                     definition: JavaDefinitionKind::Interface(JavaInterface { extends }),
                 }
             } else {
-                let name = JavaName::from_tokens(header.iter().take_while(|token| {
-                    !is_identifier(&token, "extends") && !is_identifier(&token, "implements")
-                }));
-                let implements = comma_separated_names(
-                    header
-                        .iter()
-                        .skip_while(|token| !is_identifier(&token, "implements"))
-                        .skip(1)
-                        .cloned(),
-                );
-                let has_extends = header
-                    .iter()
-                    .filter(|token| is_identifier(&token, "extends"))
-                    .next()
-                    .is_some();
-                let extends = if has_extends {
-                    Some(JavaName::from_tokens(
-                        header
-                            .iter()
-                            .skip_while(|token| !is_identifier(&token, "extends"))
-                            .skip(1)
-                            .take_while(|token| !is_identifier(&token, "implements")),
-                    ))
-                } else {
-                    None
-                };
+                let (name, extends, implements) = parse_class_header(header);
                 JavaDefinition {
                     name,
                     public,
@@ -263,7 +358,10 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
             }
         })
         .collect();
-    JavaDefinitions { definitions }
+    JavaDefinitions {
+        definitions,
+        metadata,
+    }
 }
 
 fn is_identifier(token: &TokenTree, name: &str) -> bool {
@@ -280,6 +378,14 @@ fn is_definition(token: &TokenTree) -> bool {
     }
 }
 
+fn is_metadata_definition(token: &TokenTree) -> bool {
+    match token {
+        TokenTree::Group(group) => group.delimiter() == Delimiter::Brace,
+        TokenTree::Punct(puntuation) => puntuation.as_char() == ';',
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod parse_tests {
     use super::*;
@@ -291,6 +397,9 @@ mod parse_tests {
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }
         );
     }
@@ -311,6 +420,9 @@ mod parse_tests {
                         implements: vec![],
                     }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }
         );
     }
@@ -331,6 +443,9 @@ mod parse_tests {
                         implements: vec![],
                     }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }
         );
     }
@@ -351,6 +466,9 @@ mod parse_tests {
                         implements: vec![],
                     }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }
         );
     }
@@ -371,6 +489,9 @@ mod parse_tests {
                         implements: vec![],
                     }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }
         );
     }
@@ -391,6 +512,9 @@ mod parse_tests {
                         implements: vec![JavaName(quote!{test2}), JavaName(quote!{a b test3})],
                     }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }
         );
     }
@@ -408,6 +532,9 @@ mod parse_tests {
                     public: false,
                     definition: JavaDefinitionKind::Interface(JavaInterface { extends: vec![] }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }
         );
     }
@@ -425,6 +552,9 @@ mod parse_tests {
                     public: true,
                     definition: JavaDefinitionKind::Interface(JavaInterface { extends: vec![] }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }
         );
     }
@@ -442,6 +572,9 @@ mod parse_tests {
                     public: false,
                     definition: JavaDefinitionKind::Interface(JavaInterface { extends: vec![] }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }
         );
     }
@@ -464,6 +597,9 @@ mod parse_tests {
                         ],
                     }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }
         );
     }
@@ -511,6 +647,78 @@ mod parse_tests {
                         }),
                     },
                 ],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn metadata_empty() {
+        let input = quote!{
+            metadata {}
+        };
+        assert_eq!(
+            parse_java_definition(input),
+            JavaDefinitions {
+                definitions: vec![],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn metadata() {
+        let input = quote!{
+            metadata {
+                interface TestInterface1 {}
+                interface TestInterface2 extends TestInterface1 {}
+                class TestClass2;
+                class TestClass1 extends TestClass2 implements TestInterface1, TestInterface2;
+            }
+        };
+        assert_eq!(
+            parse_java_definition(input),
+            JavaDefinitions {
+                definitions: vec![],
+                metadata: Metadata {
+                    definitions: vec![
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{TestInterface1}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata { extends: vec![] },
+                            ),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{TestInterface2}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata {
+                                    extends: vec![JavaName(quote!{TestInterface1})],
+                                },
+                            ),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{TestClass2}),
+                            definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
+                                extends: None,
+                                implements: vec![],
+                            }),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{TestClass1}),
+                            definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
+                                extends: Some(JavaName(quote!{TestClass2})),
+                                implements: vec![
+                                    JavaName(quote!{TestInterface1}),
+                                    JavaName(quote!{TestInterface2}),
+                                ],
+                            }),
+                        },
+                    ],
+                },
             }
         );
     }
@@ -556,6 +764,35 @@ mod parse_tests {
     fn definition_name_not_dot_punctuation() {
         let input = quote!{
             class a,b {}
+        };
+        parse_java_definition(input);
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected braces")]
+    fn metadata_not_group() {
+        let input = quote!{
+            metadata abc
+        };
+        parse_java_definition(input);
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected braces")]
+    fn metadata_not_braces_group() {
+        let input = quote!{
+            metadata ()
+        };
+        parse_java_definition(input);
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected \"class\" or \"interface\"")]
+    fn invalid_definition_metadata_kind() {
+        let input = quote!{
+            metadata {
+                abc
+            }
         };
         parse_java_definition(input);
     }
@@ -644,6 +881,30 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                 _ => unreachable!(),
             }
         });
+    definitions
+        .metadata
+        .definitions
+        .clone()
+        .into_iter()
+        .filter(|definition| match definition.definition {
+            JavaDefinitionMetadataKind::Interface(_) => true,
+            _ => false,
+        })
+        .for_each(|definition| {
+            let JavaDefinitionMetadata {
+                name, definition, ..
+            } = definition;
+            match definition {
+                JavaDefinitionMetadataKind::Interface(interface) => {
+                    let JavaInterfaceMetadata { extends, .. } = interface;
+                    let all_extends = interface_extends.entry(name).or_insert(HashSet::new());
+                    extends.into_iter().for_each(|extends_name| {
+                        all_extends.insert(extends_name);
+                    });
+                }
+                _ => unreachable!(),
+            }
+        });
     populate_interface_extends(&mut interface_extends);
     let mut extends_map = HashMap::new();
     definitions
@@ -661,6 +922,27 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
             match definition {
                 JavaDefinitionKind::Class(class) => {
                     let JavaClass { extends, .. } = class;
+                    extends_map.insert(name, extends.unwrap_or(JavaName(quote!{java lang Object})));
+                }
+                _ => unreachable!(),
+            }
+        });
+    definitions
+        .metadata
+        .definitions
+        .clone()
+        .into_iter()
+        .filter(|definition| match definition.definition {
+            JavaDefinitionMetadataKind::Class(_) => true,
+            _ => false,
+        })
+        .for_each(|definition| {
+            let JavaDefinitionMetadata {
+                name, definition, ..
+            } = definition;
+            match definition {
+                JavaDefinitionMetadataKind::Class(class) => {
+                    let JavaClassMetadata { extends, .. } = class;
                     extends_map.insert(name, extends.unwrap_or(JavaName(quote!{java lang Object})));
                 }
                 _ => unreachable!(),
@@ -754,6 +1036,38 @@ mod to_generator_data_tests {
         assert_eq!(
             to_generator_data(JavaDefinitions {
                 definitions: vec![],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn metadata_only() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![],
+                metadata: Metadata {
+                    definitions: vec![
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{c d test1}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata { extends: vec![] },
+                            ),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{a b test2}),
+                            definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
+                                extends: None,
+                                implements: vec![JavaName(quote!{c d test1})],
+                            }),
+                        },
+                    ],
+                },
             }),
             GeneratorData {
                 definitions: vec![],
@@ -773,6 +1087,9 @@ mod to_generator_data_tests {
                         implements: vec![],
                     }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }),
             GeneratorData {
                 definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
@@ -800,6 +1117,9 @@ mod to_generator_data_tests {
                         implements: vec![],
                     }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }),
             GeneratorData {
                 definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
@@ -821,14 +1141,6 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        name: JavaName(quote!{e f test3}),
-                        public: false,
-                        definition: JavaDefinitionKind::Class(JavaClass {
-                            extends: None,
-                            implements: vec![],
-                        }),
-                    },
-                    JavaDefinition {
                         name: JavaName(quote!{c d test2}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
@@ -845,24 +1157,34 @@ mod to_generator_data_tests {
                         }),
                     },
                 ],
+                metadata: Metadata {
+                    definitions: vec![
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{e f test4}),
+                            definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
+                                extends: None,
+                                implements: vec![],
+                            }),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{e f test3}),
+                            definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
+                                extends: Some(JavaName(quote!{e f test4})),
+                                implements: vec![],
+                            }),
+                        },
+                    ],
+                },
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition::Class(ClassGeneratorDefinition {
-                        class: Ident::new("test3", Span::call_site()),
-                        public: TokenStream::new(),
-                        super_class: quote!{::java::lang::Object},
-                        transitive_extends: vec![quote!{::java::lang::Object}],
-                        implements: vec![],
-                        signature: Literal::string("e/f/test3"),
-                        full_signature: Literal::string("Le/f/test3;"),
-                    }),
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test2", Span::call_site()),
                         public: TokenStream::new(),
                         super_class: quote!{::e::f::test3},
                         transitive_extends: vec![
                             quote!{::e::f::test3},
+                            quote!{::e::f::test4},
                             quote!{::java::lang::Object},
                         ],
                         implements: vec![],
@@ -876,6 +1198,7 @@ mod to_generator_data_tests {
                         transitive_extends: vec![
                             quote!{::c::d::test2},
                             quote!{::e::f::test3},
+                            quote!{::e::f::test4},
                             quote!{::java::lang::Object},
                         ],
                         implements: vec![],
@@ -892,13 +1215,6 @@ mod to_generator_data_tests {
         assert_eq!(
             to_generator_data(JavaDefinitions {
                 definitions: vec![
-                    JavaDefinition {
-                        name: JavaName(quote!{e f test3}),
-                        public: false,
-                        definition: JavaDefinitionKind::Interface(JavaInterface {
-                            extends: vec![],
-                        }),
-                    },
                     JavaDefinition {
                         name: JavaName(quote!{e f test4}),
                         public: false,
@@ -918,14 +1234,17 @@ mod to_generator_data_tests {
                         }),
                     },
                 ],
+                metadata: Metadata {
+                    definitions: vec![JavaDefinitionMetadata {
+                        name: JavaName(quote!{e f test3}),
+                        definition: JavaDefinitionMetadataKind::Interface(JavaInterfaceMetadata {
+                            extends: vec![],
+                        }),
+                    }],
+                },
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-                        interface: Ident::new("test3", Span::call_site()),
-                        public: TokenStream::new(),
-                        extends: vec![],
-                    }),
                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
                         interface: Ident::new("test4", Span::call_site()),
                         public: TokenStream::new(),
@@ -951,20 +1270,6 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        name: JavaName(quote!{g h test5}),
-                        public: false,
-                        definition: JavaDefinitionKind::Interface(JavaInterface {
-                            extends: vec![],
-                        }),
-                    },
-                    JavaDefinition {
-                        name: JavaName(quote!{e f test4}),
-                        public: false,
-                        definition: JavaDefinitionKind::Interface(JavaInterface {
-                            extends: vec![JavaName(quote!{g h test5})],
-                        }),
-                    },
-                    JavaDefinition {
                         name: JavaName(quote!{e f test3}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
@@ -980,19 +1285,27 @@ mod to_generator_data_tests {
                         }),
                     },
                 ],
+                metadata: Metadata {
+                    definitions: vec![
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{g h test5}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata { extends: vec![] },
+                            ),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{e f test4}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata {
+                                    extends: vec![JavaName(quote!{g h test5})],
+                                },
+                            ),
+                        },
+                    ],
+                },
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-                        interface: Ident::new("test5", Span::call_site()),
-                        public: TokenStream::new(),
-                        extends: vec![],
-                    }),
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-                        interface: Ident::new("test4", Span::call_site()),
-                        public: TokenStream::new(),
-                        extends: vec![quote!{::g::h::test5}],
-                    }),
                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
                         interface: Ident::new("test3", Span::call_site()),
                         public: TokenStream::new(),
@@ -1047,6 +1360,9 @@ mod to_generator_data_tests {
                         }),
                     },
                 ],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }),
             GeneratorData {
                 definitions: vec![
@@ -1086,6 +1402,9 @@ mod to_generator_data_tests {
                         implements: vec![],
                     }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }),
             GeneratorData {
                 definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
@@ -1110,6 +1429,9 @@ mod to_generator_data_tests {
                     public: false,
                     definition: JavaDefinitionKind::Interface(JavaInterface { extends: vec![] }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }),
             GeneratorData {
                 definitions: vec![GeneratorDefinition::Interface(
@@ -1129,13 +1451,6 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        name: JavaName(quote!{c d test2}),
-                        public: false,
-                        definition: JavaDefinitionKind::Interface(JavaInterface {
-                            extends: vec![],
-                        }),
-                    },
-                    JavaDefinition {
                         name: JavaName(quote!{e f test3}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
@@ -1150,14 +1465,27 @@ mod to_generator_data_tests {
                         }),
                     },
                 ],
+                metadata: Metadata {
+                    definitions: vec![
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{c d test4}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata { extends: vec![] },
+                            ),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{c d test2}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata {
+                                    extends: vec![JavaName(quote!{c d test4})],
+                                },
+                            ),
+                        },
+                    ],
+                },
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-                        interface: Ident::new("test2", Span::call_site()),
-                        public: TokenStream::new(),
-                        extends: vec![],
-                    }),
                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
                         interface: Ident::new("test3", Span::call_site()),
                         public: TokenStream::new(),
@@ -1182,6 +1510,9 @@ mod to_generator_data_tests {
                     public: true,
                     definition: JavaDefinitionKind::Interface(JavaInterface { extends: vec![] }),
                 }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }),
             GeneratorData {
                 definitions: vec![GeneratorDefinition::Interface(
@@ -1231,6 +1562,9 @@ mod to_generator_data_tests {
                         }),
                     },
                 ],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
             }),
             GeneratorData {
                 definitions: vec![
@@ -2357,6 +2691,11 @@ mod java_generate_tests {
             interface TestInterface2 {}
             class TestClass1 {}
             class TestClass2 {}
+
+            metadata {
+                interface TestInterface3 {}
+                class TestClass3;
+            }
         };
         let expected = quote!{
             trait TestInterface1 {
@@ -2543,208 +2882,24 @@ mod java_generate_tests {
     #[test]
     fn integration() {
         let input = quote!{
-            public interface a.b.TestInterface1 {}
-            public interface a.b.TestInterface2 extends a.b.TestInterface1 {}
             public interface a.b.TestInterface3 {}
             public interface a.b.TestInterface4 extends a.b.TestInterface2, a.b.TestInterface3 {}
 
-            public class a.b.TestClass1 {}
-            public class a.b.TestClass2 extends a.b.TestClass1 implements a.b.TestInterface1 {}
             public class a.b.TestClass3 extends a.b.TestClass2 implements a.b.TestInterface1, a.b.TestInterface4 {}
+
+            metadata {
+                interface a.b.TestInterface1 {}
+                interface a.b.TestInterface2 extends a.b.TestInterface1 {}
+
+                class a.b.TestClass1;
+                class a.b.TestClass2 extends a.b.TestClass1 implements a.b.TestInterface1;
+            }
         };
         let expected = quote!{
-            pub trait TestInterface1 {
-            }
-
-            pub trait TestInterface2: ::a::b::TestInterface1 {
-            }
-
             pub trait TestInterface3 {
             }
 
             pub trait TestInterface4: ::a::b::TestInterface2 + ::a::b::TestInterface3 {
-            }
-
-            #[derive(Debug)]
-            pub struct TestClass1<'env> {
-                object: ::java::lang::Object<'env>,
-            }
-
-            impl<'a> ::rust_jni::JavaType for TestClass1<'a> {
-                #[doc(hidden)]
-                type __JniType = <::rust_jni::java::lang::Object<'a> as ::rust_jni::JavaType>::__JniType;
-
-                #[doc(hidden)]
-                fn __signature() -> &'static str {
-                    "La/b/TestClass1;"
-                }
-            }
-
-            impl<'a> ::rust_jni::__generator::ToJni for TestClass1<'a> {
-                unsafe fn __to_jni(&self) -> Self::__JniType {
-                    self.raw_object()
-                }
-            }
-
-            impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass1<'a> {
-                unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
-                    Self {
-                        object: <::java::lang::Object as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
-                    }
-                }
-            }
-
-            impl<'a> ::rust_jni::Cast<'a, TestClass1<'a>> for TestClass1<'a> {
-                #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b TestClass1<'a> {
-                    self
-                }
-            }
-
-            impl<'a> ::rust_jni::Cast<'a, ::java::lang::Object<'a>> for TestClass1<'a> {
-                #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b ::java::lang::Object<'a> {
-                    self
-                }
-            }
-
-            impl<'a> ::std::ops::Deref for TestClass1<'a> {
-                type Target = ::java::lang::Object<'a>;
-
-                fn deref(&self) -> &Self::Target {
-                    &self.object
-                }
-            }
-
-            impl<'a> TestClass1<'a> {
-                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
-                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
-                    ::rust_jni::java::lang::Class::find(env, "a/b/TestClass1", token)
-                }
-
-                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
-                where
-                    Self: Sized,
-                {
-                    self.object
-                        .clone(token)
-                        .map(|object| Self { object })
-                }
-
-                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
-                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
-                    self.object.to_string(token)
-                }
-            }
-
-            impl<'a> ::std::fmt::Display for TestClass1<'a> {
-                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                    self.object.fmt(formatter)
-                }
-            }
-
-            impl<'a, T> PartialEq<T> for TestClass1<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
-                fn eq(&self, other: &T) -> bool {
-                    self.object.eq(other)
-                }
-            }
-
-            impl<'a> Eq for TestClass1<'a> {}
-
-            #[derive(Debug)]
-            pub struct TestClass2<'env> {
-                object: ::a::b::TestClass1<'env>,
-            }
-
-            impl<'a> ::rust_jni::JavaType for TestClass2<'a> {
-                #[doc(hidden)]
-                type __JniType = <::rust_jni::java::lang::Object<'a> as ::rust_jni::JavaType>::__JniType;
-
-                #[doc(hidden)]
-                fn __signature() -> &'static str {
-                    "La/b/TestClass2;"
-                }
-            }
-
-            impl<'a> ::rust_jni::__generator::ToJni for TestClass2<'a> {
-                unsafe fn __to_jni(&self) -> Self::__JniType {
-                    self.raw_object()
-                }
-            }
-
-            impl<'a> ::rust_jni::__generator::FromJni<'a> for TestClass2<'a> {
-                unsafe fn __from_jni(env: &'a ::rust_jni::JniEnv<'a>, value: Self::__JniType) -> Self {
-                    Self {
-                        object: <::a::b::TestClass1 as ::rust_jni::__generator::FromJni<'a>>::__from_jni(env, value),
-                    }
-                }
-            }
-
-            impl<'a> ::rust_jni::Cast<'a, TestClass2<'a>> for TestClass2<'a> {
-                #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b TestClass2<'a> {
-                    self
-                }
-            }
-
-            impl<'a> ::rust_jni::Cast<'a, ::a::b::TestClass1<'a>> for TestClass2<'a> {
-                #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b ::a::b::TestClass1<'a> {
-                    self
-                }
-            }
-
-            impl<'a> ::rust_jni::Cast<'a, ::java::lang::Object<'a>> for TestClass2<'a> {
-                #[doc(hidden)]
-                fn cast<'b>(&'b self) -> &'b ::java::lang::Object<'a> {
-                    self
-                }
-            }
-
-            impl<'a> ::std::ops::Deref for TestClass2<'a> {
-                type Target = ::a::b::TestClass1<'a>;
-
-                fn deref(&self) -> &Self::Target {
-                    &self.object
-                }
-            }
-
-            impl<'a> TestClass2<'a> {
-                pub fn get_class(env: &'a ::rust_jni::JniEnv<'a>, token: &::rust_jni::NoException<'a>)
-                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::Class<'a>> {
-                    ::rust_jni::java::lang::Class::find(env, "a/b/TestClass2", token)
-                }
-
-                pub fn clone(&self, token: &::rust_jni::NoException<'a>) -> ::rust_jni::JavaResult<'a, Self>
-                where
-                    Self: Sized,
-                {
-                    self.object
-                        .clone(token)
-                        .map(|object| Self { object })
-                }
-
-                pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
-                    -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
-                    self.object.to_string(token)
-                }
-            }
-
-            impl<'a> ::std::fmt::Display for TestClass2<'a> {
-                fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                    self.object.fmt(formatter)
-                }
-            }
-
-            impl<'a, T> PartialEq<T> for TestClass2<'a> where T: ::rust_jni::Cast<'a, ::rust_jni::java::lang::Object<'a>> {
-                fn eq(&self, other: &T) -> bool {
-                    self.object.eq(other)
-                }
-            }
-
-            impl<'a> Eq for TestClass2<'a> {}
-
-            impl<'env> ::a::b::TestInterface1 for TestClass2<'env> {
             }
 
             #[derive(Debug)]
