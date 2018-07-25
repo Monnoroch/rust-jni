@@ -146,6 +146,20 @@ impl JavaName {
         TokenStream::from_iter(tokens.iter().cloned())
     }
 
+    fn with_dots(self) -> TokenStream {
+        let mut tokens = vec![];
+        let mut first = true;
+        for token in self.0.into_iter() {
+            if first {
+                first = false;
+            } else {
+                tokens.extend(quote!{.});
+            }
+            tokens.push(token);
+        }
+        TokenStream::from_iter(tokens.iter().cloned())
+    }
+
     fn as_primitive_type(&self) -> Option<TokenStream> {
         let tokens = self.clone().0.into_iter().collect::<Vec<_>>();
         if tokens.len() == 1 {
@@ -201,10 +215,17 @@ struct JavaClassMethod {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+struct JavaConstructor {
+    arguments: Vec<MethodArgument>,
+    public: bool,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct JavaClass {
     extends: Option<JavaName>,
     implements: Vec<JavaName>,
     methods: Vec<JavaClassMethod>,
+    constructors: Vec<JavaConstructor>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -353,20 +374,19 @@ fn parse_metadata(tokens: TokenStream) -> Metadata {
     Metadata { definitions }
 }
 
-fn parse_method(tokens: &[TokenTree]) -> JavaClassMethod {
+fn is_constructor(tokens: &[TokenTree], class_name: &JavaName) -> bool {
     let public = tokens.iter().any(|token| is_identifier(token, "public"));
-    let is_static = tokens.iter().any(|token| is_identifier(token, "static"));
-    let tokens = tokens
-        .iter()
-        .filter(|token| !is_identifier(token, "public") && !is_identifier(token, "static"))
-        .cloned()
-        .collect::<Vec<_>>();
-    let name = match tokens[tokens.len() - 2].clone() {
-        TokenTree::Ident(ident) => ident,
-        token => panic!("Expected method name, got {:?}.", token),
+    let tokens = if public {
+        &tokens[1..tokens.len() - 1]
+    } else {
+        &tokens[0..tokens.len() - 1]
     };
-    let return_type = JavaName::from_tokens(tokens[0..tokens.len() - 2].iter());
-    let arguments = match tokens[tokens.len() - 1].clone() {
+    TokenStream::from_iter(tokens.iter().cloned()).to_string()
+        == class_name.clone().with_dots().to_string()
+}
+
+fn parse_method_arguments(token: TokenTree) -> Vec<MethodArgument> {
+    match token {
         TokenTree::Group(group) => {
             if group.delimiter() != Delimiter::Parenthesis {
                 panic!("Expected method arguments in parenthesis, got {:?}.", group);
@@ -389,7 +409,23 @@ fn parse_method(tokens: &[TokenTree]) -> JavaClassMethod {
                 .collect::<Vec<_>>()
         }
         token => panic!("Expected method arguments, got {:?}.", token),
+    }
+}
+
+fn parse_method(tokens: &[TokenTree]) -> JavaClassMethod {
+    let public = tokens.iter().any(|token| is_identifier(token, "public"));
+    let is_static = tokens.iter().any(|token| is_identifier(token, "static"));
+    let tokens = tokens
+        .iter()
+        .filter(|token| !is_identifier(token, "public") && !is_identifier(token, "static"))
+        .cloned()
+        .collect::<Vec<_>>();
+    let name = match tokens[tokens.len() - 2].clone() {
+        TokenTree::Ident(ident) => ident,
+        token => panic!("Expected method name, got {:?}.", token),
     };
+    let return_type = JavaName::from_tokens(tokens[0..tokens.len() - 2].iter());
+    let arguments = parse_method_arguments(tokens[tokens.len() - 1].clone());
     JavaClassMethod {
         public,
         name,
@@ -397,6 +433,17 @@ fn parse_method(tokens: &[TokenTree]) -> JavaClassMethod {
         arguments,
         is_static,
     }
+}
+
+fn parse_constructor(tokens: &[TokenTree]) -> JavaConstructor {
+    let public = tokens.iter().any(|token| is_identifier(token, "public"));
+    let tokens = tokens
+        .iter()
+        .filter(|token| !is_identifier(token, "public"))
+        .cloned()
+        .collect::<Vec<_>>();
+    let arguments = parse_method_arguments(tokens[tokens.len() - 1].clone());
+    JavaConstructor { public, arguments }
 }
 
 fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
@@ -454,6 +501,7 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
                         extends,
                         implements,
                         methods: vec![],
+                        constructors: vec![],
                     }),
                 }
             }
@@ -467,12 +515,23 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
             let methods = tokens.into_iter().collect::<Vec<_>>();
             let java_definition = match definition.definition.clone() {
                 JavaDefinitionKind::Class(class) => {
+                    let constructors = methods
+                        .split(|token| is_punctuation(token, ';'))
+                        .filter(|tokens| !tokens.is_empty())
+                        .filter(|tokens| is_constructor(tokens, &definition.name))
+                        .map(parse_constructor)
+                        .collect::<Vec<_>>();
                     let methods = methods
                         .split(|token| is_punctuation(token, ';'))
                         .filter(|tokens| !tokens.is_empty())
+                        .filter(|tokens| !is_constructor(tokens, &definition.name))
                         .map(parse_method)
                         .collect::<Vec<_>>();
-                    JavaDefinitionKind::Class(JavaClass { methods, ..class })
+                    JavaDefinitionKind::Class(JavaClass {
+                        methods,
+                        constructors,
+                        ..class
+                    })
                 }
                 JavaDefinitionKind::Interface(interface) => {
                     JavaDefinitionKind::Interface(JavaInterface { ..interface })
@@ -552,6 +611,7 @@ mod parse_tests {
                         extends: None,
                         implements: vec![],
                         methods: vec![],
+                        constructors: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -576,6 +636,7 @@ mod parse_tests {
                         extends: Some(JavaName(quote!{test1})),
                         implements: vec![],
                         methods: vec![],
+                        constructors: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -600,6 +661,7 @@ mod parse_tests {
                         extends: None,
                         implements: vec![],
                         methods: vec![],
+                        constructors: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -624,6 +686,7 @@ mod parse_tests {
                         extends: None,
                         implements: vec![],
                         methods: vec![],
+                        constructors: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -648,6 +711,7 @@ mod parse_tests {
                         extends: None,
                         implements: vec![JavaName(quote!{test2}), JavaName(quote!{a b test3})],
                         methods: vec![],
+                        constructors: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -775,6 +839,7 @@ mod parse_tests {
                             extends: None,
                             implements: vec![],
                             methods: vec![],
+                            constructors: vec![],
                         }),
                     },
                     JavaDefinition {
@@ -784,6 +849,7 @@ mod parse_tests {
                             extends: None,
                             implements: vec![],
                             methods: vec![],
+                            constructors: vec![],
                         }),
                     },
                 ],
@@ -949,6 +1015,14 @@ struct ClassMethodGeneratorDefinition {
 }
 
 #[derive(Debug, Clone)]
+struct ConstructorGeneratorDefinition {
+    name: Ident,
+    argument_names: Vec<Ident>,
+    argument_types: Vec<TokenStream>,
+    public: TokenStream,
+}
+
+#[derive(Debug, Clone)]
 struct ClassGeneratorDefinition {
     class: Ident,
     public: TokenStream,
@@ -957,6 +1031,7 @@ struct ClassGeneratorDefinition {
     implements: Vec<TokenStream>,
     signature: Literal,
     full_signature: Literal,
+    constructors: Vec<ConstructorGeneratorDefinition>,
     methods: Vec<ClassMethodGeneratorDefinition>,
     static_methods: Vec<ClassMethodGeneratorDefinition>,
 }
@@ -1031,6 +1106,26 @@ fn to_generator_method(method: JavaClassMethod) -> ClassMethodGeneratorDefinitio
         java_name,
         public,
         return_type: return_type.as_rust_type(),
+        argument_names: arguments
+            .iter()
+            .map(|argument| argument.name.clone())
+            .collect(),
+        argument_types: arguments
+            .iter()
+            .map(|argument| argument.data_type.clone().as_rust_type_reference())
+            .collect(),
+    }
+}
+
+fn to_generator_constructor(constructor: JavaConstructor) -> ConstructorGeneratorDefinition {
+    let JavaConstructor {
+        public, arguments, ..
+    } = constructor;
+    let public = public_token(public);
+    let name = Ident::new("new", Span::call_site());
+    ConstructorGeneratorDefinition {
+        name,
+        public,
         argument_names: arguments
             .iter()
             .map(|argument| argument.name.clone())
@@ -1152,6 +1247,7 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                         let JavaClass {
                             extends,
                             implements,
+                            constructors,
                             methods,
                             ..
                         } = class;
@@ -1195,6 +1291,10 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             .cloned()
                             .map(to_generator_method)
                             .collect();
+                        let constructors = constructors
+                            .into_iter()
+                            .map(to_generator_constructor)
+                            .collect();
                         GeneratorDefinition::Class(ClassGeneratorDefinition {
                             class: definition_name,
                             public,
@@ -1203,6 +1303,7 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             implements,
                             signature,
                             full_signature,
+                            constructors,
                             methods,
                             static_methods,
                         })
@@ -1283,6 +1384,7 @@ mod to_generator_data_tests {
                         extends: Some(JavaName(quote!{c d test2})),
                         implements: vec![],
                         methods: vec![],
+                        constructors: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -1300,6 +1402,7 @@ mod to_generator_data_tests {
                     full_signature: Literal::string("La/b/test1;"),
                     methods: vec![],
                     static_methods: vec![],
+                    constructors: vec![],
                 })],
             }
         );
@@ -1316,6 +1419,7 @@ mod to_generator_data_tests {
                         extends: None,
                         implements: vec![],
                         methods: vec![],
+                        constructors: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -1333,6 +1437,7 @@ mod to_generator_data_tests {
                     full_signature: Literal::string("La/b/test1;"),
                     methods: vec![],
                     static_methods: vec![],
+                    constructors: vec![],
                 })],
             }
         );
@@ -1350,6 +1455,7 @@ mod to_generator_data_tests {
                             extends: Some(JavaName(quote!{e f test3})),
                             implements: vec![],
                             methods: vec![],
+                            constructors: vec![],
                         }),
                     },
                     JavaDefinition {
@@ -1359,6 +1465,7 @@ mod to_generator_data_tests {
                             extends: Some(JavaName(quote!{c d test2})),
                             implements: vec![],
                             methods: vec![],
+                            constructors: vec![],
                         }),
                     },
                 ],
@@ -1397,6 +1504,7 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("Lc/d/test2;"),
                         methods: vec![],
                         static_methods: vec![],
+                        constructors: vec![],
                     }),
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test1", Span::call_site()),
@@ -1413,6 +1521,7 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
                         static_methods: vec![],
+                        constructors: vec![],
                     }),
                 ],
             }
@@ -1441,6 +1550,7 @@ mod to_generator_data_tests {
                                 JavaName(quote!{e f test4}),
                             ],
                             methods: vec![],
+                            constructors: vec![],
                         }),
                     },
                 ],
@@ -1470,6 +1580,7 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
                         static_methods: vec![],
+                        constructors: vec![],
                     }),
                 ],
             }
@@ -1495,6 +1606,7 @@ mod to_generator_data_tests {
                             extends: None,
                             implements: vec![JavaName(quote!{e f test3})],
                             methods: vec![],
+                            constructors: vec![],
                         }),
                     },
                 ],
@@ -1538,6 +1650,7 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
                         static_methods: vec![],
+                        constructors: vec![],
                     }),
                 ],
             }
@@ -1573,6 +1686,7 @@ mod to_generator_data_tests {
                                 JavaName(quote!{g h test4}),
                             ],
                             methods: vec![],
+                            constructors: vec![],
                         }),
                     },
                 ],
@@ -1602,6 +1716,7 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
                         static_methods: vec![],
+                        constructors: vec![],
                     }),
                 ],
             }
@@ -1619,6 +1734,7 @@ mod to_generator_data_tests {
                         extends: None,
                         implements: vec![],
                         methods: vec![],
+                        constructors: vec![],
                     }),
                 }],
                 metadata: Metadata {
@@ -1636,6 +1752,7 @@ mod to_generator_data_tests {
                     full_signature: Literal::string("La/b/test1;"),
                     methods: vec![],
                     static_methods: vec![],
+                    constructors: vec![],
                 })],
             }
         );
@@ -1773,6 +1890,7 @@ mod to_generator_data_tests {
                             extends: None,
                             implements: vec![],
                             methods: vec![],
+                            constructors: vec![],
                         }),
                     },
                     JavaDefinition {
@@ -1782,6 +1900,7 @@ mod to_generator_data_tests {
                             extends: None,
                             implements: vec![],
                             methods: vec![],
+                            constructors: vec![],
                         }),
                     },
                 ],
@@ -1811,6 +1930,7 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
                         static_methods: vec![],
+                        constructors: vec![],
                     }),
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
                         class: Ident::new("test2", Span::call_site()),
@@ -1822,6 +1942,7 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("Ltest2;"),
                         methods: vec![],
                         static_methods: vec![],
+                        constructors: vec![],
                     }),
                 ],
             }
@@ -1910,6 +2031,34 @@ fn generate_static_class_method(method: ClassMethodGeneratorDefinition) -> Token
     }
 }
 
+fn generate_constructor(method: ConstructorGeneratorDefinition) -> TokenStream {
+    let ConstructorGeneratorDefinition {
+        name,
+        public,
+        argument_names,
+        argument_types,
+    } = method;
+    let argument_names_1 = argument_names.clone();
+    let argument_types_1 = argument_types.clone();
+    quote!{
+        #public fn #name(
+            env: &'a ::rust_jni::JniEnv<'a>,
+            #(#argument_names: #argument_types,)*
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, Self> {
+            // Safe because the method name and arguments are correct.
+            unsafe {
+                ::rust_jni::__generator::call_constructor::<Self, _, fn(#(#argument_types_1,)*)>
+                (
+                    env,
+                    (#(#argument_names_1,)*),
+                    token,
+                )
+            }
+        }
+    }
+}
+
 fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStream {
     let ClassGeneratorDefinition {
         class,
@@ -1919,6 +2068,7 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
         implements,
         signature,
         full_signature,
+        constructors,
         methods,
         static_methods,
         ..
@@ -1933,6 +2083,10 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
     let static_methods = static_methods
         .into_iter()
         .map(generate_static_class_method)
+        .collect::<Vec<_>>();
+    let constructors = constructors
+        .into_iter()
+        .map(generate_constructor)
         .collect::<Vec<_>>();
     quote! {
         #[derive(Debug)]
@@ -2009,6 +2163,10 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
             }
 
             #(
+                #constructors
+            )*
+
+            #(
                 #methods
             )*
 
@@ -2082,6 +2240,7 @@ mod generate_tests {
                 full_signature: Literal::string("test/signature1"),
                 methods: vec![],
                 static_methods: vec![],
+                constructors: vec![],
             })],
         };
         let expected = quote!{
@@ -2187,6 +2346,7 @@ mod generate_tests {
                 full_signature: Literal::string("test/signature1"),
                 methods: vec![],
                 static_methods: vec![],
+                constructors: vec![],
             })],
         };
         let expected = quote!{
@@ -2345,6 +2505,7 @@ mod generate_tests {
                     full_signature: Literal::string("test/signature1"),
                     methods: vec![],
                     static_methods: vec![],
+                    constructors: vec![],
                 }),
                 GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test2", Span::call_site()),
@@ -2356,6 +2517,7 @@ mod generate_tests {
                     full_signature: Literal::string("test/signature2"),
                     methods: vec![],
                     static_methods: vec![],
+                    constructors: vec![],
                 }),
             ],
         };
@@ -3205,6 +3367,8 @@ mod java_generate_tests {
             public interface a.b.TestInterface4 extends c.d.TestInterface2, a.b.TestInterface3 {}
 
             public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {
+                public a.b.TestClass3(int arg1, a.b.TestClass3 arg2);
+
                 long primitiveFunc3(int arg1, char arg2);
                 public c.d.TestClass2 objectFunc3(a.b.TestClass3 arg);
 
@@ -3310,6 +3474,23 @@ mod java_generate_tests {
                 pub fn to_string(&self, token: &::rust_jni::NoException<'a>)
                     -> ::rust_jni::JavaResult<'a, ::rust_jni::java::lang::String<'a>> {
                     self.object.to_string(token)
+                }
+
+                pub fn new(
+                    env: &'a ::rust_jni::JniEnv<'a>,
+                    arg1: i32,
+                    arg2: &::a::b::TestClass3,
+                    token: &::rust_jni::NoException<'a>,
+                ) -> ::rust_jni::JavaResult<'a, Self> {
+                    // Safe because the method name and arguments are correct.
+                    unsafe {
+                        ::rust_jni::__generator::call_constructor::<Self, _, fn(i32, &::a::b::TestClass3,)>
+                        (
+                            env,
+                            (arg1, arg2,),
+                            token,
+                        )
+                    }
                 }
 
                 fn primitiveFunc3(
