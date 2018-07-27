@@ -17,7 +17,9 @@ mod e {
         use rust_jni_generator::*;
 
         java_generate! {
-            public interface e.f.TestInterface1 {}
+            public interface e.f.TestInterface1 {
+                long primitiveInterfaceFunc1(int arg1, char arg2);
+            }
         }
     }
 }
@@ -46,12 +48,13 @@ mod c {
                 long primitiveFunc2(int arg1, char arg2);
                 public c.d.TestClass2 objectFunc2(c.d.TestClass1 arg);
 
-                long static primitiveStaticFunc2(int arg1, char arg2);
-                public static c.d.TestClass2 objectStaticFunc2(c.d.TestClass1 arg);
+                long primitiveInterfaceFunc1(int arg1, char arg2);
             }
 
             metadata {
-                interface e.f.TestInterface1 {}
+                interface e.f.TestInterface1 {
+                    long primitiveInterfaceFunc1(int arg1, char arg2);
+                }
             }
         }
     }
@@ -64,8 +67,15 @@ mod a {
         use rust_jni_generator::*;
 
         java_generate! {
-            public interface a.b.TestInterface3 {}
-            public interface a.b.TestInterface4 extends c.d.TestInterface2, a.b.TestInterface3 {}
+            public interface a.b.TestInterface3 {
+                long primitiveInterfaceFunc3(int arg1, char arg2);
+                a.b.TestClass3 objectInterfaceFunc3(a.b.TestClass3 arg);
+            }
+
+            public interface a.b.TestInterface4 extends c.d.TestInterface2, a.b.TestInterface3 {
+                long primitiveFunc3(int arg1, char arg2);
+                c.d.TestClass2 objectFunc3(a.b.TestClass3 arg);
+            }
 
             public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {
                 public a.b.TestClass3(int arg1, a.b.TestClass3 arg2);
@@ -93,10 +103,15 @@ mod a {
                     println!("{:?} {:?} {:?}", arg, token, env);
                     Ok(arg)
                 };
+
+                long primitiveInterfaceFunc3(int arg1, char arg2);
+                a.b.TestClass3 objectInterfaceFunc3(a.b.TestClass3 arg);
             }
 
             metadata {
-                interface e.f.TestInterface1 {}
+                interface e.f.TestInterface1 {
+                    long primitiveInterfaceFunc1(int arg1, char arg2);
+                }
                 interface c.d.TestInterface2 extends e.f.TestInterface1 {}
 
                 class c.d.TestClass1;
