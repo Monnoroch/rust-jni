@@ -37,6 +37,7 @@ dependencies = [
 name = "rust-jni-generator"
 version = "0.1.0"
 dependencies = [
+ "jni-sys 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust-jni 0.1.0",

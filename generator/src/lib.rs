@@ -4,6 +4,7 @@ extern crate proc_macro;
 #[macro_use]
 extern crate quote;
 extern crate proc_macro2;
+extern crate rust_jni;
 
 use proc_macro2::*;
 use quote::ToTokens;
@@ -137,6 +138,14 @@ impl JavaName {
             .join("/")
     }
 
+    fn with_underscores(self) -> String {
+        self.0
+            .into_iter()
+            .map(|token| token.to_string())
+            .collect::<Vec<_>>()
+            .join("_")
+    }
+
     fn with_double_colons(self) -> TokenStream {
         let mut tokens = vec![];
         for token in self.0.into_iter() {
@@ -186,16 +195,51 @@ impl JavaName {
         }
     }
 
+    fn get_jni_signature(&self) -> String {
+        let tokens = self.clone().0.into_iter().collect::<Vec<_>>();
+        if tokens.len() == 1 {
+            let token = &tokens[0];
+            if is_identifier(&token, "int") {
+                <i32 as rust_jni::JavaType>::__signature().to_owned()
+            } else if is_identifier(&token, "long") {
+                <i64 as rust_jni::JavaType>::__signature().to_owned()
+            } else if is_identifier(&token, "char") {
+                <char as rust_jni::JavaType>::__signature().to_owned()
+            } else if is_identifier(&token, "byte") {
+                <u8 as rust_jni::JavaType>::__signature().to_owned()
+            } else if is_identifier(&token, "boolean") {
+                <bool as rust_jni::JavaType>::__signature().to_owned()
+            } else if is_identifier(&token, "float") {
+                panic!(
+                    "float values are not supported for not. \
+                     See https://github.com/Monnoroch/rust-jni/issues/25 for more details"
+                )
+            } else if is_identifier(&token, "double") {
+                <f64 as rust_jni::JavaType>::__signature().to_owned()
+            } else {
+                "".to_string()
+            }
+        } else {
+            "".to_string()
+        }
+    }
+
     fn as_rust_type(self) -> TokenStream {
         let primitive = self.as_primitive_type();
         let with_double_colons = self.with_double_colons();
         primitive.unwrap_or(quote!{#with_double_colons <'a>})
     }
 
+    fn as_rust_type_no_lifetime(self) -> TokenStream {
+        let primitive = self.as_primitive_type();
+        let with_double_colons = self.with_double_colons();
+        primitive.unwrap_or(quote!{#with_double_colons})
+    }
+
     fn as_rust_type_reference(self) -> TokenStream {
         let primitive = self.as_primitive_type();
         let with_double_colons = self.with_double_colons();
-        primitive.unwrap_or(quote!{& #with_double_colons})
+        primitive.unwrap_or(quote!{& #with_double_colons <'a>})
     }
 }
 
@@ -214,6 +258,24 @@ struct JavaClassMethod {
     is_static: bool,
 }
 
+#[derive(Debug, Clone)]
+struct JavaNativeMethod {
+    name: Ident,
+    return_type: JavaName,
+    arguments: Vec<MethodArgument>,
+    public: bool,
+    is_static: bool,
+    code: Group,
+}
+
+impl PartialEq for JavaNativeMethod {
+    fn eq(&self, other: &Self) -> bool {
+        format!("{:?}", self) == format!("{:?}", other)
+    }
+}
+
+impl Eq for JavaNativeMethod {}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct JavaConstructor {
     arguments: Vec<MethodArgument>,
@@ -225,6 +287,7 @@ struct JavaClass {
     extends: Option<JavaName>,
     implements: Vec<JavaName>,
     methods: Vec<JavaClassMethod>,
+    native_methods: Vec<JavaNativeMethod>,
     constructors: Vec<JavaConstructor>,
 }
 
@@ -435,6 +498,44 @@ fn parse_method(tokens: &[TokenTree]) -> JavaClassMethod {
     }
 }
 
+fn parse_native_method(tokens: &[TokenTree]) -> JavaNativeMethod {
+    let public = tokens.iter().any(|token| is_identifier(token, "public"));
+    let is_static = tokens.iter().any(|token| is_identifier(token, "static"));
+    let tokens = tokens
+        .iter()
+        .filter(|token| {
+            !is_identifier(token, "public")
+                && !is_identifier(token, "static")
+                && !is_identifier(token, "native")
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let code = match tokens[tokens.len() - 1].clone() {
+        TokenTree::Group(group) => {
+            if group.delimiter() == Delimiter::Brace {
+                group
+            } else {
+                panic!("Expected method code in braces, got {:?}.", group)
+            }
+        }
+        token => panic!("Expected method code, got {:?}.", token),
+    };
+    let name = match tokens[tokens.len() - 3].clone() {
+        TokenTree::Ident(ident) => ident,
+        token => panic!("Expected method name, got {:?}.", token),
+    };
+    let return_type = JavaName::from_tokens(tokens[0..tokens.len() - 3].iter());
+    let arguments = parse_method_arguments(tokens[tokens.len() - 2].clone());
+    JavaNativeMethod {
+        public,
+        name,
+        return_type,
+        arguments,
+        is_static,
+        code,
+    }
+}
+
 fn parse_constructor(tokens: &[TokenTree]) -> JavaConstructor {
     let public = tokens.iter().any(|token| is_identifier(token, "public"));
     let tokens = tokens
@@ -501,6 +602,7 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
                         extends,
                         implements,
                         methods: vec![],
+                        native_methods: vec![],
                         constructors: vec![],
                     }),
                 }
@@ -521,14 +623,23 @@ fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
                         .filter(|tokens| is_constructor(tokens, &definition.name))
                         .map(parse_constructor)
                         .collect::<Vec<_>>();
+                    let native_methods = methods
+                        .split(|token| is_punctuation(token, ';'))
+                        .filter(|tokens| !tokens.is_empty())
+                        .filter(|tokens| !is_constructor(tokens, &definition.name))
+                        .filter(|tokens| tokens.iter().any(|token| is_identifier(token, "native")))
+                        .map(parse_native_method)
+                        .collect::<Vec<_>>();
                     let methods = methods
                         .split(|token| is_punctuation(token, ';'))
                         .filter(|tokens| !tokens.is_empty())
                         .filter(|tokens| !is_constructor(tokens, &definition.name))
+                        .filter(|tokens| !tokens.iter().any(|token| is_identifier(token, "native")))
                         .map(parse_method)
                         .collect::<Vec<_>>();
                     JavaDefinitionKind::Class(JavaClass {
                         methods,
+                        native_methods,
                         constructors,
                         ..class
                     })
@@ -611,6 +722,7 @@ mod parse_tests {
                         extends: None,
                         implements: vec![],
                         methods: vec![],
+                        native_methods: vec![],
                         constructors: vec![],
                     }),
                 }],
@@ -636,6 +748,7 @@ mod parse_tests {
                         extends: Some(JavaName(quote!{test1})),
                         implements: vec![],
                         methods: vec![],
+                        native_methods: vec![],
                         constructors: vec![],
                     }),
                 }],
@@ -661,6 +774,7 @@ mod parse_tests {
                         extends: None,
                         implements: vec![],
                         methods: vec![],
+                        native_methods: vec![],
                         constructors: vec![],
                     }),
                 }],
@@ -686,6 +800,7 @@ mod parse_tests {
                         extends: None,
                         implements: vec![],
                         methods: vec![],
+                        native_methods: vec![],
                         constructors: vec![],
                     }),
                 }],
@@ -711,6 +826,7 @@ mod parse_tests {
                         extends: None,
                         implements: vec![JavaName(quote!{test2}), JavaName(quote!{a b test3})],
                         methods: vec![],
+                        native_methods: vec![],
                         constructors: vec![],
                     }),
                 }],
@@ -839,6 +955,7 @@ mod parse_tests {
                             extends: None,
                             implements: vec![],
                             methods: vec![],
+                            native_methods: vec![],
                             constructors: vec![],
                         }),
                     },
@@ -849,6 +966,7 @@ mod parse_tests {
                             extends: None,
                             implements: vec![],
                             methods: vec![],
+                            native_methods: vec![],
                             constructors: vec![],
                         }),
                     },
@@ -1015,6 +1133,18 @@ struct ClassMethodGeneratorDefinition {
 }
 
 #[derive(Debug, Clone)]
+struct NativeMethodGeneratorDefinition {
+    name: Ident,
+    java_name: Ident,
+    return_type: TokenStream,
+    argument_names: Vec<Ident>,
+    argument_types: Vec<TokenStream>,
+    argument_types_no_lifetime: Vec<TokenStream>,
+    public: TokenStream,
+    code: Group,
+}
+
+#[derive(Debug, Clone)]
 struct ConstructorGeneratorDefinition {
     name: Ident,
     argument_names: Vec<Ident>,
@@ -1034,6 +1164,8 @@ struct ClassGeneratorDefinition {
     constructors: Vec<ConstructorGeneratorDefinition>,
     methods: Vec<ClassMethodGeneratorDefinition>,
     static_methods: Vec<ClassMethodGeneratorDefinition>,
+    native_methods: Vec<NativeMethodGeneratorDefinition>,
+    static_native_methods: Vec<NativeMethodGeneratorDefinition>,
 }
 
 #[derive(Debug, Clone)]
@@ -1113,6 +1245,54 @@ fn to_generator_method(method: JavaClassMethod) -> ClassMethodGeneratorDefinitio
         argument_types: arguments
             .iter()
             .map(|argument| argument.data_type.clone().as_rust_type_reference())
+            .collect(),
+    }
+}
+
+fn to_generator_native_method(
+    method: JavaNativeMethod,
+    class_name: &JavaName,
+) -> NativeMethodGeneratorDefinition {
+    let JavaNativeMethod {
+        name,
+        public,
+        return_type,
+        arguments,
+        code,
+        ..
+    } = method;
+    let public = public_token(public);
+    let signatures = arguments
+        .iter()
+        .map(|argument| &argument.data_type)
+        .map(|name| name.get_jni_signature())
+        .collect::<Vec<_>>();
+    let java_name = Ident::new(
+        &format!(
+            "Java_{}_{}__{}",
+            class_name.clone().with_underscores(),
+            name.to_string(),
+            signatures.join("")
+        ),
+        Span::call_site(),
+    );
+    NativeMethodGeneratorDefinition {
+        name,
+        java_name,
+        public,
+        code,
+        return_type: return_type.as_rust_type(),
+        argument_names: arguments
+            .iter()
+            .map(|argument| argument.name.clone())
+            .collect(),
+        argument_types: arguments
+            .iter()
+            .map(|argument| argument.data_type.clone().as_rust_type())
+            .collect(),
+        argument_types_no_lifetime: arguments
+            .iter()
+            .map(|argument| argument.data_type.clone().as_rust_type_no_lifetime())
             .collect(),
     }
 }
@@ -1249,6 +1429,7 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             implements,
                             constructors,
                             methods,
+                            native_methods,
                             ..
                         } = class;
                         let mut transitive_extends = vec![];
@@ -1262,7 +1443,7 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             transitive_extends.push(super_class.clone().with_double_colons());
                             current = super_class.clone();
                         }
-                        let string_signature = name.with_slashes();
+                        let string_signature = name.clone().with_slashes();
                         let signature = Literal::string(&string_signature);
                         let full_signature = Literal::string(&format!("L{};", string_signature));
                         let super_class = extends
@@ -1295,6 +1476,18 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             .into_iter()
                             .map(to_generator_constructor)
                             .collect();
+                        let static_native_methods = native_methods
+                            .iter()
+                            .filter(|method| method.is_static)
+                            .cloned()
+                            .map(|method| to_generator_native_method(method, &name))
+                            .collect();
+                        let native_methods = native_methods
+                            .iter()
+                            .filter(|method| !method.is_static)
+                            .cloned()
+                            .map(|method| to_generator_native_method(method, &name))
+                            .collect();
                         GeneratorDefinition::Class(ClassGeneratorDefinition {
                             class: definition_name,
                             public,
@@ -1306,6 +1499,8 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             constructors,
                             methods,
                             static_methods,
+                            native_methods,
+                            static_native_methods,
                         })
                     }
                     JavaDefinitionKind::Interface(interface) => {
@@ -1384,6 +1579,7 @@ mod to_generator_data_tests {
                         extends: Some(JavaName(quote!{c d test2})),
                         implements: vec![],
                         methods: vec![],
+                        native_methods: vec![],
                         constructors: vec![],
                     }),
                 }],
@@ -1402,6 +1598,8 @@ mod to_generator_data_tests {
                     full_signature: Literal::string("La/b/test1;"),
                     methods: vec![],
                     static_methods: vec![],
+                    native_methods: vec![],
+                    static_native_methods: vec![],
                     constructors: vec![],
                 })],
             }
@@ -1419,6 +1617,7 @@ mod to_generator_data_tests {
                         extends: None,
                         implements: vec![],
                         methods: vec![],
+                        native_methods: vec![],
                         constructors: vec![],
                     }),
                 }],
@@ -1437,6 +1636,8 @@ mod to_generator_data_tests {
                     full_signature: Literal::string("La/b/test1;"),
                     methods: vec![],
                     static_methods: vec![],
+                    native_methods: vec![],
+                    static_native_methods: vec![],
                     constructors: vec![],
                 })],
             }
@@ -1455,6 +1656,7 @@ mod to_generator_data_tests {
                             extends: Some(JavaName(quote!{e f test3})),
                             implements: vec![],
                             methods: vec![],
+                            native_methods: vec![],
                             constructors: vec![],
                         }),
                     },
@@ -1465,6 +1667,7 @@ mod to_generator_data_tests {
                             extends: Some(JavaName(quote!{c d test2})),
                             implements: vec![],
                             methods: vec![],
+                            native_methods: vec![],
                             constructors: vec![],
                         }),
                     },
@@ -1504,6 +1707,8 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("Lc/d/test2;"),
                         methods: vec![],
                         static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
                         constructors: vec![],
                     }),
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
@@ -1521,6 +1726,8 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
                         static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
                         constructors: vec![],
                     }),
                 ],
@@ -1550,6 +1757,7 @@ mod to_generator_data_tests {
                                 JavaName(quote!{e f test4}),
                             ],
                             methods: vec![],
+                            native_methods: vec![],
                             constructors: vec![],
                         }),
                     },
@@ -1580,6 +1788,8 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
                         static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
                         constructors: vec![],
                     }),
                 ],
@@ -1606,6 +1816,7 @@ mod to_generator_data_tests {
                             extends: None,
                             implements: vec![JavaName(quote!{e f test3})],
                             methods: vec![],
+                            native_methods: vec![],
                             constructors: vec![],
                         }),
                     },
@@ -1650,6 +1861,8 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
                         static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
                         constructors: vec![],
                     }),
                 ],
@@ -1686,6 +1899,7 @@ mod to_generator_data_tests {
                                 JavaName(quote!{g h test4}),
                             ],
                             methods: vec![],
+                            native_methods: vec![],
                             constructors: vec![],
                         }),
                     },
@@ -1716,6 +1930,8 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
                         static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
                         constructors: vec![],
                     }),
                 ],
@@ -1734,6 +1950,7 @@ mod to_generator_data_tests {
                         extends: None,
                         implements: vec![],
                         methods: vec![],
+                        native_methods: vec![],
                         constructors: vec![],
                     }),
                 }],
@@ -1752,6 +1969,8 @@ mod to_generator_data_tests {
                     full_signature: Literal::string("La/b/test1;"),
                     methods: vec![],
                     static_methods: vec![],
+                    native_methods: vec![],
+                    static_native_methods: vec![],
                     constructors: vec![],
                 })],
             }
@@ -1890,6 +2109,7 @@ mod to_generator_data_tests {
                             extends: None,
                             implements: vec![],
                             methods: vec![],
+                            native_methods: vec![],
                             constructors: vec![],
                         }),
                     },
@@ -1900,6 +2120,7 @@ mod to_generator_data_tests {
                             extends: None,
                             implements: vec![],
                             methods: vec![],
+                            native_methods: vec![],
                             constructors: vec![],
                         }),
                     },
@@ -1930,6 +2151,8 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("La/b/test1;"),
                         methods: vec![],
                         static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
                         constructors: vec![],
                     }),
                     GeneratorDefinition::Class(ClassGeneratorDefinition {
@@ -1942,6 +2165,8 @@ mod to_generator_data_tests {
                         full_signature: Literal::string("Ltest2;"),
                         methods: vec![],
                         static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
                         constructors: vec![],
                     }),
                 ],
@@ -2031,6 +2256,176 @@ fn generate_static_class_method(method: ClassMethodGeneratorDefinition) -> Token
     }
 }
 
+fn generate_class_native_method(method: NativeMethodGeneratorDefinition) -> TokenStream {
+    let NativeMethodGeneratorDefinition {
+        name,
+        return_type,
+        public,
+        argument_names,
+        argument_types,
+        code,
+        ..
+    } = method;
+    quote!{
+        #public fn #name(
+            &self,
+            #(#argument_names: #argument_types,)*
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, #return_type> {
+            #code
+        }
+    }
+}
+
+fn generate_static_class_native_method(method: NativeMethodGeneratorDefinition) -> TokenStream {
+    let NativeMethodGeneratorDefinition {
+        name,
+        return_type,
+        public,
+        argument_names,
+        argument_types,
+        code,
+        ..
+    } = method;
+    quote!{
+        #public fn #name(
+            env: &'a ::rust_jni::JniEnv<'a>,
+            #(#argument_names: #argument_types,)*
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, #return_type> {
+            #code
+        }
+    }
+}
+
+fn generate_class_native_method_function(
+    method: NativeMethodGeneratorDefinition,
+    class_name: &Ident,
+) -> TokenStream {
+    let NativeMethodGeneratorDefinition {
+        name,
+        java_name,
+        return_type,
+        argument_names,
+        argument_types_no_lifetime,
+        ..
+    } = method;
+    let argument_names_1 = argument_names.clone();
+    let argument_names_2 = argument_names.clone();
+    let argument_names_3 = argument_names.clone();
+    let argument_types_no_lifetime_1 = argument_types_no_lifetime.clone();
+    quote!{
+        #[no_mangle]
+        #[doc(hidden)]
+        pub unsafe extern "C" fn #java_name<'a>(
+            raw_env: *mut ::jni_sys::JNIEnv,
+            object: ::jni_sys::jobject,
+            #(#argument_names: <#argument_types_no_lifetime as ::rust_jni::JavaType>::__JniType,)*
+        ) -> <#return_type as ::rust_jni::JavaType>::__JniType {
+            // TODO: make sure `#return_type: ::rust_jni::__generator::FromJni`.
+            // Compile-time check that declared arguments implement the `JniArgumentType`
+            // trait.
+            #(::rust_jni::__generator::test_jni_argument_type(#argument_names_1);)*
+            ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
+                // Compile-time check that declared arguments implement the `FromJni` trait.
+                #(
+                    {
+                        let value =
+                            <#argument_types_no_lifetime_1 as ::rust_jni::__generator::FromJni>
+                                ::__from_jni(env, #argument_names_2);
+                        ::rust_jni::__generator::test_from_jni_type(&value);
+                        ::std::mem::forget(value);
+                    }
+                )*
+
+                let object = <#class_name as ::rust_jni::__generator::FromJni>::__from_jni(env, object);
+                object
+                    .#name(
+                        #(::rust_jni::__generator::FromJni::__from_jni(env, #argument_names_3),)*
+                        &token,
+                    )
+                    .map(|value| {
+                        let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
+                        // We don't want to delete the reference to result for object results.
+                        ::std::mem::forget(value);
+                        result
+                    })
+            })
+        }
+    }
+}
+
+fn generate_static_class_native_method_function(
+    method: NativeMethodGeneratorDefinition,
+    class_name: &Ident,
+) -> TokenStream {
+    let NativeMethodGeneratorDefinition {
+        name,
+        java_name,
+        return_type,
+        argument_names,
+        argument_types_no_lifetime,
+        ..
+    } = method;
+    let argument_names_1 = argument_names.clone();
+    let argument_names_2 = argument_names.clone();
+    let argument_names_3 = argument_names.clone();
+    let argument_types_no_lifetime_1 = argument_types_no_lifetime.clone();
+    let class_mismatch_error = format!(
+        "Native method {} does not belong to class {}",
+        name.to_string(),
+        class_name.to_string()
+    );
+    quote!{
+        #[no_mangle]
+        #[doc(hidden)]
+        pub unsafe extern "C" fn #java_name<'a>(
+            raw_env: *mut ::jni_sys::JNIEnv,
+            raw_class: ::jni_sys::jclass,
+            #(#argument_names: <#argument_types_no_lifetime as ::rust_jni::JavaType>::__JniType,)*
+        ) -> <#return_type as ::rust_jni::JavaType>::__JniType {
+            // TODO: make sure `#return_type: ::rust_jni::__generator::FromJni`.
+            // Compile-time check that declared arguments implement the `JniArgumentType`
+            // trait.
+            #(::rust_jni::__generator::test_jni_argument_type(#argument_names_1);)*
+            ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
+                // Compile-time check that declared arguments implement the `FromJni` trait.
+                #(
+                    {
+                        let value =
+                            <#argument_types_no_lifetime_1 as ::rust_jni::__generator::FromJni>
+                                ::__from_jni(env, #argument_names_2);
+                        ::rust_jni::__generator::test_from_jni_type(&value);
+                        ::std::mem::forget(value);
+                    }
+                )*
+
+                let class = #class_name::get_class(env, &token)?;
+                let raw_class = <::rust_jni::java::lang::Class as ::rust_jni::__generator::FromJni>::__from_jni(env, raw_class);
+                if !class.is_same_as(&raw_class, &token) {
+                    // This should never happen, as native method's link name has the class,
+                    // so it must be bound to a correct clas by the JVM.
+                    // Still, this is a good test to ensure that the system
+                    // is in a consistent state.
+                    panic!(#class_mismatch_error);
+                }
+
+                #class_name::#name(
+                    env,
+                    #(::rust_jni::__generator::FromJni::__from_jni(env, #argument_names_3),)*
+                    &token,
+                )
+                .map(|value| {
+                    let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
+                    // We don't want to delete the reference to result for object results.
+                    ::std::mem::forget(value);
+                    result
+                })
+            })
+        }
+    }
+}
+
 fn generate_constructor(method: ConstructorGeneratorDefinition) -> TokenStream {
     let ConstructorGeneratorDefinition {
         name,
@@ -2071,6 +2466,8 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
         constructors,
         methods,
         static_methods,
+        native_methods,
+        static_native_methods,
         ..
     } = definition;
     let multiplied_class = iter::repeat(class.clone());
@@ -2083,6 +2480,24 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
     let static_methods = static_methods
         .into_iter()
         .map(generate_static_class_method)
+        .collect::<Vec<_>>();
+    let native_method_functions = native_methods
+        .clone()
+        .into_iter()
+        .map(|method| generate_class_native_method_function(method, &class))
+        .collect::<Vec<_>>();
+    let static_native_method_functions = static_native_methods
+        .clone()
+        .into_iter()
+        .map(|method| generate_static_class_native_method_function(method, &class))
+        .collect::<Vec<_>>();
+    let native_methods = native_methods
+        .into_iter()
+        .map(generate_class_native_method)
+        .collect::<Vec<_>>();
+    let static_native_methods = static_native_methods
+        .into_iter()
+        .map(generate_static_class_native_method)
         .collect::<Vec<_>>();
     let constructors = constructors
         .into_iter()
@@ -2173,7 +2588,25 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
             #(
                 #static_methods
             )*
+
+            #(
+                #native_methods
+            )*
+
+            #(
+                #static_native_methods
+            )*
         }
+
+        // TODO: put them into an anonymous module.
+
+        #(
+            #native_method_functions
+        )*
+
+        #(
+            #static_native_method_functions
+        )*
 
         impl<'a> ::std::fmt::Display for #class<'a> {
             fn fmt(&self, formatter: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -2240,6 +2673,8 @@ mod generate_tests {
                 full_signature: Literal::string("test/signature1"),
                 methods: vec![],
                 static_methods: vec![],
+                native_methods: vec![],
+                static_native_methods: vec![],
                 constructors: vec![],
             })],
         };
@@ -2346,6 +2781,8 @@ mod generate_tests {
                 full_signature: Literal::string("test/signature1"),
                 methods: vec![],
                 static_methods: vec![],
+                native_methods: vec![],
+                static_native_methods: vec![],
                 constructors: vec![],
             })],
         };
@@ -2506,6 +2943,8 @@ mod generate_tests {
                     methods: vec![],
                     static_methods: vec![],
                     constructors: vec![],
+                    native_methods: vec![],
+                    static_native_methods: vec![],
                 }),
                 GeneratorDefinition::Class(ClassGeneratorDefinition {
                     class: Ident::new("test2", Span::call_site()),
@@ -2517,6 +2956,8 @@ mod generate_tests {
                     full_signature: Literal::string("test/signature2"),
                     methods: vec![],
                     static_methods: vec![],
+                    native_methods: vec![],
+                    static_native_methods: vec![],
                     constructors: vec![],
                 }),
             ],
@@ -3374,6 +3815,24 @@ mod java_generate_tests {
 
                 static long primitiveStaticFunc3(int arg1, char arg2);
                 public static c.d.TestClass2 objectStaticFunc3(a.b.TestClass3 arg);
+
+                public native long primitiveNativeFunc3(int arg1, char arg2) {
+                    println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, self);
+                    Ok(0)
+                };
+                native a.b.TestClass3 objectNativeFunc3(a.b.TestClass3 arg) {
+                    println!("{:?} {:?} {:?}", arg, token, self);
+                    Ok(arg)
+                };
+
+                static native long primitiveStaticNativeFunc3(int arg1, char arg2) {
+                    println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, env);
+                    Ok(0)
+                };
+                public static native a.b.TestClass3 objectStaticNativeFunc3(a.b.TestClass3 arg) {
+                    println!("{:?} {:?} {:?}", arg, token, env);
+                    Ok(arg)
+                };
             }
 
             metadata {
@@ -3479,12 +3938,12 @@ mod java_generate_tests {
                 pub fn new(
                     env: &'a ::rust_jni::JniEnv<'a>,
                     arg1: i32,
-                    arg2: &::a::b::TestClass3,
+                    arg2: &::a::b::TestClass3<'a>,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, Self> {
                     // Safe because the method name and arguments are correct.
                     unsafe {
-                        ::rust_jni::__generator::call_constructor::<Self, _, fn(i32, &::a::b::TestClass3,)>
+                        ::rust_jni::__generator::call_constructor::<Self, _, fn(i32, &::a::b::TestClass3<'a>,)>
                         (
                             env,
                             (arg1, arg2,),
@@ -3515,13 +3974,13 @@ mod java_generate_tests {
 
                 pub fn objectFunc3(
                     &self,
-                    arg: &::a::b::TestClass3,
+                    arg: &::a::b::TestClass3<'a>,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, ::c::d::TestClass2<'a> > {
                     // Safe because the method name and arguments are correct.
                     unsafe {
                         ::rust_jni::__generator::call_method::<_, _, _,
-                            fn(&::a::b::TestClass3,) -> ::c::d::TestClass2<'a>
+                            fn(&::a::b::TestClass3<'a>,) -> ::c::d::TestClass2<'a>
                         >
                         (
                             self,
@@ -3554,13 +4013,13 @@ mod java_generate_tests {
 
                 pub fn objectStaticFunc3(
                     env: &'a ::rust_jni::JniEnv<'a>,
-                    arg: &::a::b::TestClass3,
+                    arg: &::a::b::TestClass3<'a>,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, ::c::d::TestClass2<'a> > {
                     // Safe because the method name and arguments are correct.
                     unsafe {
                         ::rust_jni::__generator::call_static_method::<Self, _, _,
-                            fn(&::a::b::TestClass3,) -> ::c::d::TestClass2<'a>
+                            fn(&::a::b::TestClass3<'a>,) -> ::c::d::TestClass2<'a>
                         >
                         (
                             env,
@@ -3570,6 +4029,208 @@ mod java_generate_tests {
                         )
                     }
                 }
+
+                pub fn primitiveNativeFunc3(
+                    &self,
+                    arg1: i32,
+                    arg2: char,
+                    token: &::rust_jni::NoException<'a>,
+                ) -> ::rust_jni::JavaResult<'a, i64> {
+                    {
+                        println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, self);
+                        Ok(0)
+                    }
+                }
+
+                fn objectNativeFunc3(
+                    &self,
+                    arg: ::a::b::TestClass3<'a>,
+                    token: &::rust_jni::NoException<'a>,
+                ) -> ::rust_jni::JavaResult<'a, ::a::b::TestClass3<'a> > {
+                    {
+                        println!("{:?} {:?} {:?}", arg, token, self);
+                        Ok(arg)
+                    }
+                }
+
+                fn primitiveStaticNativeFunc3(
+                    env: &'a ::rust_jni::JniEnv<'a>,
+                    arg1: i32,
+                    arg2: char,
+                    token: &::rust_jni::NoException<'a>,
+                ) -> ::rust_jni::JavaResult<'a, i64> {
+                    {
+                        println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, env);
+                        Ok(0)
+                    }
+                }
+
+                pub fn objectStaticNativeFunc3(
+                    env: &'a ::rust_jni::JniEnv<'a>,
+                    arg: ::a::b::TestClass3<'a>,
+                    token: &::rust_jni::NoException<'a>,
+                ) -> ::rust_jni::JavaResult<'a, ::a::b::TestClass3<'a> > {
+                    {
+                        println!("{:?} {:?} {:?}", arg, token, env);
+                        Ok(arg)
+                    }
+                }
+            }
+
+            #[no_mangle]
+            #[doc(hidden)]
+            pub unsafe extern "C" fn Java_a_b_TestClass3_primitiveNativeFunc3__IC<'a>(
+                raw_env: *mut ::jni_sys::JNIEnv,
+                object: ::jni_sys::jobject,
+                arg1: <i32 as ::rust_jni::JavaType>::__JniType,
+                arg2: <char as ::rust_jni::JavaType>::__JniType,
+            ) -> <i64 as ::rust_jni::JavaType>::__JniType {
+                ::rust_jni::__generator::test_jni_argument_type(arg1);
+                ::rust_jni::__generator::test_jni_argument_type(arg2);
+                ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
+                    {
+                        let value =
+                            <i32 as ::rust_jni::__generator::FromJni>
+                                ::__from_jni(env, arg1);
+                        ::rust_jni::__generator::test_from_jni_type(&value);
+                        ::std::mem::forget(value);
+                    }
+                    {
+                        let value =
+                            <char as ::rust_jni::__generator::FromJni>
+                                ::__from_jni(env, arg2);
+                        ::rust_jni::__generator::test_from_jni_type(&value);
+                        ::std::mem::forget(value);
+                    }
+
+                    let object = <TestClass3 as ::rust_jni::__generator::FromJni>::__from_jni(env, object);
+                    object
+                        .primitiveNativeFunc3(
+                            ::rust_jni::__generator::FromJni::__from_jni(env, arg1),
+                            ::rust_jni::__generator::FromJni::__from_jni(env, arg2),
+                            &token,
+                        )
+                        .map(|value| {
+                            let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
+                            // We don't want to delete the reference to result for object results.
+                            ::std::mem::forget(value);
+                            result
+                        })
+                })
+            }
+
+            #[no_mangle]
+            #[doc(hidden)]
+            pub unsafe extern "C" fn Java_a_b_TestClass3_objectNativeFunc3__<'a>(
+                raw_env: *mut ::jni_sys::JNIEnv,
+                object: ::jni_sys::jobject,
+                arg: <::a::b::TestClass3 as ::rust_jni::JavaType>::__JniType,
+            ) -> <::a::b::TestClass3<'a> as ::rust_jni::JavaType>::__JniType {
+                ::rust_jni::__generator::test_jni_argument_type(arg);
+                ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
+                    {
+                        let value =
+                            <::a::b::TestClass3 as ::rust_jni::__generator::FromJni>
+                                ::__from_jni(env, arg);
+                        ::rust_jni::__generator::test_from_jni_type(&value);
+                        ::std::mem::forget(value);
+                    }
+
+                    let object = <TestClass3 as ::rust_jni::__generator::FromJni>::__from_jni(env, object);
+                    object
+                        .objectNativeFunc3(
+                            ::rust_jni::__generator::FromJni::__from_jni(env, arg),
+                            &token,
+                        )
+                        .map(|value| {
+                            let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
+                            // We don't want to delete the reference to result for object results.
+                            ::std::mem::forget(value);
+                            result
+                        })
+                })
+            }
+
+            #[no_mangle]
+            #[doc(hidden)]
+            pub unsafe extern "C" fn Java_a_b_TestClass3_primitiveStaticNativeFunc3__IC<'a>(
+                raw_env: *mut ::jni_sys::JNIEnv,
+                raw_class: ::jni_sys::jclass,
+                arg1: <i32 as ::rust_jni::JavaType>::__JniType,
+                arg2: <char as ::rust_jni::JavaType>::__JniType,
+            ) -> <i64 as ::rust_jni::JavaType>::__JniType {
+                ::rust_jni::__generator::test_jni_argument_type(arg1);
+                ::rust_jni::__generator::test_jni_argument_type(arg2);
+                ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
+                    {
+                        let value =
+                            <i32 as ::rust_jni::__generator::FromJni>
+                                ::__from_jni(env, arg1);
+                        ::rust_jni::__generator::test_from_jni_type(&value);
+                        ::std::mem::forget(value);
+                    }
+                    {
+                        let value =
+                            <char as ::rust_jni::__generator::FromJni>
+                                ::__from_jni(env, arg2);
+                        ::rust_jni::__generator::test_from_jni_type(&value);
+                        ::std::mem::forget(value);
+                    }
+
+                    let class = TestClass3::get_class(env, &token)?;
+                    let raw_class = <::rust_jni::java::lang::Class as ::rust_jni::__generator::FromJni>::__from_jni(env, raw_class);
+                    if !class.is_same_as(&raw_class, &token) {
+                        panic!("Native method primitiveStaticNativeFunc3 does not belong to class TestClass3");
+                    }
+
+                    TestClass3::primitiveStaticNativeFunc3(
+                        env,
+                        ::rust_jni::__generator::FromJni::__from_jni(env, arg1),
+                        ::rust_jni::__generator::FromJni::__from_jni(env, arg2),
+                        &token,
+                    )
+                    .map(|value| {
+                        let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
+                        ::std::mem::forget(value);
+                        result
+                    })
+                })
+            }
+
+            #[no_mangle]
+            #[doc(hidden)]
+            pub unsafe extern "C" fn Java_a_b_TestClass3_objectStaticNativeFunc3__<'a>(
+                raw_env: *mut ::jni_sys::JNIEnv,
+                raw_class: ::jni_sys::jclass,
+                arg: <::a::b::TestClass3 as ::rust_jni::JavaType>::__JniType,
+            ) -> <::a::b::TestClass3<'a> as ::rust_jni::JavaType>::__JniType {
+                ::rust_jni::__generator::test_jni_argument_type(arg);
+                ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
+                    {
+                        let value =
+                            <::a::b::TestClass3 as ::rust_jni::__generator::FromJni>
+                                ::__from_jni(env, arg);
+                        ::rust_jni::__generator::test_from_jni_type(&value);
+                        ::std::mem::forget(value);
+                    }
+
+                    let class = TestClass3::get_class(env, &token)?;
+                    let raw_class = <::rust_jni::java::lang::Class as ::rust_jni::__generator::FromJni>::__from_jni(env, raw_class);
+                    if !class.is_same_as(&raw_class, &token) {
+                        panic!("Native method objectStaticNativeFunc3 does not belong to class TestClass3");
+                    }
+
+                    TestClass3::objectStaticNativeFunc3(
+                        env,
+                        ::rust_jni::__generator::FromJni::__from_jni(env, arg),
+                        &token,
+                    )
+                    .map(|value| {
+                        let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
+                        ::std::mem::forget(value);
+                        result
+                    })
+                })
             }
 
             impl<'a> ::std::fmt::Display for TestClass3<'a> {
