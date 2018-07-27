@@ -14,12 +14,12 @@ use std::slice;
 /// mocking the result and the arguments. Tests should populate these variables and then
 /// execute the code that depends of these functions.
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "libjvm"))]
 pub unsafe fn JNI_GetDefaultJavaVMInitArgs(arguments: *mut c_void) -> jni_sys::jint {
     jni_sys::JNI_GetDefaultJavaVMInitArgs(arguments)
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "libjvm"))]
 pub unsafe fn JNI_CreateJavaVM(
     java_vm: *mut *mut jni_sys::JavaVM,
     jni_env: *mut *mut c_void,
@@ -28,13 +28,40 @@ pub unsafe fn JNI_CreateJavaVM(
     jni_sys::JNI_CreateJavaVM(java_vm, jni_env, arguments)
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "libjvm"))]
 pub unsafe fn JNI_GetCreatedJavaVMs(
     java_vms: *mut *mut jni_sys::JavaVM,
     buffer_size: jni_sys::jsize,
     vms_count: *mut jni_sys::jsize,
 ) -> jni_sys::jint {
     jni_sys::JNI_GetCreatedJavaVMs(java_vms, buffer_size, vms_count)
+}
+
+/// Some crates might depend on this crate but not call JNI methods themselves.
+/// For these crates we provide dummy implementations of these methods that just panic
+/// in case they are called by mistake.
+
+#[cfg(all(not(test), not(feature = "libjvm")))]
+pub unsafe fn JNI_GetDefaultJavaVMInitArgs(_: *mut c_void) -> jni_sys::jint {
+    unimplemented!()
+}
+
+#[cfg(all(not(test), not(feature = "libjvm")))]
+pub unsafe fn JNI_CreateJavaVM(
+    _: *mut *mut jni_sys::JavaVM,
+    _: *mut *mut c_void,
+    _: *mut c_void,
+) -> jni_sys::jint {
+    unimplemented!()
+}
+
+#[cfg(all(not(test), not(feature = "libjvm")))]
+pub unsafe fn JNI_GetCreatedJavaVMs(
+    _: *mut *mut jni_sys::JavaVM,
+    _: jni_sys::jsize,
+    _: *mut jni_sys::jsize,
+) -> jni_sys::jint {
+    unimplemented!()
 }
 
 #[cfg(test)]
