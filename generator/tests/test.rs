@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+extern crate jni_sys;
 extern crate rust_jni;
 extern crate rust_jni_generator;
 
@@ -72,8 +73,26 @@ mod a {
                 long primitiveFunc3(int arg1, char arg2);
                 public c.d.TestClass2 objectFunc3(a.b.TestClass3 arg);
 
-                public static long primitiveStaticFunc3(int arg1, char arg2);
-                static c.d.TestClass1 objectStaticFunc3(c.d.TestClass1 arg);
+                static long primitiveStaticFunc3(int arg1, char arg2);
+                public static c.d.TestClass2 objectStaticFunc3(a.b.TestClass3 arg);
+
+                public native long primitiveNativeFunc3(int arg1, char arg2) {
+                    println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, self);
+                    Ok(0)
+                };
+                native a.b.TestClass3 objectNativeFunc3(a.b.TestClass3 arg) {
+                    println!("{:?} {:?} {:?}", arg, token, self);
+                    Ok(arg)
+                };
+
+                static native long primitiveStaticNativeFunc3(int arg1, char arg2) {
+                    println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, env);
+                    Ok(0)
+                };
+                public static native a.b.TestClass3 objectStaticNativeFunc3(a.b.TestClass3 arg) {
+                    println!("{:?} {:?} {:?}", arg, token, env);
+                    Ok(arg)
+                };
             }
 
             metadata {
