@@ -1465,7 +1465,7 @@ fn to_generator_constructor(constructor: JavaConstructor) -> ConstructorGenerato
         public, arguments, ..
     } = constructor;
     let public = public_token(public);
-    let name = Ident::new("new", Span::call_site());
+    let name = Ident::new("init", Span::call_site());
     ConstructorGeneratorDefinition {
         name,
         public,
@@ -1480,7 +1480,72 @@ fn to_generator_constructor(constructor: JavaConstructor) -> ConstructorGenerato
     }
 }
 
+fn get_interfaces(name: &Option<JavaName>, definitions: &Vec<JavaDefinition>) -> Vec<JavaName> {
+    match name {
+        None => vec![],
+        Some(ref name) => {
+            let definition = definitions
+                .iter()
+                .filter(|definition| definition.name == *name)
+                .next();
+            match definition {
+                Some(ref definition) => match definition.definition {
+                    JavaDefinitionKind::Class(ref class) => {
+                        let mut interfaces = class.implements.clone();
+                        interfaces.extend(get_interfaces(&class.extends, definitions));
+                        interfaces
+                    }
+                    _ => unreachable!(),
+                },
+                None => vec![],
+            }
+        }
+    }
+}
+
 fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
+    let mut extends_map = HashMap::new();
+    definitions
+        .definitions
+        .clone()
+        .into_iter()
+        .filter(|definition| match definition.definition {
+            JavaDefinitionKind::Class(_) => true,
+            _ => false,
+        })
+        .for_each(|definition| {
+            let JavaDefinition {
+                name, definition, ..
+            } = definition;
+            match definition {
+                JavaDefinitionKind::Class(class) => {
+                    let JavaClass { extends, .. } = class;
+                    extends_map.insert(name, extends.unwrap_or(JavaName(quote!{java lang Object})));
+                }
+                _ => unreachable!(),
+            }
+        });
+    definitions
+        .metadata
+        .definitions
+        .clone()
+        .into_iter()
+        .filter(|definition| match definition.definition {
+            JavaDefinitionMetadataKind::Class(_) => true,
+            _ => false,
+        })
+        .for_each(|definition| {
+            let JavaDefinitionMetadata {
+                name, definition, ..
+            } = definition;
+            match definition {
+                JavaDefinitionMetadataKind::Class(class) => {
+                    let JavaClassMetadata { extends, .. } = class;
+                    extends_map.insert(name, extends.unwrap_or(JavaName(quote!{java lang Object})));
+                }
+                _ => unreachable!(),
+            }
+        });
     let mut interface_extends = HashMap::new();
     definitions
         .definitions
@@ -1530,48 +1595,6 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
             }
         });
     populate_interface_extends(&mut interface_extends);
-    let mut extends_map = HashMap::new();
-    definitions
-        .definitions
-        .clone()
-        .into_iter()
-        .filter(|definition| match definition.definition {
-            JavaDefinitionKind::Class(_) => true,
-            _ => false,
-        })
-        .for_each(|definition| {
-            let JavaDefinition {
-                name, definition, ..
-            } = definition;
-            match definition {
-                JavaDefinitionKind::Class(class) => {
-                    let JavaClass { extends, .. } = class;
-                    extends_map.insert(name, extends.unwrap_or(JavaName(quote!{java lang Object})));
-                }
-                _ => unreachable!(),
-            }
-        });
-    definitions
-        .metadata
-        .definitions
-        .clone()
-        .into_iter()
-        .filter(|definition| match definition.definition {
-            JavaDefinitionMetadataKind::Class(_) => true,
-            _ => false,
-        })
-        .for_each(|definition| {
-            let JavaDefinitionMetadata {
-                name, definition, ..
-            } = definition;
-            match definition {
-                JavaDefinitionMetadataKind::Class(class) => {
-                    let JavaClassMetadata { extends, .. } = class;
-                    extends_map.insert(name, extends.unwrap_or(JavaName(quote!{java lang Object})));
-                }
-                _ => unreachable!(),
-            }
-        });
     GeneratorData {
         definitions: definitions
             .definitions
@@ -1590,7 +1613,6 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                     JavaDefinitionKind::Class(class) => {
                         let JavaClass {
                             extends,
-                            implements,
                             constructors,
                             methods,
                             native_methods,
@@ -1613,6 +1635,8 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                         let super_class = extends
                             .map(|name| name.with_double_colons())
                             .unwrap_or(quote!{::java::lang::Object});
+                        let implements =
+                            get_interfaces(&Some(name.clone()), &definitions.definitions);
                         let mut implements = implements
                             .iter()
                             .flat_map(|name| interface_extends.get(&name).unwrap().iter())
@@ -4334,7 +4358,7 @@ mod java_generate_tests {
                     self.object.to_string(token)
                 }
 
-                pub fn new(
+                pub fn init(
                     env: &'a ::rust_jni::JniEnv<'a>,
                     arg1: i32,
                     arg2: &::a::b::TestClass3<'a>,
