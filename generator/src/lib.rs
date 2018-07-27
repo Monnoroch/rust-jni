@@ -217,10 +217,10 @@ impl JavaName {
             } else if is_identifier(&token, "double") {
                 <f64 as rust_jni::JavaType>::__signature().to_owned()
             } else {
-                "".to_string()
+                format!("L{}_2", self.clone().with_underscores())
             }
         } else {
-            "".to_string()
+            format!("L{}_2", self.clone().with_underscores())
         }
     }
 
@@ -4532,7 +4532,7 @@ mod java_generate_tests {
 
             #[no_mangle]
             #[doc(hidden)]
-            pub unsafe extern "C" fn Java_a_b_TestClass3_objectNativeFunc3__<'a>(
+            pub unsafe extern "C" fn Java_a_b_TestClass3_objectNativeFunc3__La_b_TestClass3_2<'a>(
                 raw_env: *mut ::jni_sys::JNIEnv,
                 object: ::jni_sys::jobject,
                 arg: <::a::b::TestClass3 as ::rust_jni::JavaType>::__JniType,
@@ -4610,7 +4610,7 @@ mod java_generate_tests {
 
             #[no_mangle]
             #[doc(hidden)]
-            pub unsafe extern "C" fn Java_a_b_TestClass3_objectStaticNativeFunc3__<'a>(
+            pub unsafe extern "C" fn Java_a_b_TestClass3_objectStaticNativeFunc3__La_b_TestClass3_2<'a>(
                 raw_env: *mut ::jni_sys::JNIEnv,
                 raw_class: ::jni_sys::jclass,
                 arg: <::a::b::TestClass3 as ::rust_jni::JavaType>::__JniType,
