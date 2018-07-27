@@ -11,4 +11,5 @@ rust-jni = { path = "../../../rust-jni" }
 walkdir = "2"
 
 [features]
-libjvm = []
+default = ["libjvm"]
+libjvm = ["rust-jni/libjvm"]
