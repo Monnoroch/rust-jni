@@ -1736,696 +1736,723 @@ fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
     }
 }
 
-// #[cfg(test)]
-// mod to_generator_data_tests {
-//     use super::*;
+#[cfg(test)]
+mod to_generator_data_tests {
+    use super::*;
 
-//     #[test]
-//     fn empty() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![],
-//                 metadata: Metadata {
-//                     definitions: vec![],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![],
-//             }
-//         );
-//     }
+    #[test]
+    fn empty() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![],
+            }
+        );
+    }
 
-//     #[test]
-//     fn metadata_only() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![],
-//                 metadata: Metadata {
-//                     definitions: vec![
-//                         JavaDefinitionMetadata {
-//                             name: JavaName(quote!{c d test1}),
-//                             definition: JavaDefinitionMetadataKind::Interface(
-//                                 JavaInterfaceMetadata {
-//                                     methods: vec![],
-//                                     extends: vec![],
-//                                 },
-//                             ),
-//                         },
-//                         JavaDefinitionMetadata {
-//                             name: JavaName(quote!{a b test2}),
-//                             definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
-//                                 extends: None,
-//                                 implements: vec![JavaName(quote!{c d test1})],
-//                             }),
-//                         },
-//                     ],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![],
-//             }
-//         );
-//     }
+    #[test]
+    fn metadata_only() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![],
+                metadata: Metadata {
+                    definitions: vec![
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{c d test1}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata {
+                                    methods: vec![],
+                                    extends: vec![],
+                                },
+                            ),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{a b test2}),
+                            definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
+                                extends: None,
+                                implements: vec![JavaName(quote!{c d test1})],
+                            }),
+                        },
+                    ],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![],
+            }
+        );
+    }
 
-//     #[test]
-//     fn one_class() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![JavaDefinition {
-//                     name: JavaName(quote!{a b test1}),
-//                     public: false,
-//                     definition: JavaDefinitionKind::Class(JavaClass {
-//                         extends: Some(JavaName(quote!{c d test2})),
-//                         implements: vec![],
-//                         methods: vec![],
-//                         native_methods: vec![],
-//                         constructors: vec![],
-//                     }),
-//                 }],
-//                 metadata: Metadata {
-//                     definitions: vec![],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
-//                     class: Ident::new("test1", Span::call_site()),
-//                     public: TokenStream::new(),
-//                     super_class: quote!{::c::d::test2},
-//                     transitive_extends: vec![quote!{::c::d::test2}],
-//                     implements: vec![],
-//                     signature: Literal::string("a/b/test1"),
-//                     full_signature: Literal::string("La/b/test1;"),
-//                     methods: vec![],
-//                     static_methods: vec![],
-//                     native_methods: vec![],
-//                     static_native_methods: vec![],
-//                     constructors: vec![],
-//                 })],
-//             }
-//         );
-//     }
+    #[test]
+    fn one_class() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    name: JavaName(quote!{a b test1}),
+                    public: false,
+                    definition: JavaDefinitionKind::Class(JavaClass {
+                        extends: Some(JavaName(quote!{c d test2})),
+                        implements: vec![],
+                        methods: vec![],
+                        native_methods: vec![],
+                        constructors: vec![],
+                    }),
+                }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    class: Ident::new("test1", Span::call_site()),
+                    public: TokenStream::new(),
+                    super_class: quote!{::c::d::test2},
+                    transitive_extends: vec![quote!{::c::d::test2}],
+                    implements: vec![],
+                    signature: Literal::string("a/b/test1"),
+                    full_signature: Literal::string("La/b/test1;"),
+                    methods: vec![],
+                    static_methods: vec![],
+                    native_methods: vec![],
+                    static_native_methods: vec![],
+                    constructors: vec![],
+                })],
+            }
+        );
+    }
 
-//     #[test]
-//     fn one_class_no_extends() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![JavaDefinition {
-//                     name: JavaName(quote!{a b test1}),
-//                     public: false,
-//                     definition: JavaDefinitionKind::Class(JavaClass {
-//                         extends: None,
-//                         implements: vec![],
-//                         methods: vec![],
-//                         native_methods: vec![],
-//                         constructors: vec![],
-//                     }),
-//                 }],
-//                 metadata: Metadata {
-//                     definitions: vec![],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
-//                     class: Ident::new("test1", Span::call_site()),
-//                     public: TokenStream::new(),
-//                     super_class: quote!{::java::lang::Object},
-//                     transitive_extends: vec![quote!{::java::lang::Object}],
-//                     implements: vec![],
-//                     signature: Literal::string("a/b/test1"),
-//                     full_signature: Literal::string("La/b/test1;"),
-//                     methods: vec![],
-//                     static_methods: vec![],
-//                     native_methods: vec![],
-//                     static_native_methods: vec![],
-//                     constructors: vec![],
-//                 })],
-//             }
-//         );
-//     }
+    #[test]
+    fn one_class_no_extends() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    name: JavaName(quote!{a b test1}),
+                    public: false,
+                    definition: JavaDefinitionKind::Class(JavaClass {
+                        extends: None,
+                        implements: vec![],
+                        methods: vec![],
+                        native_methods: vec![],
+                        constructors: vec![],
+                    }),
+                }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    class: Ident::new("test1", Span::call_site()),
+                    public: TokenStream::new(),
+                    super_class: quote!{::java::lang::Object},
+                    transitive_extends: vec![quote!{::java::lang::Object}],
+                    implements: vec![],
+                    signature: Literal::string("a/b/test1"),
+                    full_signature: Literal::string("La/b/test1;"),
+                    methods: vec![],
+                    static_methods: vec![],
+                    native_methods: vec![],
+                    static_native_methods: vec![],
+                    constructors: vec![],
+                })],
+            }
+        );
+    }
 
-//     #[test]
-//     fn one_class_extends_recursive() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![
-//                     JavaDefinition {
-//                         name: JavaName(quote!{c d test2}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Class(JavaClass {
-//                             extends: Some(JavaName(quote!{e f test3})),
-//                             implements: vec![],
-//                             methods: vec![],
-//                             native_methods: vec![],
-//                             constructors: vec![],
-//                         }),
-//                     },
-//                     JavaDefinition {
-//                         name: JavaName(quote!{a b test1}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Class(JavaClass {
-//                             extends: Some(JavaName(quote!{c d test2})),
-//                             implements: vec![],
-//                             methods: vec![],
-//                             native_methods: vec![],
-//                             constructors: vec![],
-//                         }),
-//                     },
-//                 ],
-//                 metadata: Metadata {
-//                     definitions: vec![
-//                         JavaDefinitionMetadata {
-//                             name: JavaName(quote!{e f test4}),
-//                             definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
-//                                 extends: None,
-//                                 implements: vec![],
-//                             }),
-//                         },
-//                         JavaDefinitionMetadata {
-//                             name: JavaName(quote!{e f test3}),
-//                             definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
-//                                 extends: Some(JavaName(quote!{e f test4})),
-//                                 implements: vec![],
-//                             }),
-//                         },
-//                     ],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![
-//                     GeneratorDefinition::Class(ClassGeneratorDefinition {
-//                         class: Ident::new("test2", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         super_class: quote!{::e::f::test3},
-//                         transitive_extends: vec![
-//                             quote!{::e::f::test3},
-//                             quote!{::e::f::test4},
-//                             quote!{::java::lang::Object},
-//                         ],
-//                         implements: vec![],
-//                         signature: Literal::string("c/d/test2"),
-//                         full_signature: Literal::string("Lc/d/test2;"),
-//                         methods: vec![],
-//                         static_methods: vec![],
-//                         native_methods: vec![],
-//                         static_native_methods: vec![],
-//                         constructors: vec![],
-//                     }),
-//                     GeneratorDefinition::Class(ClassGeneratorDefinition {
-//                         class: Ident::new("test1", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         super_class: quote!{::c::d::test2},
-//                         transitive_extends: vec![
-//                             quote!{::c::d::test2},
-//                             quote!{::e::f::test3},
-//                             quote!{::e::f::test4},
-//                             quote!{::java::lang::Object},
-//                         ],
-//                         implements: vec![],
-//                         signature: Literal::string("a/b/test1"),
-//                         full_signature: Literal::string("La/b/test1;"),
-//                         methods: vec![],
-//                         static_methods: vec![],
-//                         native_methods: vec![],
-//                         static_native_methods: vec![],
-//                         constructors: vec![],
-//                     }),
-//                 ],
-//             }
-//         );
-//     }
+    #[test]
+    fn one_class_extends_recursive() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![
+                    JavaDefinition {
+                        name: JavaName(quote!{c d test2}),
+                        public: false,
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: Some(JavaName(quote!{e f test3})),
+                            implements: vec![],
+                            methods: vec![],
+                            native_methods: vec![],
+                            constructors: vec![],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{a b test1}),
+                        public: false,
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: Some(JavaName(quote!{c d test2})),
+                            implements: vec![],
+                            methods: vec![],
+                            native_methods: vec![],
+                            constructors: vec![],
+                        }),
+                    },
+                ],
+                metadata: Metadata {
+                    definitions: vec![
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{e f test4}),
+                            definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
+                                extends: None,
+                                implements: vec![],
+                            }),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{e f test3}),
+                            definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
+                                extends: Some(JavaName(quote!{e f test4})),
+                                implements: vec![],
+                            }),
+                        },
+                    ],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        class: Ident::new("test2", Span::call_site()),
+                        public: TokenStream::new(),
+                        super_class: quote!{::e::f::test3},
+                        transitive_extends: vec![
+                            quote!{::e::f::test3},
+                            quote!{::e::f::test4},
+                            quote!{::java::lang::Object},
+                        ],
+                        implements: vec![],
+                        signature: Literal::string("c/d/test2"),
+                        full_signature: Literal::string("Lc/d/test2;"),
+                        methods: vec![],
+                        static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
+                        constructors: vec![],
+                    }),
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        class: Ident::new("test1", Span::call_site()),
+                        public: TokenStream::new(),
+                        super_class: quote!{::c::d::test2},
+                        transitive_extends: vec![
+                            quote!{::c::d::test2},
+                            quote!{::e::f::test3},
+                            quote!{::e::f::test4},
+                            quote!{::java::lang::Object},
+                        ],
+                        implements: vec![],
+                        signature: Literal::string("a/b/test1"),
+                        full_signature: Literal::string("La/b/test1;"),
+                        methods: vec![],
+                        static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
+                        constructors: vec![],
+                    }),
+                ],
+            }
+        );
+    }
 
-//     #[test]
-//     fn one_class_implements() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![
-//                     JavaDefinition {
-//                         name: JavaName(quote!{e f test4}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Interface(JavaInterface {
-//                             methods: vec![],
-//                             extends: vec![],
-//                         }),
-//                     },
-//                     JavaDefinition {
-//                         name: JavaName(quote!{a b test1}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Class(JavaClass {
-//                             extends: None,
-//                             implements: vec![
-//                                 JavaName(quote!{e f test3}),
-//                                 JavaName(quote!{e f test4}),
-//                             ],
-//                             methods: vec![],
-//                             native_methods: vec![],
-//                             constructors: vec![],
-//                         }),
-//                     },
-//                 ],
-//                 metadata: Metadata {
-//                     definitions: vec![JavaDefinitionMetadata {
-//                         name: JavaName(quote!{e f test3}),
-//                         definition: JavaDefinitionMetadataKind::Interface(JavaInterfaceMetadata {
-//                             extends: vec![],
-//                             methods: vec![],
-//                         }),
-//                     }],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![
-//                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-//                         interface: Ident::new("test4", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         extends: vec![],
-//                         methods: vec![],
-//                     }),
-//                     GeneratorDefinition::Class(ClassGeneratorDefinition {
-//                         class: Ident::new("test1", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         super_class: quote!{::java::lang::Object},
-//                         transitive_extends: vec![quote!{::java::lang::Object}],
-//                         implements: vec![quote!{::e::f::test3}, quote!{::e::f::test4}],
-//                         signature: Literal::string("a/b/test1"),
-//                         full_signature: Literal::string("La/b/test1;"),
-//                         methods: vec![],
-//                         static_methods: vec![],
-//                         native_methods: vec![],
-//                         static_native_methods: vec![],
-//                         constructors: vec![],
-//                     }),
-//                 ],
-//             }
-//         );
-//     }
+    #[test]
+    fn one_class_implements() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![
+                    JavaDefinition {
+                        name: JavaName(quote!{e f test4}),
+                        public: false,
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            methods: vec![],
+                            extends: vec![],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{a b test1}),
+                        public: false,
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: None,
+                            implements: vec![
+                                JavaName(quote!{e f test3}),
+                                JavaName(quote!{e f test4}),
+                            ],
+                            methods: vec![],
+                            native_methods: vec![],
+                            constructors: vec![],
+                        }),
+                    },
+                ],
+                metadata: Metadata {
+                    definitions: vec![JavaDefinitionMetadata {
+                        name: JavaName(quote!{e f test3}),
+                        definition: JavaDefinitionMetadataKind::Interface(JavaInterfaceMetadata {
+                            extends: vec![],
+                            methods: vec![],
+                        }),
+                    }],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![
+                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                        interface: Ident::new("test4", Span::call_site()),
+                        public: TokenStream::new(),
+                        extends: vec![],
+                        methods: vec![],
+                    }),
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        class: Ident::new("test1", Span::call_site()),
+                        public: TokenStream::new(),
+                        super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        implements: vec![
+                            InterfaceImplementationGeneratorDefinition {
+                                interface: quote!{::e::f::test3},
+                                methods: vec![],
+                            },
+                            InterfaceImplementationGeneratorDefinition {
+                                interface: quote!{::e::f::test4},
+                                methods: vec![],
+                            },
+                        ],
+                        signature: Literal::string("a/b/test1"),
+                        full_signature: Literal::string("La/b/test1;"),
+                        methods: vec![],
+                        static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
+                        constructors: vec![],
+                    }),
+                ],
+            }
+        );
+    }
 
-//     #[test]
-//     fn one_class_implements_recursive() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![
-//                     JavaDefinition {
-//                         name: JavaName(quote!{e f test3}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Interface(JavaInterface {
-//                             methods: vec![],
-//                             extends: vec![JavaName(quote!{e f test4})],
-//                         }),
-//                     },
-//                     JavaDefinition {
-//                         name: JavaName(quote!{a b test1}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Class(JavaClass {
-//                             extends: None,
-//                             implements: vec![JavaName(quote!{e f test3})],
-//                             methods: vec![],
-//                             native_methods: vec![],
-//                             constructors: vec![],
-//                         }),
-//                     },
-//                 ],
-//                 metadata: Metadata {
-//                     definitions: vec![
-//                         JavaDefinitionMetadata {
-//                             name: JavaName(quote!{g h test5}),
-//                             definition: JavaDefinitionMetadataKind::Interface(
-//                                 JavaInterfaceMetadata {
-//                                     methods: vec![],
-//                                     extends: vec![],
-//                                 },
-//                             ),
-//                         },
-//                         JavaDefinitionMetadata {
-//                             name: JavaName(quote!{e f test4}),
-//                             definition: JavaDefinitionMetadataKind::Interface(
-//                                 JavaInterfaceMetadata {
-//                                     methods: vec![],
-//                                     extends: vec![JavaName(quote!{g h test5})],
-//                                 },
-//                             ),
-//                         },
-//                     ],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![
-//                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-//                         interface: Ident::new("test3", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         extends: vec![quote!{::e::f::test4}],
-//                         methods: vec![],
-//                     }),
-//                     GeneratorDefinition::Class(ClassGeneratorDefinition {
-//                         class: Ident::new("test1", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         super_class: quote!{::java::lang::Object},
-//                         transitive_extends: vec![quote!{::java::lang::Object}],
-//                         implements: vec![
-//                             quote!{::e::f::test3},
-//                             quote!{::e::f::test4},
-//                             quote!{::g::h::test5},
-//                         ],
-//                         signature: Literal::string("a/b/test1"),
-//                         full_signature: Literal::string("La/b/test1;"),
-//                         methods: vec![],
-//                         static_methods: vec![],
-//                         native_methods: vec![],
-//                         static_native_methods: vec![],
-//                         constructors: vec![],
-//                     }),
-//                 ],
-//             }
-//         );
-//     }
+    #[test]
+    fn one_class_implements_recursive() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![
+                    JavaDefinition {
+                        name: JavaName(quote!{e f test3}),
+                        public: false,
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            methods: vec![],
+                            extends: vec![JavaName(quote!{e f test4})],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{a b test1}),
+                        public: false,
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: None,
+                            implements: vec![JavaName(quote!{e f test3})],
+                            methods: vec![],
+                            native_methods: vec![],
+                            constructors: vec![],
+                        }),
+                    },
+                ],
+                metadata: Metadata {
+                    definitions: vec![
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{g h test5}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata {
+                                    methods: vec![],
+                                    extends: vec![],
+                                },
+                            ),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{e f test4}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata {
+                                    methods: vec![],
+                                    extends: vec![JavaName(quote!{g h test5})],
+                                },
+                            ),
+                        },
+                    ],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![
+                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                        interface: Ident::new("test3", Span::call_site()),
+                        public: TokenStream::new(),
+                        extends: vec![quote!{::e::f::test4}],
+                        methods: vec![],
+                    }),
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        class: Ident::new("test1", Span::call_site()),
+                        public: TokenStream::new(),
+                        super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        implements: vec![
+                            InterfaceImplementationGeneratorDefinition {
+                                interface: quote!{::e::f::test3},
+                                methods: vec![],
+                            },
+                            InterfaceImplementationGeneratorDefinition {
+                                interface: quote!{::e::f::test4},
+                                methods: vec![],
+                            },
+                            InterfaceImplementationGeneratorDefinition {
+                                interface: quote!{::g::h::test5},
+                                methods: vec![],
+                            },
+                        ],
+                        signature: Literal::string("a/b/test1"),
+                        full_signature: Literal::string("La/b/test1;"),
+                        methods: vec![],
+                        static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
+                        constructors: vec![],
+                    }),
+                ],
+            }
+        );
+    }
 
-//     #[test]
-//     fn one_class_implements_recursive_duplicated() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![
-//                     JavaDefinition {
-//                         name: JavaName(quote!{g h test4}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Interface(JavaInterface {
-//                             methods: vec![],
-//                             extends: vec![],
-//                         }),
-//                     },
-//                     JavaDefinition {
-//                         name: JavaName(quote!{e f test3}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Interface(JavaInterface {
-//                             methods: vec![],
-//                             extends: vec![JavaName(quote!{g h test4})],
-//                         }),
-//                     },
-//                     JavaDefinition {
-//                         name: JavaName(quote!{a b test1}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Class(JavaClass {
-//                             extends: None,
-//                             implements: vec![
-//                                 JavaName(quote!{e f test3}),
-//                                 JavaName(quote!{g h test4}),
-//                             ],
-//                             methods: vec![],
-//                             native_methods: vec![],
-//                             constructors: vec![],
-//                         }),
-//                     },
-//                 ],
-//                 metadata: Metadata {
-//                     definitions: vec![],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![
-//                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-//                         interface: Ident::new("test4", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         extends: vec![],
-//                         methods: vec![],
-//                     }),
-//                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-//                         interface: Ident::new("test3", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         extends: vec![quote!{::g::h::test4}],
-//                         methods: vec![],
-//                     }),
-//                     GeneratorDefinition::Class(ClassGeneratorDefinition {
-//                         class: Ident::new("test1", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         super_class: quote!{::java::lang::Object},
-//                         transitive_extends: vec![quote!{::java::lang::Object}],
-//                         implements: vec![quote!{::e::f::test3}, quote!{::g::h::test4}],
-//                         signature: Literal::string("a/b/test1"),
-//                         full_signature: Literal::string("La/b/test1;"),
-//                         methods: vec![],
-//                         static_methods: vec![],
-//                         native_methods: vec![],
-//                         static_native_methods: vec![],
-//                         constructors: vec![],
-//                     }),
-//                 ],
-//             }
-//         );
-//     }
+    #[test]
+    fn one_class_implements_recursive_duplicated() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![
+                    JavaDefinition {
+                        name: JavaName(quote!{g h test4}),
+                        public: false,
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            methods: vec![],
+                            extends: vec![],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{e f test3}),
+                        public: false,
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            methods: vec![],
+                            extends: vec![JavaName(quote!{g h test4})],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{a b test1}),
+                        public: false,
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: None,
+                            implements: vec![
+                                JavaName(quote!{e f test3}),
+                                JavaName(quote!{g h test4}),
+                            ],
+                            methods: vec![],
+                            native_methods: vec![],
+                            constructors: vec![],
+                        }),
+                    },
+                ],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![
+                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                        interface: Ident::new("test4", Span::call_site()),
+                        public: TokenStream::new(),
+                        extends: vec![],
+                        methods: vec![],
+                    }),
+                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                        interface: Ident::new("test3", Span::call_site()),
+                        public: TokenStream::new(),
+                        extends: vec![quote!{::g::h::test4}],
+                        methods: vec![],
+                    }),
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        class: Ident::new("test1", Span::call_site()),
+                        public: TokenStream::new(),
+                        super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        implements: vec![
+                            InterfaceImplementationGeneratorDefinition {
+                                interface: quote!{::e::f::test3},
+                                methods: vec![],
+                            },
+                            InterfaceImplementationGeneratorDefinition {
+                                interface: quote!{::g::h::test4},
+                                methods: vec![],
+                            },
+                        ],
+                        signature: Literal::string("a/b/test1"),
+                        full_signature: Literal::string("La/b/test1;"),
+                        methods: vec![],
+                        static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
+                        constructors: vec![],
+                    }),
+                ],
+            }
+        );
+    }
 
-//     #[test]
-//     fn one_class_public() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![JavaDefinition {
-//                     name: JavaName(quote!{a b test1}),
-//                     public: true,
-//                     definition: JavaDefinitionKind::Class(JavaClass {
-//                         extends: None,
-//                         implements: vec![],
-//                         methods: vec![],
-//                         native_methods: vec![],
-//                         constructors: vec![],
-//                     }),
-//                 }],
-//                 metadata: Metadata {
-//                     definitions: vec![],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
-//                     class: Ident::new("test1", Span::call_site()),
-//                     public: quote!{pub},
-//                     super_class: quote!{::java::lang::Object},
-//                     transitive_extends: vec![quote!{::java::lang::Object}],
-//                     implements: vec![],
-//                     signature: Literal::string("a/b/test1"),
-//                     full_signature: Literal::string("La/b/test1;"),
-//                     methods: vec![],
-//                     static_methods: vec![],
-//                     native_methods: vec![],
-//                     static_native_methods: vec![],
-//                     constructors: vec![],
-//                 })],
-//             }
-//         );
-//     }
+    #[test]
+    fn one_class_public() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    name: JavaName(quote!{a b test1}),
+                    public: true,
+                    definition: JavaDefinitionKind::Class(JavaClass {
+                        extends: None,
+                        implements: vec![],
+                        methods: vec![],
+                        native_methods: vec![],
+                        constructors: vec![],
+                    }),
+                }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    class: Ident::new("test1", Span::call_site()),
+                    public: quote!{pub},
+                    super_class: quote!{::java::lang::Object},
+                    transitive_extends: vec![quote!{::java::lang::Object}],
+                    implements: vec![],
+                    signature: Literal::string("a/b/test1"),
+                    full_signature: Literal::string("La/b/test1;"),
+                    methods: vec![],
+                    static_methods: vec![],
+                    native_methods: vec![],
+                    static_native_methods: vec![],
+                    constructors: vec![],
+                })],
+            }
+        );
+    }
 
-//     #[test]
-//     fn one_interface() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![JavaDefinition {
-//                     name: JavaName(quote!{a b test1}),
-//                     public: false,
-//                     definition: JavaDefinitionKind::Interface(JavaInterface {
-//                         methods: vec![],
-//                         extends: vec![],
-//                     }),
-//                 }],
-//                 metadata: Metadata {
-//                     definitions: vec![],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![GeneratorDefinition::Interface(
-//                     InterfaceGeneratorDefinition {
-//                         interface: Ident::new("test1", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         extends: vec![],
-//                         methods: vec![],
-//                     },
-//                 )],
-//             }
-//         );
-//     }
+    #[test]
+    fn one_interface() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    name: JavaName(quote!{a b test1}),
+                    public: false,
+                    definition: JavaDefinitionKind::Interface(JavaInterface {
+                        methods: vec![],
+                        extends: vec![],
+                    }),
+                }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![GeneratorDefinition::Interface(
+                    InterfaceGeneratorDefinition {
+                        interface: Ident::new("test1", Span::call_site()),
+                        public: TokenStream::new(),
+                        extends: vec![],
+                        methods: vec![],
+                    },
+                )],
+            }
+        );
+    }
 
-//     #[test]
-//     fn one_interface_extends() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![
-//                     JavaDefinition {
-//                         name: JavaName(quote!{e f test3}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Interface(JavaInterface {
-//                             methods: vec![],
-//                             extends: vec![],
-//                         }),
-//                     },
-//                     JavaDefinition {
-//                         name: JavaName(quote!{a b test1}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Interface(JavaInterface {
-//                             methods: vec![],
-//                             extends: vec![JavaName(quote!{c d test2}), JavaName(quote!{e f test3})],
-//                         }),
-//                     },
-//                 ],
-//                 metadata: Metadata {
-//                     definitions: vec![
-//                         JavaDefinitionMetadata {
-//                             name: JavaName(quote!{c d test4}),
-//                             definition: JavaDefinitionMetadataKind::Interface(
-//                                 JavaInterfaceMetadata {
-//                                     methods: vec![],
-//                                     extends: vec![],
-//                                 },
-//                             ),
-//                         },
-//                         JavaDefinitionMetadata {
-//                             name: JavaName(quote!{c d test2}),
-//                             definition: JavaDefinitionMetadataKind::Interface(
-//                                 JavaInterfaceMetadata {
-//                                     methods: vec![],
-//                                     extends: vec![JavaName(quote!{c d test4})],
-//                                 },
-//                             ),
-//                         },
-//                     ],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![
-//                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-//                         interface: Ident::new("test3", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         extends: vec![],
-//                         methods: vec![],
-//                     }),
-//                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-//                         interface: Ident::new("test1", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         extends: vec![quote!{::c::d::test2}, quote!{::e::f::test3}],
-//                         methods: vec![],
-//                     }),
-//                 ],
-//             }
-//         );
-//     }
+    #[test]
+    fn one_interface_extends() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![
+                    JavaDefinition {
+                        name: JavaName(quote!{e f test3}),
+                        public: false,
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            methods: vec![],
+                            extends: vec![],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{a b test1}),
+                        public: false,
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            methods: vec![],
+                            extends: vec![JavaName(quote!{c d test2}), JavaName(quote!{e f test3})],
+                        }),
+                    },
+                ],
+                metadata: Metadata {
+                    definitions: vec![
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{c d test4}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata {
+                                    methods: vec![],
+                                    extends: vec![],
+                                },
+                            ),
+                        },
+                        JavaDefinitionMetadata {
+                            name: JavaName(quote!{c d test2}),
+                            definition: JavaDefinitionMetadataKind::Interface(
+                                JavaInterfaceMetadata {
+                                    methods: vec![],
+                                    extends: vec![JavaName(quote!{c d test4})],
+                                },
+                            ),
+                        },
+                    ],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![
+                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                        interface: Ident::new("test3", Span::call_site()),
+                        public: TokenStream::new(),
+                        extends: vec![],
+                        methods: vec![],
+                    }),
+                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                        interface: Ident::new("test1", Span::call_site()),
+                        public: TokenStream::new(),
+                        extends: vec![quote!{::c::d::test2}, quote!{::e::f::test3}],
+                        methods: vec![],
+                    }),
+                ],
+            }
+        );
+    }
 
-//     #[test]
-//     fn one_interface_public() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![JavaDefinition {
-//                     name: JavaName(quote!{a b test1}),
-//                     public: true,
-//                     definition: JavaDefinitionKind::Interface(JavaInterface {
-//                         methods: vec![],
-//                         extends: vec![],
-//                     }),
-//                 }],
-//                 metadata: Metadata {
-//                     definitions: vec![],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![GeneratorDefinition::Interface(
-//                     InterfaceGeneratorDefinition {
-//                         interface: Ident::new("test1", Span::call_site()),
-//                         public: quote!{pub},
-//                         extends: vec![],
-//                         methods: vec![],
-//                     },
-//                 )],
-//             }
-//         );
-//     }
+    #[test]
+    fn one_interface_public() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![JavaDefinition {
+                    name: JavaName(quote!{a b test1}),
+                    public: true,
+                    definition: JavaDefinitionKind::Interface(JavaInterface {
+                        methods: vec![],
+                        extends: vec![],
+                    }),
+                }],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![GeneratorDefinition::Interface(
+                    InterfaceGeneratorDefinition {
+                        interface: Ident::new("test1", Span::call_site()),
+                        public: quote!{pub},
+                        extends: vec![],
+                        methods: vec![],
+                    },
+                )],
+            }
+        );
+    }
 
-//     #[test]
-//     fn multiple() {
-//         assert_eq!(
-//             to_generator_data(JavaDefinitions {
-//                 definitions: vec![
-//                     JavaDefinition {
-//                         name: JavaName(quote!{e f test_if1}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Interface(JavaInterface {
-//                             methods: vec![],
-//                             extends: vec![],
-//                         }),
-//                     },
-//                     JavaDefinition {
-//                         name: JavaName(quote!{e f test_if2}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Interface(JavaInterface {
-//                             methods: vec![],
-//                             extends: vec![],
-//                         }),
-//                     },
-//                     JavaDefinition {
-//                         name: JavaName(quote!{a b test1}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Class(JavaClass {
-//                             extends: None,
-//                             implements: vec![],
-//                             methods: vec![],
-//                             native_methods: vec![],
-//                             constructors: vec![],
-//                         }),
-//                     },
-//                     JavaDefinition {
-//                         name: JavaName(quote!{test2}),
-//                         public: false,
-//                         definition: JavaDefinitionKind::Class(JavaClass {
-//                             extends: None,
-//                             implements: vec![],
-//                             methods: vec![],
-//                             native_methods: vec![],
-//                             constructors: vec![],
-//                         }),
-//                     },
-//                 ],
-//                 metadata: Metadata {
-//                     definitions: vec![],
-//                 },
-//             }),
-//             GeneratorData {
-//                 definitions: vec![
-//                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-//                         interface: Ident::new("test_if1", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         extends: vec![],
-//                         methods: vec![],
-//                     }),
-//                     GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
-//                         interface: Ident::new("test_if2", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         extends: vec![],
-//                         methods: vec![],
-//                     }),
-//                     GeneratorDefinition::Class(ClassGeneratorDefinition {
-//                         class: Ident::new("test1", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         super_class: quote!{::java::lang::Object},
-//                         transitive_extends: vec![quote!{::java::lang::Object}],
-//                         implements: vec![],
-//                         signature: Literal::string("a/b/test1"),
-//                         full_signature: Literal::string("La/b/test1;"),
-//                         methods: vec![],
-//                         static_methods: vec![],
-//                         native_methods: vec![],
-//                         static_native_methods: vec![],
-//                         constructors: vec![],
-//                     }),
-//                     GeneratorDefinition::Class(ClassGeneratorDefinition {
-//                         class: Ident::new("test2", Span::call_site()),
-//                         public: TokenStream::new(),
-//                         super_class: quote!{::java::lang::Object},
-//                         transitive_extends: vec![quote!{::java::lang::Object}],
-//                         implements: vec![],
-//                         signature: Literal::string("test2"),
-//                         full_signature: Literal::string("Ltest2;"),
-//                         methods: vec![],
-//                         static_methods: vec![],
-//                         native_methods: vec![],
-//                         static_native_methods: vec![],
-//                         constructors: vec![],
-//                     }),
-//                 ],
-//             }
-//         );
-//     }
-// }
+    #[test]
+    fn multiple() {
+        assert_eq!(
+            to_generator_data(JavaDefinitions {
+                definitions: vec![
+                    JavaDefinition {
+                        name: JavaName(quote!{e f test_if1}),
+                        public: false,
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            methods: vec![],
+                            extends: vec![],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{e f test_if2}),
+                        public: false,
+                        definition: JavaDefinitionKind::Interface(JavaInterface {
+                            methods: vec![],
+                            extends: vec![],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{a b test1}),
+                        public: false,
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: None,
+                            implements: vec![],
+                            methods: vec![],
+                            native_methods: vec![],
+                            constructors: vec![],
+                        }),
+                    },
+                    JavaDefinition {
+                        name: JavaName(quote!{test2}),
+                        public: false,
+                        definition: JavaDefinitionKind::Class(JavaClass {
+                            extends: None,
+                            implements: vec![],
+                            methods: vec![],
+                            native_methods: vec![],
+                            constructors: vec![],
+                        }),
+                    },
+                ],
+                metadata: Metadata {
+                    definitions: vec![],
+                },
+            }),
+            GeneratorData {
+                definitions: vec![
+                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                        interface: Ident::new("test_if1", Span::call_site()),
+                        public: TokenStream::new(),
+                        extends: vec![],
+                        methods: vec![],
+                    }),
+                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                        interface: Ident::new("test_if2", Span::call_site()),
+                        public: TokenStream::new(),
+                        extends: vec![],
+                        methods: vec![],
+                    }),
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        class: Ident::new("test1", Span::call_site()),
+                        public: TokenStream::new(),
+                        super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        implements: vec![],
+                        signature: Literal::string("a/b/test1"),
+                        full_signature: Literal::string("La/b/test1;"),
+                        methods: vec![],
+                        static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
+                        constructors: vec![],
+                    }),
+                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        class: Ident::new("test2", Span::call_site()),
+                        public: TokenStream::new(),
+                        super_class: quote!{::java::lang::Object},
+                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        implements: vec![],
+                        signature: Literal::string("test2"),
+                        full_signature: Literal::string("Ltest2;"),
+                        methods: vec![],
+                        static_methods: vec![],
+                        native_methods: vec![],
+                        static_native_methods: vec![],
+                        constructors: vec![],
+                    }),
+                ],
+            }
+        );
+    }
+}
 
 fn generate(data: GeneratorData) -> TokenStream {
     let mut tokens = TokenStream::new();
