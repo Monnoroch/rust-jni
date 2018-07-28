@@ -2,11 +2,23 @@
 name = "rust-jni"
 version = "0.1.0"
 authors = ["Monnoroch <monnoroch@gmail.com>"]
-exclude = [
-    "ci/*",
-    ".travis.yml",
-    ".gitignore",
+license = "MIT"
+description = "A package for easy Java interop"
+repository = "https://github.com/Monnoroch/rust-jni"
+documentation = "https://docs.rs/rust-jni/"
+keywords = ["java"]
+readme = "README.md"
+include = [
+	"Cargo.toml",
+	"build.rs",
+	"src/**/*.rs",
+	"tests/**/*.rs",
+	"README.md",
+	"LICENSE",
 ]
+
+[badges]
+travis-ci = { repository = "Monnoroch/rust-jni", branch = "master" }
 
 [dependencies]
 cesu8 = "1.1.0"
