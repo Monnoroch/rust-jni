@@ -1,9 +1,11 @@
+extern crate java;
 extern crate rust_jni;
 extern crate rust_jni_java_lib;
 
 #[cfg(test)]
 mod call_methods {
-    use rust_jni::{java, AttachArguments, InitArguments, JavaVM, JniVersion};
+    use java;
+    use rust_jni::{AttachArguments, InitArguments, JavaVM, JniVersion};
     use rust_jni_java_lib::rustjni::test::*;
     use std::fs;
 

@@ -1,13 +1,8 @@
 extern crate jni_sys;
 #[macro_use]
 extern crate rust_jni;
+extern crate java;
 extern crate rust_jni_generator;
-
-mod java {
-    pub mod lang {
-        pub use rust_jni::java::lang::*;
-    }
-}
 
 pub mod rustjni {
     pub mod test {
