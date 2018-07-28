@@ -22,12 +22,11 @@ use proc_macro2::*;
 /// TODO(#76): examples.
 #[proc_macro]
 pub fn java_generate(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input: TokenStream = input.into();
-    java_generate_impl(input).into()
+    java_generate_impl(input.into()).into()
 }
 
 fn java_generate_impl(input: TokenStream) -> TokenStream {
-    generate(to_generator_data(parse_java_definition(input)))
+    generate(&to_generator_data(parse_java_definition(input)))
 }
 
 #[cfg(test)]

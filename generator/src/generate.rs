@@ -2,27 +2,28 @@
 use super::assert_tokens_equals;
 use proc_macro2::*;
 use std::iter;
+use std::iter::FromIterator;
 
-#[derive(Debug, Clone)]
-pub struct ClassMethodGeneratorDefinition {
+#[derive(Debug)]
+pub struct ClassMethod {
     pub name: Ident,
     pub java_name: Literal,
     pub return_type: TokenStream,
     pub argument_names: Vec<Ident>,
     pub argument_types: Vec<TokenStream>,
-    pub public: TokenStream,
+    pub public: bool,
 }
 
-#[derive(Debug, Clone)]
-pub struct InterfaceMethodGeneratorDefinition {
+#[derive(Debug)]
+pub struct InterfaceMethod {
     pub name: Ident,
     pub return_type: TokenStream,
     pub argument_names: Vec<Ident>,
     pub argument_types: Vec<TokenStream>,
 }
 
-#[derive(Debug, Clone)]
-pub struct InterfaceMethodImplementationGeneratorDefinition {
+#[derive(Debug)]
+pub struct InterfaceMethodImplementation {
     pub name: Ident,
     pub return_type: TokenStream,
     pub argument_names: Vec<Ident>,
@@ -30,8 +31,8 @@ pub struct InterfaceMethodImplementationGeneratorDefinition {
     pub class_cast: TokenStream,
 }
 
-#[derive(Debug, Clone)]
-pub struct NativeMethodGeneratorDefinition {
+#[derive(Debug)]
+pub struct NativeMethod {
     pub name: Ident,
     pub rust_name: Ident,
     pub java_name: Ident,
@@ -39,84 +40,100 @@ pub struct NativeMethodGeneratorDefinition {
     pub argument_names: Vec<Ident>,
     pub argument_types: Vec<TokenStream>,
     pub argument_types_no_lifetime: Vec<TokenStream>,
-    pub public: TokenStream,
+    pub public: bool,
     pub code: Group,
 }
 
-#[derive(Debug, Clone)]
-pub struct ConstructorGeneratorDefinition {
+#[derive(Debug)]
+pub struct Constructor {
     pub name: Ident,
     pub argument_names: Vec<Ident>,
     pub argument_types: Vec<TokenStream>,
-    pub public: TokenStream,
+    pub public: bool,
 }
 
-#[derive(Debug, Clone)]
-pub struct InterfaceImplementationGeneratorDefinition {
+#[derive(Debug)]
+pub struct InterfaceImplementation {
     pub interface: TokenStream,
-    pub methods: Vec<InterfaceMethodImplementationGeneratorDefinition>,
+    pub methods: Vec<InterfaceMethodImplementation>,
 }
 
-#[derive(Debug, Clone)]
-pub struct ClassGeneratorDefinition {
+#[derive(Debug)]
+pub struct Class {
     pub class: Ident,
-    pub public: TokenStream,
+    pub public: bool,
     pub super_class: TokenStream,
     pub transitive_extends: Vec<TokenStream>,
-    pub implements: Vec<InterfaceImplementationGeneratorDefinition>,
+    pub implements: Vec<InterfaceImplementation>,
     pub signature: Literal,
     pub full_signature: Literal,
-    pub constructors: Vec<ConstructorGeneratorDefinition>,
-    pub methods: Vec<ClassMethodGeneratorDefinition>,
-    pub static_methods: Vec<ClassMethodGeneratorDefinition>,
-    pub native_methods: Vec<NativeMethodGeneratorDefinition>,
-    pub static_native_methods: Vec<NativeMethodGeneratorDefinition>,
+    pub constructors: Vec<Constructor>,
+    pub methods: Vec<ClassMethod>,
+    pub static_methods: Vec<ClassMethod>,
+    pub native_methods: Vec<NativeMethod>,
+    pub static_native_methods: Vec<NativeMethod>,
 }
 
-#[derive(Debug, Clone)]
-pub struct InterfaceGeneratorDefinition {
+#[derive(Debug)]
+pub struct Interface {
     pub interface: Ident,
-    pub public: TokenStream,
+    pub public: bool,
     pub extends: Vec<TokenStream>,
-    pub methods: Vec<InterfaceMethodGeneratorDefinition>,
+    pub methods: Vec<InterfaceMethod>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum GeneratorDefinition {
-    Class(ClassGeneratorDefinition),
-    Interface(InterfaceGeneratorDefinition),
+    Interface(Interface),
+    Class(Class),
 }
 
-impl PartialEq for GeneratorDefinition {
-    fn eq(&self, other: &Self) -> bool {
-        format!("{:?}", self) == format!("{:?}", other)
-    }
-}
-
-impl Eq for GeneratorDefinition {}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug)]
 pub struct GeneratorData {
     pub definitions: Vec<GeneratorDefinition>,
 }
 
-pub fn generate(data: GeneratorData) -> TokenStream {
-    let mut tokens = TokenStream::new();
-    for definition in data.definitions {
-        tokens.extend(generate_definition(definition));
-    }
-    tokens
+pub fn generate(data: &GeneratorData) -> TokenStream {
+    TokenStream::from_iter(
+        data.definitions
+            .iter()
+            .map(generate_definition)
+            .flat_map(|tokens| tokens.into_iter()),
+    )
 }
 
-fn generate_definition(definition: GeneratorDefinition) -> TokenStream {
+fn generate_definition(definition: &GeneratorDefinition) -> TokenStream {
     match definition {
-        GeneratorDefinition::Class(class) => generate_class_definition(class),
-        GeneratorDefinition::Interface(interface) => generate_interface_definition(interface),
+        GeneratorDefinition::Interface(interface) => generate_interface(interface),
+        GeneratorDefinition::Class(class) => generate_class(class),
     }
 }
 
-fn generate_interface_method(method: InterfaceMethodGeneratorDefinition) -> TokenStream {
-    let InterfaceMethodGeneratorDefinition {
+fn generate_interface(definition: &Interface) -> TokenStream {
+    let Interface {
+        interface,
+        public,
+        extends,
+        methods,
+    } = definition;
+    let extends = if extends.is_empty() {
+        quote!{}
+    } else {
+        quote!{: #(#extends<'a>)+*}
+    };
+    let methods = methods.iter().map(generate_interface_method);
+    let public = generate_public(*public);
+    quote! {
+        #public trait #interface<'a> #extends {
+            #(
+                #methods
+            )*
+        }
+    }
+}
+
+fn generate_interface_method(method: &InterfaceMethod) -> TokenStream {
+    let InterfaceMethod {
         name,
         return_type,
         argument_names,
@@ -131,317 +148,8 @@ fn generate_interface_method(method: InterfaceMethodGeneratorDefinition) -> Toke
     }
 }
 
-fn generate_class_method(method: ClassMethodGeneratorDefinition) -> TokenStream {
-    let ClassMethodGeneratorDefinition {
-        name,
-        java_name,
-        return_type,
-        public,
-        argument_names,
-        argument_types,
-    } = method;
-    let argument_names_1 = argument_names.clone();
-    let argument_types_1 = argument_types.clone();
-    quote!{
-        #public fn #name(
-            &self,
-            #(#argument_names: #argument_types,)*
-            token: &::rust_jni::NoException<'a>,
-        ) -> ::rust_jni::JavaResult<'a, #return_type> {
-            // Safe because the method name and arguments are correct.
-            unsafe {
-                ::rust_jni::__generator::call_method::<_, _, _,
-                    fn(#(#argument_types_1,)*) -> #return_type
-                >
-                (
-                    self,
-                    #java_name,
-                    (#(#argument_names_1,)*),
-                    token,
-                )
-            }
-        }
-    }
-}
-
-fn generate_static_class_method(method: ClassMethodGeneratorDefinition) -> TokenStream {
-    let ClassMethodGeneratorDefinition {
-        name,
-        java_name,
-        return_type,
-        public,
-        argument_names,
-        argument_types,
-    } = method;
-    let argument_names_1 = argument_names.clone();
-    let argument_types_1 = argument_types.clone();
-    quote!{
-        #public fn #name(
-            env: &'a ::rust_jni::JniEnv<'a>,
-            #(#argument_names: #argument_types,)*
-            token: &::rust_jni::NoException<'a>,
-        ) -> ::rust_jni::JavaResult<'a, #return_type> {
-            // Safe because the method name and arguments are correct.
-            unsafe {
-                ::rust_jni::__generator::call_static_method::<Self, _, _,
-                    fn(#(#argument_types_1,)*) -> #return_type
-                >
-                (
-                    env,
-                    #java_name,
-                    (#(#argument_names_1,)*),
-                    token,
-                )
-            }
-        }
-    }
-}
-
-fn generate_class_native_method(method: NativeMethodGeneratorDefinition) -> TokenStream {
-    let NativeMethodGeneratorDefinition {
-        rust_name,
-        return_type,
-        public,
-        argument_names,
-        argument_types,
-        code,
-        ..
-    } = method;
-    quote!{
-        #public fn #rust_name(
-            &self,
-            #(#argument_names: #argument_types,)*
-            token: &::rust_jni::NoException<'a>,
-        ) -> ::rust_jni::JavaResult<'a, #return_type> {
-            #code
-        }
-    }
-}
-
-fn generate_static_class_native_method(method: NativeMethodGeneratorDefinition) -> TokenStream {
-    let NativeMethodGeneratorDefinition {
-        rust_name,
-        return_type,
-        public,
-        argument_names,
-        argument_types,
-        code,
-        ..
-    } = method;
-    quote!{
-        #public fn #rust_name(
-            env: &'a ::rust_jni::JniEnv<'a>,
-            #(#argument_names: #argument_types,)*
-            token: &::rust_jni::NoException<'a>,
-        ) -> ::rust_jni::JavaResult<'a, #return_type> {
-            #code
-        }
-    }
-}
-
-fn generate_class_native_method_function(
-    method: NativeMethodGeneratorDefinition,
-    class_name: &Ident,
-) -> TokenStream {
-    let NativeMethodGeneratorDefinition {
-        rust_name,
-        java_name,
-        return_type,
-        argument_names,
-        argument_types_no_lifetime,
-        ..
-    } = method;
-    let argument_names_1 = argument_names.clone();
-    let argument_names_2 = argument_names.clone();
-    let argument_names_3 = argument_names.clone();
-    let argument_types_no_lifetime_1 = argument_types_no_lifetime.clone();
-    quote!{
-        #[no_mangle]
-        #[doc(hidden)]
-        pub unsafe extern "C" fn #java_name<'a>(
-            raw_env: *mut ::jni_sys::JNIEnv,
-            object: ::jni_sys::jobject,
-            #(#argument_names: <#argument_types_no_lifetime as ::rust_jni::JavaType>::__JniType,)*
-        ) -> <#return_type as ::rust_jni::JavaType>::__JniType {
-            // TODO: make sure `#return_type: ::rust_jni::__generator::FromJni`.
-            // Compile-time check that declared arguments implement the `JniArgumentType`
-            // trait.
-            #(::rust_jni::__generator::test_jni_argument_type(#argument_names_1);)*
-            ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
-                // Compile-time check that declared arguments implement the `FromJni` trait.
-                #(
-                    {
-                        let value =
-                            <#argument_types_no_lifetime_1 as ::rust_jni::__generator::FromJni>
-                                ::__from_jni(env, #argument_names_2);
-                        ::rust_jni::__generator::test_from_jni_type(&value);
-                        ::std::mem::forget(value);
-                    }
-                )*
-
-                let object = <#class_name as ::rust_jni::__generator::FromJni>::__from_jni(env, object);
-                object
-                    .#rust_name(
-                        #(::rust_jni::__generator::FromJni::__from_jni(env, #argument_names_3),)*
-                        &token,
-                    )
-                    .map(|value| {
-                        let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
-                        // We don't want to delete the reference to result for object results.
-                        ::std::mem::forget(value);
-                        result
-                    })
-            })
-        }
-    }
-}
-
-fn generate_static_class_native_method_function(
-    method: NativeMethodGeneratorDefinition,
-    class_name: &Ident,
-) -> TokenStream {
-    let NativeMethodGeneratorDefinition {
-        name,
-        rust_name,
-        java_name,
-        return_type,
-        argument_names,
-        argument_types_no_lifetime,
-        ..
-    } = method;
-    let argument_names_1 = argument_names.clone();
-    let argument_names_2 = argument_names.clone();
-    let argument_names_3 = argument_names.clone();
-    let argument_types_no_lifetime_1 = argument_types_no_lifetime.clone();
-    let class_mismatch_error = format!(
-        "Native method {} does not belong to class {}",
-        name.to_string(),
-        class_name.to_string()
-    );
-    quote!{
-        #[no_mangle]
-        #[doc(hidden)]
-        pub unsafe extern "C" fn #java_name<'a>(
-            raw_env: *mut ::jni_sys::JNIEnv,
-            raw_class: ::jni_sys::jclass,
-            #(#argument_names: <#argument_types_no_lifetime as ::rust_jni::JavaType>::__JniType,)*
-        ) -> <#return_type as ::rust_jni::JavaType>::__JniType {
-            // TODO: make sure `#return_type: ::rust_jni::__generator::FromJni`.
-            // Compile-time check that declared arguments implement the `JniArgumentType`
-            // trait.
-            #(::rust_jni::__generator::test_jni_argument_type(#argument_names_1);)*
-            ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
-                // Compile-time check that declared arguments implement the `FromJni` trait.
-                #(
-                    {
-                        let value =
-                            <#argument_types_no_lifetime_1 as ::rust_jni::__generator::FromJni>
-                                ::__from_jni(env, #argument_names_2);
-                        ::rust_jni::__generator::test_from_jni_type(&value);
-                        ::std::mem::forget(value);
-                    }
-                )*
-
-                let class = #class_name::get_class(env, &token)?;
-                let raw_class = <::rust_jni::java::lang::Class as ::rust_jni::__generator::FromJni>::__from_jni(env, raw_class);
-                if !class.is_same_as(&raw_class, &token) {
-                    // This should never happen, as native method's link name has the class,
-                    // so it must be bound to a correct clas by the JVM.
-                    // Still, this is a good test to ensure that the system
-                    // is in a consistent state.
-                    panic!(#class_mismatch_error);
-                }
-
-                #class_name::#rust_name(
-                    env,
-                    #(::rust_jni::__generator::FromJni::__from_jni(env, #argument_names_3),)*
-                    &token,
-                )
-                .map(|value| {
-                    let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
-                    // We don't want to delete the reference to result for object results.
-                    ::std::mem::forget(value);
-                    result
-                })
-            })
-        }
-    }
-}
-
-fn generate_constructor(method: ConstructorGeneratorDefinition) -> TokenStream {
-    let ConstructorGeneratorDefinition {
-        name,
-        public,
-        argument_names,
-        argument_types,
-    } = method;
-    let argument_names_1 = argument_names.clone();
-    let argument_types_1 = argument_types.clone();
-    quote!{
-        #public fn #name(
-            env: &'a ::rust_jni::JniEnv<'a>,
-            #(#argument_names: #argument_types,)*
-            token: &::rust_jni::NoException<'a>,
-        ) -> ::rust_jni::JavaResult<'a, Self> {
-            // Safe because the method name and arguments are correct.
-            unsafe {
-                ::rust_jni::__generator::call_constructor::<Self, _, fn(#(#argument_types_1,)*)>
-                (
-                    env,
-                    (#(#argument_names_1,)*),
-                    token,
-                )
-            }
-        }
-    }
-}
-
-fn generate_interface_method_implementation(
-    method: InterfaceMethodImplementationGeneratorDefinition,
-) -> TokenStream {
-    let InterfaceMethodImplementationGeneratorDefinition {
-        name,
-        argument_names,
-        argument_types,
-        return_type,
-        class_cast,
-    } = method;
-    let argument_names_1 = argument_names.clone();
-    quote!{
-        fn #name(
-            &self,
-            #(#argument_names: #argument_types),*,
-            token: &::rust_jni::NoException<'a>,
-        ) -> ::rust_jni::JavaResult<'a, #return_type> {
-            #class_cast::#name(
-                self, #(#argument_names_1),*, token
-            )
-        }
-    }
-}
-
-fn generate_interface_implementation(
-    interface: InterfaceImplementationGeneratorDefinition,
-    class: &Ident,
-) -> TokenStream {
-    let InterfaceImplementationGeneratorDefinition {
-        interface, methods, ..
-    } = interface;
-    let methods = methods
-        .into_iter()
-        .map(generate_interface_method_implementation)
-        .collect::<Vec<_>>();
-    quote! {
-        impl<'a> #interface<'a> for #class<'a> {
-            #(
-                #methods
-            )*
-        }
-    }
-}
-
-fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStream {
-    let ClassGeneratorDefinition {
+fn generate_class(definition: &Class) -> TokenStream {
+    let Class {
         class,
         public,
         super_class,
@@ -454,45 +162,27 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
         static_methods,
         native_methods,
         static_native_methods,
-        ..
     } = definition;
-    let multiplied_class = iter::repeat(class.clone());
-    let multiplied_class_1 = multiplied_class.clone();
-    let transitive_extends_1 = transitive_extends.clone();
-    let methods = methods
-        .into_iter()
-        .map(generate_class_method)
-        .collect::<Vec<_>>();
-    let static_methods = static_methods
-        .into_iter()
-        .map(generate_static_class_method)
-        .collect::<Vec<_>>();
+    let multiplied_class = iter::repeat(&class);
+    let transitive_extends_1 = transitive_extends.iter();
+    let transitive_extends = transitive_extends.iter();
+    let methods = methods.iter().map(generate_class_method);
+    let static_methods = static_methods.iter().map(generate_static_class_method);
     let native_method_functions = native_methods
-        .clone()
-        .into_iter()
-        .map(|method| generate_class_native_method_function(method, &class))
-        .collect::<Vec<_>>();
+        .iter()
+        .map(|method| generate_class_native_method_function(method, &class));
     let static_native_method_functions = static_native_methods
-        .clone()
-        .into_iter()
-        .map(|method| generate_static_class_native_method_function(method, &class))
-        .collect::<Vec<_>>();
-    let native_methods = native_methods
-        .into_iter()
-        .map(generate_class_native_method)
-        .collect::<Vec<_>>();
+        .iter()
+        .map(|method| generate_static_class_native_method_function(method, &class));
+    let native_methods = native_methods.iter().map(generate_class_native_method);
     let static_native_methods = static_native_methods
-        .into_iter()
-        .map(generate_static_class_native_method)
-        .collect::<Vec<_>>();
-    let constructors = constructors
-        .into_iter()
-        .map(generate_constructor)
-        .collect::<Vec<_>>();
+        .iter()
+        .map(generate_static_class_native_method);
+    let constructors = constructors.iter().map(generate_constructor);
     let implementations = implements
-        .into_iter()
-        .map(|interface| generate_interface_implementation(interface, &class))
-        .collect::<Vec<_>>();
+        .iter()
+        .map(|interface| generate_interface_implementation(interface, &class));
+    let public = generate_public(*public);
     quote! {
         #[derive(Debug)]
         #public struct #class<'env> {
@@ -531,7 +221,7 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
         }
 
         #(
-            impl<'a> ::rust_jni::Cast<'a, #transitive_extends<'a>> for #multiplied_class_1<'a> {
+            impl<'a> ::rust_jni::Cast<'a, #transitive_extends<'a>> for #multiplied_class<'a> {
                 #[doc(hidden)]
                 fn cast<'b>(&'b self) -> &'b #transitive_extends_1<'a> {
                     self
@@ -618,29 +308,326 @@ fn generate_class_definition(definition: ClassGeneratorDefinition) -> TokenStrea
     }
 }
 
-fn generate_interface_definition(definition: InterfaceGeneratorDefinition) -> TokenStream {
-    let InterfaceGeneratorDefinition {
-        interface,
+fn generate_constructor(method: &Constructor) -> TokenStream {
+    let Constructor {
+        name,
         public,
-        extends,
-        methods,
+        argument_names,
+        argument_types,
+    } = method;
+    let argument_names_1 = argument_names.iter();
+    let argument_names = argument_names.iter();
+    let argument_types_1 = argument_types.iter();
+    let argument_types = argument_types.iter();
+    let public = generate_public(*public);
+    quote!{
+        #public fn #name(
+            env: &'a ::rust_jni::JniEnv<'a>,
+            #(#argument_names: #argument_types,)*
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, Self> {
+            // Safe because the method name and arguments are correct.
+            unsafe {
+                ::rust_jni::__generator::call_constructor::<Self, _, fn(#(#argument_types_1,)*)>
+                (
+                    env,
+                    (#(#argument_names_1,)*),
+                    token,
+                )
+            }
+        }
+    }
+}
+
+fn generate_class_method(method: &ClassMethod) -> TokenStream {
+    let ClassMethod {
+        name,
+        java_name,
+        return_type,
+        public,
+        argument_names,
+        argument_types,
+    } = method;
+    let argument_names_1 = argument_names.iter();
+    let argument_names = argument_names.iter();
+    let argument_types_1 = argument_types.iter();
+    let argument_types = argument_types.iter();
+    let public = generate_public(*public);
+    quote!{
+        #public fn #name(
+            &self,
+            #(#argument_names: #argument_types,)*
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, #return_type> {
+            // Safe because the method name and arguments are correct.
+            unsafe {
+                ::rust_jni::__generator::call_method::<_, _, _,
+                    fn(#(#argument_types_1,)*) -> #return_type
+                >
+                (
+                    self,
+                    #java_name,
+                    (#(#argument_names_1,)*),
+                    token,
+                )
+            }
+        }
+    }
+}
+
+fn generate_static_class_method(method: &ClassMethod) -> TokenStream {
+    let ClassMethod {
+        name,
+        java_name,
+        return_type,
+        public,
+        argument_names,
+        argument_types,
+    } = method;
+    let argument_names_1 = argument_names.iter();
+    let argument_names = argument_names.iter();
+    let argument_types_1 = argument_types.iter();
+    let argument_types = argument_types.iter();
+    let public = generate_public(*public);
+    quote!{
+        #public fn #name(
+            env: &'a ::rust_jni::JniEnv<'a>,
+            #(#argument_names: #argument_types,)*
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, #return_type> {
+            // Safe because the method name and arguments are correct.
+            unsafe {
+                ::rust_jni::__generator::call_static_method::<Self, _, _,
+                    fn(#(#argument_types_1,)*) -> #return_type
+                >
+                (
+                    env,
+                    #java_name,
+                    (#(#argument_names_1,)*),
+                    token,
+                )
+            }
+        }
+    }
+}
+
+fn generate_class_native_method(method: &NativeMethod) -> TokenStream {
+    let NativeMethod {
+        rust_name,
+        return_type,
+        public,
+        argument_names,
+        argument_types,
+        code,
         ..
-    } = definition;
-    let extends = if extends.is_empty() {
-        TokenStream::new()
-    } else {
-        quote!{: #(#extends<'a>)+*}
-    };
-    let methods = methods
-        .into_iter()
-        .map(generate_interface_method)
-        .collect::<Vec<_>>();
+    } = method;
+    let public = generate_public(*public);
+    quote!{
+        #public fn #rust_name(
+            &self,
+            #(#argument_names: #argument_types,)*
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, #return_type> {
+            #code
+        }
+    }
+}
+
+fn generate_static_class_native_method(method: &NativeMethod) -> TokenStream {
+    let NativeMethod {
+        rust_name,
+        return_type,
+        public,
+        argument_names,
+        argument_types,
+        code,
+        ..
+    } = method;
+    let public = generate_public(*public);
+    quote!{
+        #public fn #rust_name(
+            env: &'a ::rust_jni::JniEnv<'a>,
+            #(#argument_names: #argument_types,)*
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, #return_type> {
+            #code
+        }
+    }
+}
+
+fn generate_class_native_method_function(method: &NativeMethod, class_name: &Ident) -> TokenStream {
+    let NativeMethod {
+        rust_name,
+        java_name,
+        return_type,
+        argument_names,
+        argument_types_no_lifetime,
+        ..
+    } = method;
+    let argument_names_1 = argument_names.iter();
+    let argument_names_2 = argument_names.iter();
+    let argument_names_3 = argument_names.iter();
+    let argument_names = argument_names.iter();
+    let argument_types_no_lifetime_1 = argument_types_no_lifetime.iter();
+    let argument_types_no_lifetime = argument_types_no_lifetime.iter();
+    quote!{
+        #[no_mangle]
+        #[doc(hidden)]
+        pub unsafe extern "C" fn #java_name<'a>(
+            raw_env: *mut ::jni_sys::JNIEnv,
+            object: ::jni_sys::jobject,
+            #(#argument_names: <#argument_types_no_lifetime as ::rust_jni::JavaType>::__JniType,)*
+        ) -> <#return_type as ::rust_jni::JavaType>::__JniType {
+            // TODO: make sure `#return_type: ::rust_jni::__generator::FromJni`.
+            // Compile-time check that declared arguments implement the `JniArgumentType`
+            // trait.
+            #(::rust_jni::__generator::test_jni_argument_type(#argument_names_1);)*
+            ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
+                // Compile-time check that declared arguments implement the `FromJni` trait.
+                #(
+                    {
+                        let value =
+                            <#argument_types_no_lifetime_1 as ::rust_jni::__generator::FromJni>
+                                ::__from_jni(env, #argument_names_2);
+                        ::rust_jni::__generator::test_from_jni_type(&value);
+                        ::std::mem::forget(value);
+                    }
+                )*
+
+                let object = <#class_name as ::rust_jni::__generator::FromJni>::__from_jni(env, object);
+                object
+                    .#rust_name(
+                        #(::rust_jni::__generator::FromJni::__from_jni(env, #argument_names_3),)*
+                        &token,
+                    )
+                    .map(|value| {
+                        let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
+                        // We don't want to delete the reference to result for object results.
+                        ::std::mem::forget(value);
+                        result
+                    })
+            })
+        }
+    }
+}
+
+fn generate_static_class_native_method_function(
+    method: &NativeMethod,
+    class_name: &Ident,
+) -> TokenStream {
+    let NativeMethod {
+        name,
+        rust_name,
+        java_name,
+        return_type,
+        argument_names,
+        argument_types_no_lifetime,
+        ..
+    } = method;
+    let argument_names_1 = argument_names.iter();
+    let argument_names_2 = argument_names.iter();
+    let argument_names_3 = argument_names.iter();
+    let argument_names = argument_names.iter();
+    let argument_types_no_lifetime_1 = argument_types_no_lifetime.iter();
+    let argument_types_no_lifetime = argument_types_no_lifetime.iter();
+    let class_mismatch_error = format!(
+        "Native method {} does not belong to class {}",
+        name.to_string(),
+        class_name.to_string()
+    );
+    quote!{
+        #[no_mangle]
+        #[doc(hidden)]
+        pub unsafe extern "C" fn #java_name<'a>(
+            raw_env: *mut ::jni_sys::JNIEnv,
+            raw_class: ::jni_sys::jclass,
+            #(#argument_names: <#argument_types_no_lifetime as ::rust_jni::JavaType>::__JniType,)*
+        ) -> <#return_type as ::rust_jni::JavaType>::__JniType {
+            // TODO: make sure `#return_type: ::rust_jni::__generator::FromJni`.
+            // Compile-time check that declared arguments implement the `JniArgumentType`
+            // trait.
+            #(::rust_jni::__generator::test_jni_argument_type(#argument_names_1);)*
+            ::rust_jni::__generator::native_method_wrapper(raw_env, |env, token| {
+                // Compile-time check that declared arguments implement the `FromJni` trait.
+                #(
+                    {
+                        let value =
+                            <#argument_types_no_lifetime_1 as ::rust_jni::__generator::FromJni>
+                                ::__from_jni(env, #argument_names_2);
+                        ::rust_jni::__generator::test_from_jni_type(&value);
+                        ::std::mem::forget(value);
+                    }
+                )*
+
+                let class = #class_name::get_class(env, &token)?;
+                let raw_class = <::rust_jni::java::lang::Class as ::rust_jni::__generator::FromJni>::__from_jni(env, raw_class);
+                if !class.is_same_as(&raw_class, &token) {
+                    // This should never happen, as native method's link name has the class,
+                    // so it must be bound to a correct clas by the JVM.
+                    // Still, this is a good test to ensure that the system
+                    // is in a consistent state.
+                    panic!(#class_mismatch_error);
+                }
+
+                #class_name::#rust_name(
+                    env,
+                    #(::rust_jni::__generator::FromJni::__from_jni(env, #argument_names_3),)*
+                    &token,
+                )
+                .map(|value| {
+                    let result = ::rust_jni::__generator::ToJni::__to_jni(&value);
+                    // We don't want to delete the reference to result for object results.
+                    ::std::mem::forget(value);
+                    result
+                })
+            })
+        }
+    }
+}
+
+fn generate_interface_method_implementation(method: &InterfaceMethodImplementation) -> TokenStream {
+    let InterfaceMethodImplementation {
+        name,
+        argument_names,
+        argument_types,
+        return_type,
+        class_cast,
+    } = method;
+    let argument_names_1 = argument_names.iter();
+    let argument_names = argument_names.iter();
+    quote!{
+        fn #name(
+            &self,
+            #(#argument_names: #argument_types),*,
+            token: &::rust_jni::NoException<'a>,
+        ) -> ::rust_jni::JavaResult<'a, #return_type> {
+            #class_cast::#name(
+                self, #(#argument_names_1),*, token
+            )
+        }
+    }
+}
+
+fn generate_interface_implementation(
+    interface: &InterfaceImplementation,
+    class: &Ident,
+) -> TokenStream {
+    let InterfaceImplementation { interface, methods } = interface;
+    let methods = methods.iter().map(generate_interface_method_implementation);
     quote! {
-        #public trait #interface<'a> #extends {
+        impl<'a> #interface<'a> for #class<'a> {
             #(
                 #methods
             )*
         }
+    }
+}
+
+fn generate_public(public: bool) -> TokenStream {
+    if public {
+        quote!{pub}
+    } else {
+        quote!{}
     }
 }
 
@@ -654,15 +641,15 @@ mod generate_tests {
             definitions: vec![],
         };
         let expected = quote!{};
-        assert_tokens_equals(generate(input), expected);
+        assert_tokens_equals(generate(&input), expected);
     }
 
     #[test]
     fn one_class() {
         let input = GeneratorData {
-            definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
+            definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
-                public: quote!{test_public},
+                public: true,
                 super_class: quote!{c::d::test2},
                 transitive_extends: vec![quote!{c::d::test2}],
                 implements: vec![],
@@ -677,7 +664,7 @@ mod generate_tests {
         };
         let expected = quote!{
             #[derive(Debug)]
-            test_public struct test1<'env> {
+            pub struct test1<'env> {
                 object: c::d::test2<'env>,
             }
 
@@ -762,23 +749,23 @@ mod generate_tests {
 
             impl<'a> Eq for test1<'a> {}
         };
-        assert_tokens_equals(generate(input), expected);
+        assert_tokens_equals(generate(&input), expected);
     }
 
     #[test]
     fn one_class_implements() {
         let input = GeneratorData {
-            definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
+            definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
-                public: quote!{test_public},
+                public: true,
                 super_class: quote!{c::d::test2},
                 transitive_extends: vec![quote!{c::d::test2}],
                 implements: vec![
-                    InterfaceImplementationGeneratorDefinition {
+                    InterfaceImplementation {
                         interface: quote!{e::f::test3},
                         methods: vec![],
                     },
-                    InterfaceImplementationGeneratorDefinition {
+                    InterfaceImplementation {
                         interface: quote!{e::f::test4},
                         methods: vec![],
                     },
@@ -794,7 +781,7 @@ mod generate_tests {
         };
         let expected = quote!{
             #[derive(Debug)]
-            test_public struct test1<'env> {
+            pub struct test1<'env> {
                 object: c::d::test2<'env>,
             }
 
@@ -885,66 +872,62 @@ mod generate_tests {
             impl<'a> e::f::test4<'a> for test1<'a> {
             }
         };
-        assert_tokens_equals(generate(input), expected);
+        assert_tokens_equals(generate(&input), expected);
     }
 
     #[test]
     fn one_interface() {
         let input = GeneratorData {
-            definitions: vec![GeneratorDefinition::Interface(
-                InterfaceGeneratorDefinition {
-                    interface: Ident::new("test1", Span::call_site()),
-                    public: quote!{test_public},
-                    extends: vec![],
-                    methods: vec![],
-                },
-            )],
+            definitions: vec![GeneratorDefinition::Interface(Interface {
+                interface: Ident::new("test1", Span::call_site()),
+                public: true,
+                extends: vec![],
+                methods: vec![],
+            })],
         };
         let expected = quote!{
-            test_public trait test1<'a> {
+            pub trait test1<'a> {
             }
         };
-        assert_tokens_equals(generate(input), expected);
+        assert_tokens_equals(generate(&input), expected);
     }
 
     #[test]
     fn one_interface_extends() {
         let input = GeneratorData {
-            definitions: vec![GeneratorDefinition::Interface(
-                InterfaceGeneratorDefinition {
-                    interface: Ident::new("test1", Span::call_site()),
-                    public: TokenStream::new(),
-                    extends: vec![quote!{c::d::test2}, quote!{e::f::test3}],
-                    methods: vec![],
-                },
-            )],
+            definitions: vec![GeneratorDefinition::Interface(Interface {
+                interface: Ident::new("test1", Span::call_site()),
+                public: false,
+                extends: vec![quote!{c::d::test2}, quote!{e::f::test3}],
+                methods: vec![],
+            })],
         };
         let expected = quote!{
             trait test1<'a> : c::d::test2<'a> + e::f::test3<'a> {
             }
         };
-        assert_tokens_equals(generate(input), expected);
+        assert_tokens_equals(generate(&input), expected);
     }
 
     #[test]
     fn multiple() {
         let input = GeneratorData {
             definitions: vec![
-                GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                GeneratorDefinition::Interface(Interface {
                     interface: Ident::new("test_if1", Span::call_site()),
-                    public: TokenStream::new(),
+                    public: false,
                     extends: vec![],
                     methods: vec![],
                 }),
-                GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                GeneratorDefinition::Interface(Interface {
                     interface: Ident::new("test_if2", Span::call_site()),
-                    public: TokenStream::new(),
+                    public: false,
                     extends: vec![],
                     methods: vec![],
                 }),
-                GeneratorDefinition::Class(ClassGeneratorDefinition {
+                GeneratorDefinition::Class(Class {
                     class: Ident::new("test1", Span::call_site()),
-                    public: TokenStream::new(),
+                    public: false,
                     super_class: quote!{c::d::test3},
                     transitive_extends: vec![quote!{c::d::test3}],
                     implements: vec![],
@@ -956,9 +939,9 @@ mod generate_tests {
                     native_methods: vec![],
                     static_native_methods: vec![],
                 }),
-                GeneratorDefinition::Class(ClassGeneratorDefinition {
+                GeneratorDefinition::Class(Class {
                     class: Ident::new("test2", Span::call_site()),
-                    public: TokenStream::new(),
+                    public: false,
                     super_class: quote!{c::d::test4},
                     transitive_extends: vec![quote!{c::d::test4}],
                     implements: vec![],
@@ -1151,6 +1134,6 @@ mod generate_tests {
 
             impl<'a> Eq for test2<'a> {}
         };
-        assert_tokens_equals(generate(input), expected);
+        assert_tokens_equals(generate(&input), expected);
     }
 }

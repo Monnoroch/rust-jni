@@ -1,4 +1,4 @@
-use generate::*;
+use generate::{self, GeneratorData, GeneratorDefinition};
 use java_name::*;
 use parse::*;
 use proc_macro2::*;
@@ -23,14 +23,6 @@ fn populate_interface_extends_rec(
 fn populate_interface_extends(interface_extends: &mut HashMap<JavaName, HashSet<JavaName>>) {
     for key in interface_extends.keys().cloned().collect::<Vec<_>>() {
         populate_interface_extends_rec(interface_extends, &key);
-    }
-}
-
-fn public_token(public: bool) -> TokenStream {
-    if public {
-        quote!{pub}
-    } else {
-        TokenStream::new()
     }
 }
 
@@ -65,7 +57,7 @@ fn annotation_value_ident(annotations: &[Annotation], name: &str) -> Option<Iden
     })
 }
 
-fn to_generator_method(method: JavaClassMethod) -> ClassMethodGeneratorDefinition {
+fn to_generator_method(method: JavaClassMethod) -> generate::ClassMethod {
     let JavaClassMethod {
         name,
         public,
@@ -74,9 +66,8 @@ fn to_generator_method(method: JavaClassMethod) -> ClassMethodGeneratorDefinitio
         annotations,
         ..
     } = method;
-    let public = public_token(public);
     let java_name = Literal::string(&name.to_string());
-    ClassMethodGeneratorDefinition {
+    generate::ClassMethod {
         name: annotation_value_ident(&annotations, "RustName").unwrap_or(name),
         java_name,
         public,
@@ -92,9 +83,7 @@ fn to_generator_method(method: JavaClassMethod) -> ClassMethodGeneratorDefinitio
     }
 }
 
-fn to_generator_interface_method(
-    method: JavaInterfaceMethod,
-) -> InterfaceMethodGeneratorDefinition {
+fn to_generator_interface_method(method: JavaInterfaceMethod) -> generate::InterfaceMethod {
     let JavaInterfaceMethod {
         name,
         return_type,
@@ -102,7 +91,7 @@ fn to_generator_interface_method(
         annotations,
         ..
     } = method;
-    InterfaceMethodGeneratorDefinition {
+    generate::InterfaceMethod {
         name: annotation_value_ident(&annotations, "RustName").unwrap_or(name),
         return_type: return_type.as_rust_type(),
         argument_names: arguments
@@ -121,7 +110,7 @@ fn to_generator_interface_method_implementation(
     class_methods: &Vec<JavaClassMethod>,
     interface: &JavaName,
     super_class: &TokenStream,
-) -> InterfaceMethodImplementationGeneratorDefinition {
+) -> generate::InterfaceMethodImplementation {
     let JavaInterfaceMethod {
         name,
         return_type,
@@ -135,7 +124,7 @@ fn to_generator_interface_method_implementation(
             && class_method.arguments == arguments
     });
     let interface = interface.clone().with_double_colons();
-    InterfaceMethodImplementationGeneratorDefinition {
+    generate::InterfaceMethodImplementation {
         name: annotation_value_ident(&annotations, "RustName").unwrap_or(name),
         return_type: return_type.as_rust_type(),
         argument_names: arguments
@@ -157,7 +146,7 @@ fn to_generator_interface_method_implementation(
 fn to_generator_native_method(
     method: JavaNativeMethod,
     class_name: &JavaName,
-) -> NativeMethodGeneratorDefinition {
+) -> generate::NativeMethod {
     let JavaNativeMethod {
         name,
         public,
@@ -167,7 +156,6 @@ fn to_generator_native_method(
         annotations,
         ..
     } = method;
-    let public = public_token(public);
     let signatures = arguments
         .iter()
         .map(|argument| &argument.data_type)
@@ -183,7 +171,7 @@ fn to_generator_native_method(
         Span::call_site(),
     );
     let rust_name = annotation_value_ident(&annotations, "RustName").unwrap_or(name.clone());
-    NativeMethodGeneratorDefinition {
+    generate::NativeMethod {
         name,
         rust_name,
         java_name,
@@ -205,16 +193,15 @@ fn to_generator_native_method(
     }
 }
 
-fn to_generator_constructor(constructor: JavaConstructor) -> ConstructorGeneratorDefinition {
+fn to_generator_constructor(constructor: JavaConstructor) -> generate::Constructor {
     let JavaConstructor {
         public,
         arguments,
         annotations,
         ..
     } = constructor;
-    let public = public_token(public);
     let name = Ident::new("init", Span::call_site());
-    ConstructorGeneratorDefinition {
+    generate::Constructor {
         name: annotation_value_ident(&annotations, "RustName").unwrap_or(name),
         public,
         argument_names: arguments
@@ -356,7 +343,6 @@ pub fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                     ..
                 } = definition;
                 let definition_name = name.clone().name();
-                let public = public_token(public);
                 match definition {
                     JavaDefinitionKind::Class(class) => {
                         let JavaClass {
@@ -396,7 +382,7 @@ pub fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                         implements.sort_by(|left, right| left.to_string().cmp(&right.to_string()));
                         let mut implements = implements
                             .into_iter()
-                            .map(|name| InterfaceImplementationGeneratorDefinition {
+                            .map(|name| generate::InterfaceImplementation {
                                 interface: name.clone().with_double_colons(),
                                 methods: definitions
                                     .definitions
@@ -468,7 +454,7 @@ pub fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             .cloned()
                             .map(|method| to_generator_native_method(method, &name))
                             .collect();
-                        GeneratorDefinition::Class(ClassGeneratorDefinition {
+                        GeneratorDefinition::Class(generate::Class {
                             class: definition_name,
                             public,
                             super_class,
@@ -492,7 +478,7 @@ pub fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                             .cloned()
                             .map(to_generator_interface_method)
                             .collect();
-                        GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                        GeneratorDefinition::Interface(generate::Interface {
                             interface: definition_name,
                             public,
                             methods,
@@ -514,7 +500,7 @@ mod to_generator_data_tests {
 
     #[test]
     fn empty() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![],
                 metadata: Metadata {
@@ -523,13 +509,13 @@ mod to_generator_data_tests {
             }),
             GeneratorData {
                 definitions: vec![],
-            }
+            },
         );
     }
 
     #[test]
     fn metadata_only() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![],
                 metadata: Metadata {
@@ -555,13 +541,13 @@ mod to_generator_data_tests {
             }),
             GeneratorData {
                 definitions: vec![],
-            }
+            },
         );
     }
 
     #[test]
     fn one_class() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
                     name: JavaName(quote!{a b test1}),
@@ -579,9 +565,9 @@ mod to_generator_data_tests {
                 },
             }),
             GeneratorData {
-                definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
+                definitions: vec![GeneratorDefinition::Class(generate::Class {
                     class: Ident::new("test1", Span::call_site()),
-                    public: TokenStream::new(),
+                    public: false,
                     super_class: quote!{::c::d::test2},
                     transitive_extends: vec![quote!{::c::d::test2}],
                     implements: vec![],
@@ -593,13 +579,13 @@ mod to_generator_data_tests {
                     static_native_methods: vec![],
                     constructors: vec![],
                 })],
-            }
+            },
         );
     }
 
     #[test]
     fn one_class_no_extends() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
                     name: JavaName(quote!{a b test1}),
@@ -617,9 +603,9 @@ mod to_generator_data_tests {
                 },
             }),
             GeneratorData {
-                definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
+                definitions: vec![GeneratorDefinition::Class(generate::Class {
                     class: Ident::new("test1", Span::call_site()),
-                    public: TokenStream::new(),
+                    public: false,
                     super_class: quote!{::java::lang::Object},
                     transitive_extends: vec![quote!{::java::lang::Object}],
                     implements: vec![],
@@ -631,13 +617,13 @@ mod to_generator_data_tests {
                     static_native_methods: vec![],
                     constructors: vec![],
                 })],
-            }
+            },
         );
     }
 
     #[test]
     fn one_class_extends_recursive() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
@@ -684,9 +670,9 @@ mod to_generator_data_tests {
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test2", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         super_class: quote!{::e::f::test3},
                         transitive_extends: vec![
                             quote!{::e::f::test3},
@@ -702,9 +688,9 @@ mod to_generator_data_tests {
                         static_native_methods: vec![],
                         constructors: vec![],
                     }),
-                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test1", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         super_class: quote!{::c::d::test2},
                         transitive_extends: vec![
                             quote!{::c::d::test2},
@@ -722,13 +708,13 @@ mod to_generator_data_tests {
                         constructors: vec![],
                     }),
                 ],
-            }
+            },
         );
     }
 
     #[test]
     fn one_class_implements() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
@@ -766,23 +752,23 @@ mod to_generator_data_tests {
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                    GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test4", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         extends: vec![],
                         methods: vec![],
                     }),
-                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test1", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         super_class: quote!{::java::lang::Object},
                         transitive_extends: vec![quote!{::java::lang::Object}],
                         implements: vec![
-                            InterfaceImplementationGeneratorDefinition {
+                            generate::InterfaceImplementation {
                                 interface: quote!{::e::f::test3},
                                 methods: vec![],
                             },
-                            InterfaceImplementationGeneratorDefinition {
+                            generate::InterfaceImplementation {
                                 interface: quote!{::e::f::test4},
                                 methods: vec![],
                             },
@@ -796,13 +782,13 @@ mod to_generator_data_tests {
                         constructors: vec![],
                     }),
                 ],
-            }
+            },
         );
     }
 
     #[test]
     fn one_class_implements_recursive() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
@@ -850,27 +836,27 @@ mod to_generator_data_tests {
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                    GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test3", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         extends: vec![quote!{::e::f::test4}],
                         methods: vec![],
                     }),
-                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test1", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         super_class: quote!{::java::lang::Object},
                         transitive_extends: vec![quote!{::java::lang::Object}],
                         implements: vec![
-                            InterfaceImplementationGeneratorDefinition {
+                            generate::InterfaceImplementation {
                                 interface: quote!{::e::f::test3},
                                 methods: vec![],
                             },
-                            InterfaceImplementationGeneratorDefinition {
+                            generate::InterfaceImplementation {
                                 interface: quote!{::e::f::test4},
                                 methods: vec![],
                             },
-                            InterfaceImplementationGeneratorDefinition {
+                            generate::InterfaceImplementation {
                                 interface: quote!{::g::h::test5},
                                 methods: vec![],
                             },
@@ -884,13 +870,13 @@ mod to_generator_data_tests {
                         constructors: vec![],
                     }),
                 ],
-            }
+            },
         );
     }
 
     #[test]
     fn one_class_implements_recursive_duplicated() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
@@ -930,29 +916,29 @@ mod to_generator_data_tests {
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                    GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test4", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         extends: vec![],
                         methods: vec![],
                     }),
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                    GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test3", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         extends: vec![quote!{::g::h::test4}],
                         methods: vec![],
                     }),
-                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test1", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         super_class: quote!{::java::lang::Object},
                         transitive_extends: vec![quote!{::java::lang::Object}],
                         implements: vec![
-                            InterfaceImplementationGeneratorDefinition {
+                            generate::InterfaceImplementation {
                                 interface: quote!{::e::f::test3},
                                 methods: vec![],
                             },
-                            InterfaceImplementationGeneratorDefinition {
+                            generate::InterfaceImplementation {
                                 interface: quote!{::g::h::test4},
                                 methods: vec![],
                             },
@@ -966,13 +952,13 @@ mod to_generator_data_tests {
                         constructors: vec![],
                     }),
                 ],
-            }
+            },
         );
     }
 
     #[test]
     fn one_class_public() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
                     name: JavaName(quote!{a b test1}),
@@ -990,9 +976,9 @@ mod to_generator_data_tests {
                 },
             }),
             GeneratorData {
-                definitions: vec![GeneratorDefinition::Class(ClassGeneratorDefinition {
+                definitions: vec![GeneratorDefinition::Class(generate::Class {
                     class: Ident::new("test1", Span::call_site()),
-                    public: quote!{pub},
+                    public: true,
                     super_class: quote!{::java::lang::Object},
                     transitive_extends: vec![quote!{::java::lang::Object}],
                     implements: vec![],
@@ -1004,13 +990,13 @@ mod to_generator_data_tests {
                     static_native_methods: vec![],
                     constructors: vec![],
                 })],
-            }
+            },
         );
     }
 
     #[test]
     fn one_interface() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
                     name: JavaName(quote!{a b test1}),
@@ -1025,21 +1011,19 @@ mod to_generator_data_tests {
                 },
             }),
             GeneratorData {
-                definitions: vec![GeneratorDefinition::Interface(
-                    InterfaceGeneratorDefinition {
-                        interface: Ident::new("test1", Span::call_site()),
-                        public: TokenStream::new(),
-                        extends: vec![],
-                        methods: vec![],
-                    },
-                )],
-            }
+                definitions: vec![GeneratorDefinition::Interface(generate::Interface {
+                    interface: Ident::new("test1", Span::call_site()),
+                    public: false,
+                    extends: vec![],
+                    methods: vec![],
+                })],
+            },
         );
     }
 
     #[test]
     fn one_interface_extends() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
@@ -1084,26 +1068,26 @@ mod to_generator_data_tests {
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                    GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test3", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         extends: vec![],
                         methods: vec![],
                     }),
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                    GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test1", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         extends: vec![quote!{::c::d::test2}, quote!{::e::f::test3}],
                         methods: vec![],
                     }),
                 ],
-            }
+            },
         );
     }
 
     #[test]
     fn one_interface_public() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
                     name: JavaName(quote!{a b test1}),
@@ -1118,21 +1102,19 @@ mod to_generator_data_tests {
                 },
             }),
             GeneratorData {
-                definitions: vec![GeneratorDefinition::Interface(
-                    InterfaceGeneratorDefinition {
-                        interface: Ident::new("test1", Span::call_site()),
-                        public: quote!{pub},
-                        extends: vec![],
-                        methods: vec![],
-                    },
-                )],
-            }
+                definitions: vec![GeneratorDefinition::Interface(generate::Interface {
+                    interface: Ident::new("test1", Span::call_site()),
+                    public: true,
+                    extends: vec![],
+                    methods: vec![],
+                })],
+            },
         );
     }
 
     #[test]
     fn multiple() {
-        assert_eq!(
+        assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
@@ -1180,21 +1162,21 @@ mod to_generator_data_tests {
             }),
             GeneratorData {
                 definitions: vec![
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                    GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test_if1", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         extends: vec![],
                         methods: vec![],
                     }),
-                    GeneratorDefinition::Interface(InterfaceGeneratorDefinition {
+                    GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test_if2", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         extends: vec![],
                         methods: vec![],
                     }),
-                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test1", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         super_class: quote!{::java::lang::Object},
                         transitive_extends: vec![quote!{::java::lang::Object}],
                         implements: vec![],
@@ -1206,9 +1188,9 @@ mod to_generator_data_tests {
                         static_native_methods: vec![],
                         constructors: vec![],
                     }),
-                    GeneratorDefinition::Class(ClassGeneratorDefinition {
+                    GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test2", Span::call_site()),
-                        public: TokenStream::new(),
+                        public: false,
                         super_class: quote!{::java::lang::Object},
                         transitive_extends: vec![quote!{::java::lang::Object}],
                         implements: vec![],
@@ -1221,7 +1203,12 @@ mod to_generator_data_tests {
                         constructors: vec![],
                     }),
                 ],
-            }
+            },
         );
     }
+}
+
+#[cfg(test)]
+fn assert_generator_data_equals(left: GeneratorData, right: GeneratorData) {
+    assert_eq!(format!("{:?}", left), format!("{:?}", right),);
 }
