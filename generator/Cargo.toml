@@ -2,6 +2,16 @@
 name = "rust-jni-generator"
 version = "0.1.0"
 authors = ["Monnoroch <monnoroch@gmail.com>"]
+license = "MIT"
+description = "A package for generating Java class wrappers that use rust-jni crate"
+repository = "https://github.com/Monnoroch/rust-jni"
+documentation = "https://docs.rs/rust-jni-generator/"
+keywords = ["java"]
+include = [
+	"Cargo.toml",
+	"src/**/*.rs",
+	"tests/**/*.rs",
+]
 
 [dependencies]
 quote = "0.6.4"
