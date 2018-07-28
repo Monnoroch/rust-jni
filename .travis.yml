@@ -16,6 +16,7 @@ install:
   - rustup component add rustfmt-preview
 script:
   - ci/check-format.sh
+  - ci/build-against-master.sh
   - ci/test.sh
 notifications:
   email: false
