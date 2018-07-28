@@ -5,7 +5,7 @@ authors = ["Monnoroch <monnoroch@gmail.com>"]
 
 [dependencies]
 jni-sys = "0.3.0"
-rust-jni = { path = "../../../rust-jni" }
+rust-jni = "0.1.0"
 rust-jni-generator = { path = "../../../rust-jni/generator" }
 
 [build-dependencies]
