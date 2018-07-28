@@ -187,6 +187,10 @@ impl JavaName {
                 Some(quote!{f32})
             } else if is_identifier(&token, "double") {
                 Some(quote!{f64})
+            } else if is_identifier(&token, "void") {
+                Some(quote!{()})
+            } else if is_identifier(&token, "short") {
+                Some(quote!{i64})
             } else {
                 None
             }
@@ -216,6 +220,10 @@ impl JavaName {
                 )
             } else if is_identifier(&token, "double") {
                 <f64 as rust_jni::JavaType>::__signature().to_owned()
+            } else if is_identifier(&token, "void") {
+                <() as rust_jni::JavaType>::__signature().to_owned()
+            } else if is_identifier(&token, "short") {
+                <i16 as rust_jni::JavaType>::__signature().to_owned()
             } else {
                 format!("L{}_2", self.clone().with_underscores())
             }
@@ -243,6 +251,20 @@ impl JavaName {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Annotation {
+    name: Ident,
+    value: TokenStream,
+}
+
+impl PartialEq for Annotation {
+    fn eq(&self, other: &Self) -> bool {
+        format!("{:?}", self) == format!("{:?}", other)
+    }
+}
+
+impl Eq for Annotation {}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct MethodArgument {
     name: Ident,
@@ -254,6 +276,7 @@ struct JavaInterfaceMethod {
     name: Ident,
     return_type: JavaName,
     arguments: Vec<MethodArgument>,
+    annotations: Vec<Annotation>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -263,6 +286,7 @@ struct JavaClassMethod {
     arguments: Vec<MethodArgument>,
     public: bool,
     is_static: bool,
+    annotations: Vec<Annotation>,
 }
 
 #[derive(Debug, Clone)]
@@ -273,6 +297,7 @@ struct JavaNativeMethod {
     public: bool,
     is_static: bool,
     code: Group,
+    annotations: Vec<Annotation>,
 }
 
 impl PartialEq for JavaNativeMethod {
@@ -287,6 +312,7 @@ impl Eq for JavaNativeMethod {}
 struct JavaConstructor {
     arguments: Vec<MethodArgument>,
     public: bool,
+    annotations: Vec<Annotation>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -352,6 +378,47 @@ struct JavaDefinitions {
     metadata: Metadata,
 }
 
+fn parse_annotation(tokens: &[TokenTree]) -> Annotation {
+    let name = match tokens[0] {
+        TokenTree::Ident(ref identifier) => identifier.clone(),
+        _ => unreachable!(),
+    };
+    let value = match tokens[1] {
+        TokenTree::Group(ref group) => group.stream(),
+        _ => unreachable!(),
+    };
+    Annotation {
+        name,
+        value: TokenStream::from_iter(value.into_iter()),
+    }
+}
+
+fn parse_annotations(tokens: &[TokenTree]) -> Vec<Annotation> {
+    if tokens.len() == 0 {
+        vec![]
+    } else {
+        match tokens[0] {
+            TokenTree::Punct(ref punct) => {
+                if punct.spacing() == Spacing::Alone && punct.as_char() == '@' {
+                    tokens
+                        .split(|token| match token {
+                            TokenTree::Punct(punct) => {
+                                punct.spacing() == Spacing::Alone && punct.as_char() == '@'
+                            }
+                            _ => false,
+                        })
+                        .filter(|slice| !slice.is_empty())
+                        .map(parse_annotation)
+                        .collect()
+                } else {
+                    vec![]
+                }
+            }
+            _ => vec![],
+        }
+    }
+}
+
 fn comma_separated_names(tokens: impl Iterator<Item = TokenTree>) -> Vec<JavaName> {
     let tokens = tokens.collect::<Vec<_>>();
     tokens
@@ -359,7 +426,7 @@ fn comma_separated_names(tokens: impl Iterator<Item = TokenTree>) -> Vec<JavaNam
             TokenTree::Punct(punct) => punct.spacing() == Spacing::Alone && punct.as_char() == ',',
             _ => false,
         })
-        .filter(|slice| slice.len() > 0)
+        .filter(|slice| !slice.is_empty())
         .map(|slice| JavaName::from_tokens(slice.iter()))
         .collect()
 }
@@ -475,12 +542,16 @@ fn parse_metadata(tokens: TokenStream) -> Metadata {
 }
 
 fn is_constructor(tokens: &[TokenTree], class_name: &JavaName) -> bool {
-    let public = tokens.iter().any(|token| is_identifier(token, "public"));
-    let tokens = if public {
-        &tokens[1..tokens.len() - 1]
-    } else {
-        &tokens[0..tokens.len() - 1]
-    };
+    let class_name_len = class_name
+        .clone()
+        .with_dots()
+        .into_iter()
+        .collect::<Vec<_>>()
+        .len();
+    if tokens.len() <= class_name_len {
+        return false;
+    }
+    let tokens = &tokens[tokens.len() - class_name_len - 1..tokens.len() - 1];
     TokenStream::from_iter(tokens.iter().cloned()).to_string()
         == class_name.clone().with_dots().to_string()
 }
@@ -524,7 +595,12 @@ fn parse_method(tokens: &[TokenTree]) -> JavaClassMethod {
         TokenTree::Ident(ident) => ident,
         token => panic!("Expected method name, got {:?}.", token),
     };
-    let return_type = JavaName::from_tokens(tokens[0..tokens.len() - 2].iter());
+    let annotations = parse_annotations(&tokens[0..tokens.len() - 2]);
+    let return_type = JavaName::from_tokens(
+        tokens[0..tokens.len() - 2]
+            .iter()
+            .skip(3 * annotations.len()),
+    );
     let arguments = parse_method_arguments(tokens[tokens.len() - 1].clone());
     JavaClassMethod {
         public,
@@ -532,6 +608,7 @@ fn parse_method(tokens: &[TokenTree]) -> JavaClassMethod {
         return_type,
         arguments,
         is_static,
+        annotations,
     }
 }
 
@@ -541,12 +618,18 @@ fn parse_interface_method(tokens: &[TokenTree]) -> JavaInterfaceMethod {
         TokenTree::Ident(ident) => ident,
         token => panic!("Expected method name, got {:?}.", token),
     };
-    let return_type = JavaName::from_tokens(tokens[0..tokens.len() - 2].iter());
+    let annotations = parse_annotations(&tokens[0..tokens.len() - 2]);
+    let return_type = JavaName::from_tokens(
+        tokens[0..tokens.len() - 2]
+            .iter()
+            .skip(3 * annotations.len()),
+    );
     let arguments = parse_method_arguments(tokens[tokens.len() - 1].clone());
     JavaInterfaceMethod {
         name,
         return_type,
         arguments,
+        annotations,
     }
 }
 
@@ -576,7 +659,12 @@ fn parse_native_method(tokens: &[TokenTree]) -> JavaNativeMethod {
         TokenTree::Ident(ident) => ident,
         token => panic!("Expected method name, got {:?}.", token),
     };
-    let return_type = JavaName::from_tokens(tokens[0..tokens.len() - 3].iter());
+    let annotations = parse_annotations(&tokens[0..tokens.len() - 3]);
+    let return_type = JavaName::from_tokens(
+        tokens[0..tokens.len() - 3]
+            .iter()
+            .skip(3 * annotations.len()),
+    );
     let arguments = parse_method_arguments(tokens[tokens.len() - 2].clone());
     JavaNativeMethod {
         public,
@@ -585,6 +673,7 @@ fn parse_native_method(tokens: &[TokenTree]) -> JavaNativeMethod {
         arguments,
         is_static,
         code,
+        annotations,
     }
 }
 
@@ -595,8 +684,13 @@ fn parse_constructor(tokens: &[TokenTree]) -> JavaConstructor {
         .filter(|token| !is_identifier(token, "public"))
         .cloned()
         .collect::<Vec<_>>();
+    let annotations = parse_annotations(&tokens[0..tokens.len() - 1]);
     let arguments = parse_method_arguments(tokens[tokens.len() - 1].clone());
-    JavaConstructor { public, arguments }
+    JavaConstructor {
+        public,
+        arguments,
+        annotations,
+    }
 }
 
 fn parse_java_definition(input: TokenStream) -> JavaDefinitions {
@@ -1231,6 +1325,7 @@ struct InterfaceMethodImplementationGeneratorDefinition {
 #[derive(Debug, Clone)]
 struct NativeMethodGeneratorDefinition {
     name: Ident,
+    rust_name: Ident,
     java_name: Ident,
     return_type: TokenStream,
     argument_names: Vec<Ident>,
@@ -1326,18 +1421,50 @@ fn public_token(public: bool) -> TokenStream {
     }
 }
 
+fn annotation_value(annotations: &[Annotation], name: &str) -> Option<TokenStream> {
+    let values = annotations
+        .iter()
+        .filter_map(|annotation| {
+            if annotation.name == name.to_string() {
+                Some(annotation.value.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    if values.len() > 1 {
+        panic!(
+            "Only one @{} annotation per definition can be provided.",
+            name
+        );
+    }
+    if values.is_empty() {
+        None
+    } else {
+        Some(values[0].clone())
+    }
+}
+
+fn annotation_value_ident(annotations: &[Annotation], name: &str) -> Option<Ident> {
+    annotation_value(annotations, name).map(|value| match value.into_iter().next().unwrap() {
+        TokenTree::Ident(identifier) => identifier,
+        _ => unreachable!(),
+    })
+}
+
 fn to_generator_method(method: JavaClassMethod) -> ClassMethodGeneratorDefinition {
     let JavaClassMethod {
         name,
         public,
         return_type,
         arguments,
+        annotations,
         ..
     } = method;
     let public = public_token(public);
     let java_name = Literal::string(&name.to_string());
     ClassMethodGeneratorDefinition {
-        name,
+        name: annotation_value_ident(&annotations, "RustName").unwrap_or(name),
         java_name,
         public,
         return_type: return_type.as_rust_type(),
@@ -1359,10 +1486,11 @@ fn to_generator_interface_method(
         name,
         return_type,
         arguments,
+        annotations,
         ..
     } = method;
     InterfaceMethodGeneratorDefinition {
-        name,
+        name: annotation_value_ident(&annotations, "RustName").unwrap_or(name),
         return_type: return_type.as_rust_type(),
         argument_names: arguments
             .iter()
@@ -1385,6 +1513,7 @@ fn to_generator_interface_method_implementation(
         name,
         return_type,
         arguments,
+        annotations,
         ..
     } = method;
     let class_has_method = class_methods.iter().any(|class_method| {
@@ -1394,7 +1523,7 @@ fn to_generator_interface_method_implementation(
     });
     let interface = interface.clone().with_double_colons();
     InterfaceMethodImplementationGeneratorDefinition {
-        name,
+        name: annotation_value_ident(&annotations, "RustName").unwrap_or(name),
         return_type: return_type.as_rust_type(),
         argument_names: arguments
             .iter()
@@ -1422,6 +1551,7 @@ fn to_generator_native_method(
         return_type,
         arguments,
         code,
+        annotations,
         ..
     } = method;
     let public = public_token(public);
@@ -1439,8 +1569,10 @@ fn to_generator_native_method(
         ),
         Span::call_site(),
     );
+    let rust_name = annotation_value_ident(&annotations, "RustName").unwrap_or(name.clone());
     NativeMethodGeneratorDefinition {
         name,
+        rust_name,
         java_name,
         public,
         code,
@@ -1462,12 +1594,15 @@ fn to_generator_native_method(
 
 fn to_generator_constructor(constructor: JavaConstructor) -> ConstructorGeneratorDefinition {
     let JavaConstructor {
-        public, arguments, ..
+        public,
+        arguments,
+        annotations,
+        ..
     } = constructor;
     let public = public_token(public);
     let name = Ident::new("init", Span::call_site());
     ConstructorGeneratorDefinition {
-        name,
+        name: annotation_value_ident(&annotations, "RustName").unwrap_or(name),
         public,
         argument_names: arguments
             .iter()
@@ -2577,7 +2712,7 @@ fn generate_static_class_method(method: ClassMethodGeneratorDefinition) -> Token
 
 fn generate_class_native_method(method: NativeMethodGeneratorDefinition) -> TokenStream {
     let NativeMethodGeneratorDefinition {
-        name,
+        rust_name,
         return_type,
         public,
         argument_names,
@@ -2586,7 +2721,7 @@ fn generate_class_native_method(method: NativeMethodGeneratorDefinition) -> Toke
         ..
     } = method;
     quote!{
-        #public fn #name(
+        #public fn #rust_name(
             &self,
             #(#argument_names: #argument_types,)*
             token: &::rust_jni::NoException<'a>,
@@ -2598,7 +2733,7 @@ fn generate_class_native_method(method: NativeMethodGeneratorDefinition) -> Toke
 
 fn generate_static_class_native_method(method: NativeMethodGeneratorDefinition) -> TokenStream {
     let NativeMethodGeneratorDefinition {
-        name,
+        rust_name,
         return_type,
         public,
         argument_names,
@@ -2607,7 +2742,7 @@ fn generate_static_class_native_method(method: NativeMethodGeneratorDefinition) 
         ..
     } = method;
     quote!{
-        #public fn #name(
+        #public fn #rust_name(
             env: &'a ::rust_jni::JniEnv<'a>,
             #(#argument_names: #argument_types,)*
             token: &::rust_jni::NoException<'a>,
@@ -2622,7 +2757,7 @@ fn generate_class_native_method_function(
     class_name: &Ident,
 ) -> TokenStream {
     let NativeMethodGeneratorDefinition {
-        name,
+        rust_name,
         java_name,
         return_type,
         argument_names,
@@ -2659,7 +2794,7 @@ fn generate_class_native_method_function(
 
                 let object = <#class_name as ::rust_jni::__generator::FromJni>::__from_jni(env, object);
                 object
-                    .#name(
+                    .#rust_name(
                         #(::rust_jni::__generator::FromJni::__from_jni(env, #argument_names_3),)*
                         &token,
                     )
@@ -2680,6 +2815,7 @@ fn generate_static_class_native_method_function(
 ) -> TokenStream {
     let NativeMethodGeneratorDefinition {
         name,
+        rust_name,
         java_name,
         return_type,
         argument_names,
@@ -2729,7 +2865,7 @@ fn generate_static_class_native_method_function(
                     panic!(#class_mismatch_error);
                 }
 
-                #class_name::#name(
+                #class_name::#rust_name(
                     env,
                     #(::rust_jni::__generator::FromJni::__from_jni(env, #argument_names_3),)*
                     &token,
@@ -4197,19 +4333,27 @@ mod java_generate_tests {
             }
 
             public interface a.b.TestInterface4 extends c.d.TestInterface2, a.b.TestInterface3 {
+                @RustName(primitive_func_3)
                 long primitiveFunc3(int arg1, char arg2);
+                @RustName(object_func_3)
                 c.d.TestClass2 objectFunc3(a.b.TestClass3 arg);
             }
 
             public class a.b.TestClass3 extends c.d.TestClass2 implements e.f.TestInterface1, a.b.TestInterface4 {
+                @RustName(init)
                 public a.b.TestClass3(int arg1, a.b.TestClass3 arg2);
 
+                @RustName(primitive_func_3)
                 long primitiveFunc3(int arg1, char arg2);
+                @RustName(object_func_3)
                 public c.d.TestClass2 objectFunc3(a.b.TestClass3 arg);
 
+                @RustName(primitive_static_func_3)
                 static long primitiveStaticFunc3(int arg1, char arg2);
+                @RustName(object_static_func_3)
                 public static c.d.TestClass2 objectStaticFunc3(a.b.TestClass3 arg);
 
+                @RustName(primitive_native_func_3)
                 public native long primitiveNativeFunc3(int arg1, char arg2) {
                     println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, self);
                     Ok(0)
@@ -4219,6 +4363,7 @@ mod java_generate_tests {
                     Ok(arg)
                 };
 
+                @RustName(primitive_static_native_func_3)
                 static native long primitiveStaticNativeFunc3(int arg1, char arg2) {
                     println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, env);
                     Ok(0)
@@ -4234,6 +4379,7 @@ mod java_generate_tests {
 
             metadata {
                 interface e.f.TestInterface1 {
+                    @RustName(primitive_interface_func_1)
                     long primitiveInterfaceFunc1(int arg1, char arg2);
                 }
                 interface c.d.TestInterface2 extends e.f.TestInterface1 {}
@@ -4259,14 +4405,14 @@ mod java_generate_tests {
             }
 
             pub trait TestInterface4<'a>: ::c::d::TestInterface2<'a> + ::a::b::TestInterface3<'a> {
-                fn primitiveFunc3(
+                fn primitive_func_3(
                     &self,
                     arg1: i32,
                     arg2: char,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, i64>;
 
-                fn objectFunc3(
+                fn object_func_3(
                     &self,
                     arg: &::a::b::TestClass3<'a>,
                     token: &::rust_jni::NoException<'a>,
@@ -4375,7 +4521,7 @@ mod java_generate_tests {
                     }
                 }
 
-                fn primitiveFunc3(
+                fn primitive_func_3(
                     &self,
                     arg1: i32,
                     arg2: char,
@@ -4395,7 +4541,7 @@ mod java_generate_tests {
                     }
                 }
 
-                pub fn objectFunc3(
+                pub fn object_func_3(
                     &self,
                     arg: &::a::b::TestClass3<'a>,
                     token: &::rust_jni::NoException<'a>,
@@ -4453,7 +4599,7 @@ mod java_generate_tests {
                     }
                 }
 
-                fn primitiveStaticFunc3(
+                fn primitive_static_func_3(
                     env: &'a ::rust_jni::JniEnv<'a>,
                     arg1: i32,
                     arg2: char,
@@ -4473,7 +4619,7 @@ mod java_generate_tests {
                     }
                 }
 
-                pub fn objectStaticFunc3(
+                pub fn object_static_func_3(
                     env: &'a ::rust_jni::JniEnv<'a>,
                     arg: &::a::b::TestClass3<'a>,
                     token: &::rust_jni::NoException<'a>,
@@ -4492,7 +4638,7 @@ mod java_generate_tests {
                     }
                 }
 
-                pub fn primitiveNativeFunc3(
+                pub fn primitive_native_func_3(
                     &self,
                     arg1: i32,
                     arg2: char,
@@ -4515,7 +4661,7 @@ mod java_generate_tests {
                     }
                 }
 
-                fn primitiveStaticNativeFunc3(
+                fn primitive_static_native_func_3(
                     env: &'a ::rust_jni::JniEnv<'a>,
                     arg1: i32,
                     arg2: char,
@@ -4567,7 +4713,7 @@ mod java_generate_tests {
 
                     let object = <TestClass3 as ::rust_jni::__generator::FromJni>::__from_jni(env, object);
                     object
-                        .primitiveNativeFunc3(
+                        .primitive_native_func_3(
                             ::rust_jni::__generator::FromJni::__from_jni(env, arg1),
                             ::rust_jni::__generator::FromJni::__from_jni(env, arg2),
                             &token,
@@ -4645,7 +4791,7 @@ mod java_generate_tests {
                         panic!("Native method primitiveStaticNativeFunc3 does not belong to class TestClass3");
                     }
 
-                    TestClass3::primitiveStaticNativeFunc3(
+                    TestClass3::primitive_static_native_func_3(
                         env,
                         ::rust_jni::__generator::FromJni::__from_jni(env, arg1),
                         ::rust_jni::__generator::FromJni::__from_jni(env, arg2),
@@ -4730,21 +4876,21 @@ mod java_generate_tests {
             }
 
             impl<'a> ::a::b::TestInterface4<'a> for TestClass3<'a> {
-                fn primitiveFunc3(
+                fn primitive_func_3(
                     &self,
                     arg1: i32,
                     arg2: char,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, i64> {
-                    Self::primitiveFunc3(self, arg1, arg2, token)
+                    Self::primitive_func_3(self, arg1, arg2, token)
                 }
 
-                fn objectFunc3(
+                fn object_func_3(
                     &self,
                     arg: &::a::b::TestClass3<'a>,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, ::c::d::TestClass2<'a> > {
-                    Self::objectFunc3(self, arg, token)
+                    Self::object_func_3(self, arg, token)
                 }
             }
 
@@ -4752,14 +4898,14 @@ mod java_generate_tests {
             }
 
             impl<'a> ::e::f::TestInterface1<'a> for TestClass3<'a> {
-                fn primitiveInterfaceFunc1(
+                fn primitive_interface_func_1(
                     &self,
                     arg1: i32,
                     arg2: char,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, i64> {
                     < ::c::d::TestClass2 as ::e::f::TestInterface1 >
-                        ::primitiveInterfaceFunc1(self, arg1, arg2, token)
+                        ::primitive_interface_func_1(self, arg1, arg2, token)
                 }
             }
         };
