@@ -1,3 +1,4 @@
+sudo: false
 dist: trusty
 language: rust
 rust:
@@ -18,5 +19,39 @@ script:
   - ci/check-format.sh
   - ci/build-against-master.sh
   - ci/test.sh
+jobs:
+  include:
+    - stage: "Test release versions of all crates"
+      if: fork = false AND branch = master AND commit_message ~= /!sudo publish (rust-jni|rust-jni-generator|java)/
+      rust: nightly
+      jdk: openjdk8
+      before_script:
+        - jdk_switcher use $JDK
+      script:
+        - ci/test.sh
+        - cargo package
+        - (cd generator && cargo package)
+        - (cd java && cargo package)
+    - stage: "Publish rust-jni"
+      if: fork = false AND branch = master AND commit_message ~= /!sudo publish rust-jni/
+      rust: stable
+      jdk: openjdk8
+      script:
+        - cargo login $CARGO_TOKEN
+        - cargo publish
+    - stage: "Publish rust-jni-generator"
+      if: fork = false AND branch = master AND commit_message ~= /!sudo publish rust-jni-generator/
+      rust: nightly
+      jdk: openjdk8
+      script:
+        - cargo login $CARGO_TOKEN
+        - (cd generator && cargo publish)
+    - stage: "Publish java"
+      if: fork = false AND branch = master AND commit_message ~= /!sudo publish java/
+      rust: stable
+      jdk: openjdk8
+      script:
+        - cargo login $CARGO_TOKEN
+        - (cd java && cargo publish)
 notifications:
   email: false
