@@ -2,6 +2,11 @@
 name = "rust-jni"
 version = "0.1.0"
 authors = ["Monnoroch <monnoroch@gmail.com>"]
+exclude = [
+    "ci/*",
+    ".travis.yml",
+    ".gitignore",
+]
 
 [dependencies]
 cesu8 = "1.1.0"
