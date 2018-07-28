@@ -37,6 +37,7 @@ dependencies = [
 [[package]]
 name = "rust-jni-generator"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -56,7 +57,7 @@ version = "0.1.0"
 dependencies = [
  "jni-sys 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust-jni 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rust-jni-generator 0.1.0",
+ "rust-jni-generator 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "walkdir 2.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -107,6 +108,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum proc-macro2 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)" = "cccdc7557a98fe98453030f077df7f3a042052fae465bb61d2c2c41435cfd9b6"
 "checksum quote 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)" = "b71f9f575d55555aa9c06188be9d4e2bfc83ed02537948ac0d520c24d0419f1a"
 "checksum rust-jni 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "014b18b1f1fecac4d8b48d5676ab7edfce5da285ce96bed98b8d18beb4c51194"
+"checksum rust-jni-generator 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "0410425f600ee9bfe7f2b941f01fae13aa1fda5c3d08007a8404dc738a00a288"
 "checksum same-file 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "cfb6eded0b06a0b512c8ddbcf04089138c9b4362c2f696f3c3d76039d68f3637"
 "checksum unicode-xid 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "fc72304796d0818e357ead4e000d19c9c174ab23dc11093ac919054d20a6a7fc"
 "checksum walkdir 2.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "63636bd0eb3d00ccb8b9036381b526efac53caf112b7783b730ab3f8e44da369"
