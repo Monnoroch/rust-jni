@@ -6,7 +6,7 @@ authors = ["Monnoroch <monnoroch@gmail.com>"]
 [dependencies]
 quote = "0.6.4"
 proc-macro2 = "0.4.9"
-rust-jni = { path = "../../rust-jni" }
+rust-jni = "0.1.0"
 
 [dev-dependencies]
 jni-sys = "0.3.0"
