@@ -3,7 +3,6 @@ use java_name::*;
 use parse::*;
 use proc_macro2::*;
 use std::collections::{HashMap, HashSet};
-use std::iter;
 
 fn populate_interface_extends_rec(
     interface_extends: &mut HashMap<JavaName, HashSet<JavaName>>,
@@ -108,8 +107,6 @@ fn to_generator_interface_method(method: JavaInterfaceMethod) -> generate::Inter
 fn to_generator_interface_method_implementation(
     method: JavaInterfaceMethod,
     class_methods: &Vec<JavaClassMethod>,
-    interface: &JavaName,
-    super_class: &TokenStream,
 ) -> generate::InterfaceMethodImplementation {
     let JavaInterfaceMethod {
         name,
@@ -123,7 +120,6 @@ fn to_generator_interface_method_implementation(
             && class_method.return_type == return_type
             && class_method.arguments == arguments
     });
-    let interface = interface.clone().with_double_colons();
     generate::InterfaceMethodImplementation {
         name: annotation_value_ident(&annotations, "RustName").unwrap_or(name),
         return_type: return_type.as_rust_type(),
@@ -135,12 +131,7 @@ fn to_generator_interface_method_implementation(
             .iter()
             .map(|argument| argument.data_type.clone().as_rust_type_reference())
             .collect(),
-        // TODO: make this a template.
-        class_cast: if class_has_method {
-            quote!{Self}
-        } else {
-            quote!{ <#super_class as #interface> }
-        },
+        class_has_method,
     }
 }
 
@@ -391,11 +382,9 @@ pub fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                                     .filter(|definition| definition.name == name)
                                     .next()
                                     .map(|definition| match definition.definition {
-                                        JavaDefinitionKind::Interface(ref interface) => interface
-                                            .methods
-                                            .clone()
-                                            .into_iter()
-                                            .zip(iter::repeat(definition.name.clone())),
+                                        JavaDefinitionKind::Interface(ref interface) => {
+                                            interface.methods.clone()
+                                        }
                                         _ => unreachable!(),
                                     })
                                     .or(definitions
@@ -407,21 +396,15 @@ pub fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                                         .map(|definition| match definition.definition {
                                             JavaDefinitionMetadataKind::Interface(
                                                 ref interface,
-                                            ) => interface
-                                                .methods
-                                                .clone()
-                                                .into_iter()
-                                                .zip(iter::repeat(definition.name.clone())),
+                                            ) => interface.methods.clone(),
                                             _ => unreachable!(),
                                         })
                                         .next())
                                     .unwrap()
-                                    .map(|(method, name)| {
+                                    .into_iter()
+                                    .map(|method| {
                                         to_generator_interface_method_implementation(
-                                            method,
-                                            &methods,
-                                            &name,
-                                            &super_class,
+                                            method, &methods,
                                         )
                                     })
                                     .collect(),

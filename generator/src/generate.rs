@@ -28,7 +28,7 @@ pub struct InterfaceMethodImplementation {
     pub return_type: TokenStream,
     pub argument_names: Vec<Ident>,
     pub argument_types: Vec<TokenStream>,
-    pub class_cast: TokenStream,
+    pub class_has_method: bool,
 }
 
 #[derive(Debug)]
@@ -163,17 +163,17 @@ fn generate_class(definition: &Class) -> TokenStream {
         native_methods,
         static_native_methods,
     } = definition;
-    let multiplied_class = iter::repeat(&class);
+    let multiplied_class = iter::repeat(class);
     let transitive_extends_1 = transitive_extends.iter();
     let transitive_extends = transitive_extends.iter();
     let methods = methods.iter().map(generate_class_method);
     let static_methods = static_methods.iter().map(generate_static_class_method);
     let native_method_functions = native_methods
         .iter()
-        .map(|method| generate_class_native_method_function(method, &class));
+        .map(|method| generate_class_native_method_function(method, class));
     let static_native_method_functions = static_native_methods
         .iter()
-        .map(|method| generate_static_class_native_method_function(method, &class));
+        .map(|method| generate_static_class_native_method_function(method, class));
     let native_methods = native_methods.iter().map(generate_class_native_method);
     let static_native_methods = static_native_methods
         .iter()
@@ -181,7 +181,7 @@ fn generate_class(definition: &Class) -> TokenStream {
     let constructors = constructors.iter().map(generate_constructor);
     let implementations = implements
         .iter()
-        .map(|interface| generate_interface_implementation(interface, &class));
+        .map(|interface| generate_interface_implementation(interface, class, super_class));
     let public = generate_public(*public);
     quote! {
         #[derive(Debug)]
@@ -585,16 +585,25 @@ fn generate_static_class_native_method_function(
     }
 }
 
-fn generate_interface_method_implementation(method: &InterfaceMethodImplementation) -> TokenStream {
+fn generate_interface_method_implementation(
+    method: &InterfaceMethodImplementation,
+    interface: &TokenStream,
+    super_class: &TokenStream,
+) -> TokenStream {
     let InterfaceMethodImplementation {
         name,
         argument_names,
         argument_types,
         return_type,
-        class_cast,
+        class_has_method,
     } = method;
     let argument_names_1 = argument_names.iter();
     let argument_names = argument_names.iter();
+    let class_cast = if *class_has_method {
+        quote!{Self}
+    } else {
+        quote!{ <#super_class as #interface> }
+    };
     quote!{
         fn #name(
             &self,
@@ -611,9 +620,12 @@ fn generate_interface_method_implementation(method: &InterfaceMethodImplementati
 fn generate_interface_implementation(
     interface: &InterfaceImplementation,
     class: &Ident,
+    super_class: &TokenStream,
 ) -> TokenStream {
     let InterfaceImplementation { interface, methods } = interface;
-    let methods = methods.iter().map(generate_interface_method_implementation);
+    let methods = methods
+        .iter()
+        .map(|method| generate_interface_method_implementation(method, interface, super_class));
     quote! {
         impl<'a> #interface<'a> for #class<'a> {
             #(
@@ -2297,14 +2309,14 @@ mod generate_class_tests {
                                 Ident::new("arg2", Span::call_site()),
                             ],
                             argument_types: vec![quote!{type1}, quote!{type2}],
-                            class_cast: quote!{class_cast_1},
+                            class_has_method: false,
                         },
                         InterfaceMethodImplementation {
                             name: Ident::new("test_method_2", Span::call_site()),
                             return_type: quote!{return_type_2},
                             argument_names: vec![],
                             argument_types: vec![],
-                            class_cast: quote!{class_cast_2},
+                            class_has_method: true,
                         },
                     ],
                 }],
@@ -2404,7 +2416,7 @@ mod generate_class_tests {
                     arg2: type2,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, return_type_1> {
-                    class_cast_1::test_method_1(
+                    <c::d::test2 as e::f::test3>::test_method_1(
                         self, arg1, arg2, token
                     )
                 }
@@ -2413,7 +2425,7 @@ mod generate_class_tests {
                     &self,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, return_type_2> {
-                    class_cast_2::test_method_2(
+                    Self::test_method_2(
                         self, token
                     )
                 }
