@@ -1005,10 +1005,8 @@ mod java_generate_tests {
                     arg2: char,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, i64> {
-                    {
-                        println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, self);
-                        Ok(0)
-                    }
+                    println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, self);
+                    Ok(0)
                 }
 
                 fn objectNativeFunc3(
@@ -1016,10 +1014,8 @@ mod java_generate_tests {
                     arg: ::a::b::TestClass3<'a>,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, ::a::b::TestClass3<'a> > {
-                    {
-                        println!("{:?} {:?} {:?}", arg, token, self);
-                        Ok(arg)
-                    }
+                    println!("{:?} {:?} {:?}", arg, token, self);
+                    Ok(arg)
                 }
 
                 fn primitive_static_native_func_3(
@@ -1028,10 +1024,8 @@ mod java_generate_tests {
                     arg2: char,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, i64> {
-                    {
-                        println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, env);
-                        Ok(0)
-                    }
+                    println!("{:?} {:?} {:?} {:?}", arg1, arg2, token, env);
+                    Ok(0)
                 }
 
                 pub fn objectStaticNativeFunc3(
@@ -1039,10 +1033,8 @@ mod java_generate_tests {
                     arg: ::a::b::TestClass3<'a>,
                     token: &::rust_jni::NoException<'a>,
                 ) -> ::rust_jni::JavaResult<'a, ::a::b::TestClass3<'a> > {
-                    {
-                        println!("{:?} {:?} {:?}", arg, token, env);
-                        Ok(arg)
-                    }
+                    println!("{:?} {:?} {:?}", arg, token, env);
+                    Ok(arg)
                 }
             }
 

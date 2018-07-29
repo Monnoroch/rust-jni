@@ -135,6 +135,7 @@ fn to_generator_interface_method_implementation(
             .iter()
             .map(|argument| argument.data_type.clone().as_rust_type_reference())
             .collect(),
+        // TODO: make this a template.
         class_cast: if class_has_method {
             quote!{Self}
         } else {

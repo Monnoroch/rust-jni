@@ -47,7 +47,7 @@ pub struct JavaNativeMethod {
     pub arguments: Vec<MethodArgument>,
     pub public: bool,
     pub is_static: bool,
-    pub code: Group,
+    pub code: TokenStream,
     pub annotations: Vec<Annotation>,
 }
 
@@ -398,7 +398,7 @@ fn parse_native_method(tokens: &[TokenTree]) -> JavaNativeMethod {
     let code = match tokens[tokens.len() - 1].clone() {
         TokenTree::Group(group) => {
             if group.delimiter() == Delimiter::Brace {
-                group
+                group.stream()
             } else {
                 panic!("Expected method code in braces, got {:?}.", group)
             }
