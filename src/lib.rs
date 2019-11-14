@@ -19,11 +19,13 @@ mod java_string;
 mod jni;
 mod jni_bool;
 mod raw;
+mod result;
 mod version;
 
 pub use attach_arguments::AttachArguments;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
-pub use jni::{Cast, Exception, JavaResult, JavaType, JavaVM, JniEnv, JniError, NoException};
+pub use jni::{Cast, Exception, JavaType, JavaVM, JniEnv, JniError, NoException};
+pub use result::JavaResult;
 pub use version::JniVersion;
 
 pub mod java {

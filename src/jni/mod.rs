@@ -19,6 +19,7 @@ use crate::jni::method_calls::call_method;
 use crate::jni::primitives::ToJniTuple;
 use crate::jni::string::String;
 use crate::jni::throwable::Throwable;
+use crate::result::JavaResult;
 use crate::version::JniVersion;
 use cfg_if::cfg_if;
 use jni_sys;
@@ -266,11 +267,6 @@ unsafe fn from_nullable<'a, T>(
         Ok((value, token))
     }
 }
-
-/// A type that represents a result of a Java method call. A Java method can either return
-/// a result or throw a
-/// [`Throwable`](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html).
-pub type JavaResult<'env, T> = Result<T, Throwable<'env>>;
 
 #[cfg(test)]
 mod jni_result_tests {
