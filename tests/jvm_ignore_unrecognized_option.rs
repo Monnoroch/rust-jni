@@ -1,5 +1,3 @@
-extern crate rust_jni;
-
 #[cfg(test)]
 mod create_jvm {
     use rust_jni::*;

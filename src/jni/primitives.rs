@@ -1,5 +1,5 @@
-use jni::class::*;
-use jni::*;
+use crate::jni::class::*;
+use crate::jni::*;
 use jni_sys;
 use std::char;
 use std::iter;
@@ -82,7 +82,7 @@ macro_rules! generate_jni_type_tests {
         #[cfg(test)]
         mod $module {
             use super::*;
-            use jni::testing::*;
+            use crate::jni::testing::*;
             use std::mem;
 
             #[test]
@@ -653,7 +653,7 @@ macro_rules! generate_to_jni_tuple_tests {
 #[cfg(test)]
 mod to_jni_tuple_tests {
     use super::*;
-    use jni::testing::*;
+    use crate::jni::testing::*;
     use std::mem;
 
     generate_to_jni_tuple_tests!(

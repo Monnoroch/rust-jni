@@ -1,8 +1,8 @@
-use jni::class::Class;
-use jni::method_calls::call_constructor;
-use jni::method_calls::call_method;
-use jni::string::String;
-use jni::*;
+use crate::jni::class::Class;
+use crate::jni::method_calls::call_constructor;
+use crate::jni::method_calls::call_method;
+use crate::jni::string::String;
+use crate::jni::*;
 use jni_sys;
 use std::fmt;
 
@@ -66,7 +66,7 @@ pub fn test_throwable<'env>(
 #[cfg(test)]
 mod throwable_tests {
     use super::*;
-    use jni::testing::*;
+    use crate::jni::testing::*;
     use std::mem;
     use std::ops::Deref;
     use std::ptr;

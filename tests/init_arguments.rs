@@ -1,5 +1,3 @@
-extern crate rust_jni;
-
 #[cfg(test)]
 mod default_jvm_arguments {
     #[test]

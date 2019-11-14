@@ -1,11 +1,9 @@
-extern crate rust_jni;
-
 mod object;
 
 /// An integration test for the `java::lang::String` type.
 #[cfg(test)]
 mod string {
-    use object;
+    use crate::object;
     use rust_jni::*;
 
     #[test]

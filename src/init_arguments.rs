@@ -1,12 +1,12 @@
-use jni::ToJni;
+use crate::jni::ToJni;
 use jni_sys;
-use raw::*;
+use crate::raw::*;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::os::raw::c_void;
 use std::ptr;
 use std::slice;
-use version::{self, JniVersion};
+use crate::version::{self, JniVersion};
 
 /// Verbose options for starting a Java VM.
 ///

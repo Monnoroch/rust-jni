@@ -1,11 +1,9 @@
-extern crate rust_jni;
-
 mod object;
 
 /// An integration test for the `java::lang::Throwable` type.
 #[cfg(test)]
 mod throwable {
-    use object;
+    use crate::object;
     use rust_jni::*;
 
     #[test]

@@ -1,6 +1,6 @@
-use java_string::*;
-use jni::method_calls::call_static_method;
-use jni::*;
+use crate::java_string::*;
+use crate::jni::method_calls::call_static_method;
+use crate::jni::*;
 use jni_sys;
 use std;
 use std::fmt;
@@ -138,7 +138,7 @@ java_class!(
 #[cfg(test)]
 mod string_tests {
     use super::*;
-    use jni::testing::*;
+    use crate::jni::testing::*;
     use std::mem;
     use std::ops::Deref;
 

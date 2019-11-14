@@ -1,6 +1,3 @@
-extern crate jni_sys;
-extern crate rust_jni;
-
 #[cfg(test)]
 mod native_method_env {
     use rust_jni::__generator::*;

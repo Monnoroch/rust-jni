@@ -2,7 +2,7 @@
 #![allow(non_upper_case_globals)]
 
 #[cfg(test)]
-use init_arguments;
+use crate::init_arguments;
 use jni_sys;
 use std::os::raw::c_void;
 #[cfg(test)]

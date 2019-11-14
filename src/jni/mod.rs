@@ -10,22 +10,22 @@ mod primitives;
 pub mod string;
 pub mod throwable;
 
-use attach_arguments::{self, AttachArguments};
-use init_arguments::{self, InitArguments};
-use jni::class::Class;
-use jni::method_calls::call_method;
-use jni::primitives::ToJniTuple;
-use jni::string::String;
-use jni::throwable::Throwable;
+use crate::attach_arguments::{self, AttachArguments};
+use crate::init_arguments::{self, InitArguments};
+use crate::jni::class::Class;
+use crate::jni::method_calls::call_method;
+use crate::jni::primitives::ToJniTuple;
+use crate::jni::string::String;
+use crate::jni::throwable::Throwable;
 use jni_sys;
-use raw::*;
+use crate::raw::*;
 use std;
 use std::cell::RefCell;
 use std::fmt;
 use std::marker::PhantomData;
 use std::os::raw::c_void;
 use std::ptr;
-use version::{self, JniVersion};
+use crate::version::{self, JniVersion};
 
 include!("call_jni_method.rs");
 include!("generate_class.rs");
@@ -231,7 +231,7 @@ impl<'env> Exception<'env> {
 #[cfg(test)]
 mod exception_tests {
     use super::*;
-    use jni::testing::*;
+    use crate::jni::testing::*;
 
     #[test]
     fn unwrap() {
@@ -608,9 +608,9 @@ unsafe impl Sync for JavaVM {}
 #[cfg(test)]
 mod java_vm_tests {
     use super::*;
-    use init_arguments;
-    use java_string::*;
-    use jni::testing::*;
+    use crate::init_arguments;
+    use crate::java_string::*;
+    use crate::jni::testing::*;
     use std::ffi::CStr;
     use std::mem;
 
@@ -1330,7 +1330,7 @@ fn test_env<'vm>(vm: &'vm JavaVM, ptr: *mut jni_sys::JNIEnv) -> JniEnv<'vm> {
 #[cfg(test)]
 mod jni_env_tests {
     use super::*;
-    use jni::testing::*;
+    use crate::jni::testing::*;
 
     #[test]
     fn raw_jvm() {
@@ -1533,7 +1533,7 @@ fn maybe_get_and_clear_exception<'a>(env: &'a JniEnv<'a>) -> Option<Throwable<'a
 #[cfg(test)]
 mod maybe_get_and_clear_exception_tests {
     use super::*;
-    use jni::testing::*;
+    use crate::jni::testing::*;
 
     #[test]
     fn exception() {
@@ -1572,7 +1572,7 @@ fn get_and_clear_exception<'a>(token: Exception<'a>) -> Throwable<'a> {
 #[cfg(test)]
 mod get_and_clear_exception_tests {
     use super::*;
-    use jni::testing::*;
+    use crate::jni::testing::*;
 
     #[test]
     fn exception() {
@@ -1616,7 +1616,7 @@ fn with_checked_exception<'a, Out, T: FnOnce(NoException<'a>) -> JniResult<'a, O
 #[cfg(test)]
 mod with_checked_exception_tests {
     use super::*;
-    use jni::testing::*;
+    use crate::jni::testing::*;
 
     #[test]
     fn no_exception() {
@@ -2032,8 +2032,8 @@ pub fn test_object<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) 
 #[cfg(test)]
 mod object_tests {
     use super::*;
-    use jni::class::test_class;
-    use jni::testing::*;
+    use crate::jni::class::test_class;
+    use crate::jni::testing::*;
     use std::mem;
 
     #[cfg(test)]

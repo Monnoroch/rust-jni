@@ -1,4 +1,4 @@
-use jni::*;
+use crate::jni::*;
 use std::string;
 
 macro_rules! braces {

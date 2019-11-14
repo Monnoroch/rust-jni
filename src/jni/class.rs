@@ -1,6 +1,6 @@
-use java_string::*;
-use jni::string::String;
-use jni::*;
+use crate::java_string::*;
+use crate::jni::string::String;
+use crate::jni::*;
 use jni_sys;
 use std::fmt;
 use std::os::raw::c_char;
@@ -127,7 +127,7 @@ pub fn test_class<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -
 #[cfg(test)]
 mod class_tests {
     use super::*;
-    use jni::testing::*;
+    use crate::jni::testing::*;
     use std::mem;
     use std::ops::Deref;
 

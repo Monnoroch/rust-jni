@@ -1,11 +1,11 @@
-use java_string::*;
-use jni::*;
+use crate::java_string::*;
+use crate::jni::*;
 use jni_sys;
 use std::cell::RefCell;
 use std::panic;
 use std::ptr;
 use std::string;
-use version;
+use crate::version;
 
 /// Unsafe because an incorrect pointer can be passed as an argument.
 unsafe fn throw_new_runtime_exception(raw_env: *mut jni_sys::JNIEnv, message: impl AsRef<str>) {
@@ -92,8 +92,8 @@ where
 #[cfg(test)]
 mod native_method_wrapper_tests {
     use super::*;
-    use jni::testing::*;
-    use jni::throwable::test_throwable;
+    use crate::jni::testing::*;
+    use crate::jni::throwable::test_throwable;
 
     #[test]
     fn success() {

@@ -1,10 +1,10 @@
-use init_arguments::InitArguments;
-use java_string::*;
+use crate::init_arguments::InitArguments;
+use crate::java_string::*;
 use jni_sys;
 use std::marker::PhantomData;
 use std::os::raw::c_char;
 use std::ptr;
-use version::{self, JniVersion};
+use crate::version::{self, JniVersion};
 
 /// Arguments for attaching a thread to the JVM.
 ///
@@ -58,7 +58,7 @@ impl<'a> AttachArguments<'a> {
 #[cfg(test)]
 mod attach_arguments_tests {
     use super::*;
-    use init_arguments;
+    use crate::init_arguments;
 
     #[test]
     fn new() {
@@ -129,7 +129,7 @@ pub fn to_raw<'a>(arguments: &AttachArguments, buffer: &'a mut Vec<u8>) -> RawAt
 #[cfg(test)]
 mod to_raw_tests {
     use super::*;
-    use init_arguments;
+    use crate::init_arguments;
     use std::slice;
 
     #[test]
