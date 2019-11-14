@@ -1,11 +1,11 @@
 use crate::java_string::*;
 use crate::jni::*;
+use crate::version;
 use jni_sys;
 use std::cell::RefCell;
 use std::panic;
 use std::ptr;
 use std::string;
-use crate::version;
 
 /// Unsafe because an incorrect pointer can be passed as an argument.
 unsafe fn throw_new_runtime_exception(raw_env: *mut jni_sys::JNIEnv, message: impl AsRef<str>) {
@@ -54,7 +54,7 @@ where
         let vm = JavaVM::from_ptr(java_vm);
         let get_version_fn = ((**raw_env).GetVersion).unwrap();
         let env = JniEnv {
-            version: version::from_raw(get_version_fn(raw_env)),
+            version: JniVersion::from_raw(get_version_fn(raw_env)),
             vm: &vm,
             jni_env: raw_env,
             has_token: RefCell::new(true),

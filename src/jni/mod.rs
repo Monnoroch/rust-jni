@@ -17,15 +17,15 @@ use crate::jni::method_calls::call_method;
 use crate::jni::primitives::ToJniTuple;
 use crate::jni::string::String;
 use crate::jni::throwable::Throwable;
-use jni_sys;
 use crate::raw::*;
+use crate::version::{self, JniVersion};
+use jni_sys;
 use std;
 use std::cell::RefCell;
 use std::fmt;
 use std::marker::PhantomData;
 use std::os::raw::c_void;
 use std::ptr;
-use crate::version::{self, JniVersion};
 
 include!("call_jni_method.rs");
 include!("generate_class.rs");
@@ -502,7 +502,7 @@ impl JavaVM {
         let status = get_env_fn(
             self.raw_jvm(),
             (&mut jni_env) as *mut *mut jni_sys::JNIEnv as *mut *mut c_void,
-            version::to_raw(arguments.version()),
+            arguments.version().to_raw(),
         );
         match status {
             jni_sys::JNI_EDETACHED => {
@@ -868,7 +868,7 @@ mod java_vm_tests {
     //     unsafe {
     //         assert_eq!(GET_ENV_CALLS, 1);
     //         assert_eq!(GET_ENV_VM_ARGUMENT, raw_java_vm_ptr);
-    //         assert_eq!(GET_ENV_VERSION_ARGUMENT, version::to_raw(JniVersion::V8));
+    //         assert_eq!(GET_ENV_VERSION_ARGUMENT, JniVersion::V8.to_raw());
     //         assert_eq!(ATTACH_CALLS, 1);
     //         assert_eq!(ATTACH_VM_ARGUMENT, raw_java_vm_ptr);
     //         assert_eq!(
@@ -1116,7 +1116,7 @@ mod java_vm_tests {
     //     unsafe {
     //         assert_eq!(GET_ENV_CALLS, 1);
     //         assert_eq!(GET_ENV_VM_ARGUMENT, raw_java_vm_ptr);
-    //         assert_eq!(GET_ENV_VERSION_ARGUMENT, version::to_raw(JniVersion::V8));
+    //         assert_eq!(GET_ENV_VERSION_ARGUMENT, JniVersion::V8.to_raw());
     //         assert_eq!(ATTACH_CALLS, 1);
     //         assert_eq!(ATTACH_VM_ARGUMENT, raw_java_vm_ptr);
     //         assert_eq!(

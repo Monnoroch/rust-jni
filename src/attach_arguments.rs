@@ -1,10 +1,10 @@
 use crate::init_arguments::InitArguments;
 use crate::java_string::*;
+use crate::version::{self, JniVersion};
 use jni_sys;
 use std::marker::PhantomData;
 use std::os::raw::c_char;
 use std::ptr;
-use crate::version::{self, JniVersion};
 
 /// Arguments for attaching a thread to the JVM.
 ///
@@ -106,7 +106,7 @@ pub struct RawAttachArguments<'a> {
 /// Convert `AttachArguments` to `jni_sys::JavaVMAttachArgs`. Uses a buffer for storing
 /// the Java string with the thread name.
 pub fn to_raw<'a>(arguments: &AttachArguments, buffer: &'a mut Vec<u8>) -> RawAttachArguments<'a> {
-    let version = version::to_raw(arguments.version);
+    let version = arguments.version.to_raw();
     let group = ptr::null_mut();
     let raw_arguments = jni_sys::JavaVMAttachArgs {
         name: match arguments.thread_name {
@@ -140,10 +140,7 @@ mod to_raw_tests {
         let raw_arguments = super::to_raw(&arguments, &mut buffer);
         assert_eq!(raw_arguments.raw_arguments.group, ptr::null_mut());
         assert_eq!(raw_arguments.raw_arguments.name, ptr::null_mut());
-        assert_eq!(
-            raw_arguments.raw_arguments.version,
-            version::to_raw(JniVersion::V8)
-        );
+        assert_eq!(raw_arguments.raw_arguments.version, JniVersion::V8.to_raw());
     }
 
     #[test]
@@ -154,10 +151,7 @@ mod to_raw_tests {
         let mut buffer: Vec<u8> = vec![];
         let raw_arguments = super::to_raw(&arguments, &mut buffer);
         assert_eq!(raw_arguments.raw_arguments.group, ptr::null_mut());
-        assert_eq!(
-            raw_arguments.raw_arguments.version,
-            version::to_raw(JniVersion::V8)
-        );
+        assert_eq!(raw_arguments.raw_arguments.version, JniVersion::V8.to_raw());
         assert_eq!(
             from_java_string(unsafe {
                 slice::from_raw_parts(

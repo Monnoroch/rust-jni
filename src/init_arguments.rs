@@ -1,12 +1,12 @@
 use crate::jni::ToJni;
-use jni_sys;
 use crate::raw::*;
+use crate::version::{self, JniVersion};
+use jni_sys;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::os::raw::c_void;
 use std::ptr;
 use std::slice;
-use crate::version::{self, JniVersion};
 
 /// Verbose options for starting a Java VM.
 ///
@@ -300,7 +300,7 @@ impl InitArguments {
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
     pub fn get_default_or_closest_supported(version: JniVersion) -> Self {
         let mut raw_arguments = jni_sys::JavaVMInitArgs {
-            version: version::to_raw(version),
+            version: version.to_raw(),
             nOptions: 0,
             options: ptr::null_mut(),
             ignoreUnrecognized: jni_sys::JNI_FALSE,
@@ -325,7 +325,7 @@ impl InitArguments {
             .map(|value| JvmOption::from_raw(value))
             .collect();
         InitArguments {
-            version: version::from_raw(raw_arguments.version),
+            version: JniVersion::from_raw(raw_arguments.version),
             ignore_unrecognized: to_bool(raw_arguments.ignoreUnrecognized),
             options,
         }
@@ -433,7 +433,7 @@ pub fn to_raw<'a, 'b, 'c: 'a + 'b>(
         .collect();
     RawInitArguments {
         raw_arguments: jni_sys::JavaVMInitArgs {
-            version: version::to_raw(arguments.version),
+            version: arguments.version.to_raw(),
             nOptions: options_buffer.len() as i32,
             options: options_buffer.as_mut_ptr(),
             // Safe because `bool` conversion is safe internally.
@@ -486,7 +486,7 @@ pub mod init_arguments_tests {
 
     fn check_arguments(version: JniVersion) {
         let actual_arguments = get_default_java_vm_init_args_call_input();
-        assert_eq!(actual_arguments.version, version::to_raw(version));
+        assert_eq!(actual_arguments.version, version.to_raw());
         assert_eq!(actual_arguments.nOptions, 0);
         assert_eq!(actual_arguments.options, ptr::null_mut());
         assert_eq!(actual_arguments.ignoreUnrecognized, jni_sys::JNI_FALSE);
@@ -502,10 +502,7 @@ pub mod init_arguments_tests {
         let mut strings_buffer = vec![];
         let mut options_buffer = vec![];
         let raw_arguments = to_raw(&arguments, &mut strings_buffer, &mut options_buffer);
-        assert_eq!(
-            raw_arguments.raw_arguments.version,
-            version::to_raw(JniVersion::V4)
-        );
+        assert_eq!(raw_arguments.raw_arguments.version, JniVersion::V4.to_raw());
         assert_eq!(raw_arguments.raw_arguments.nOptions, 2);
         assert_eq!(
             raw_arguments.raw_arguments.ignoreUnrecognized,
