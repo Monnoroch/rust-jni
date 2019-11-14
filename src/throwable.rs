@@ -1,4 +1,5 @@
 use crate::class::Class;
+use crate::env::JniEnv;
 use crate::error::JniError;
 use crate::method_calls::call_constructor;
 use crate::method_calls::call_method;
@@ -75,6 +76,7 @@ pub fn test_throwable<'env>(
 #[cfg(test)]
 mod throwable_tests {
     use super::*;
+    use crate::env::test_env;
     use crate::testing::*;
     use std::mem;
     use std::ops::Deref;

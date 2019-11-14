@@ -1,8 +1,8 @@
+use crate::env::JniEnv;
 use crate::error::JniError;
 use crate::java_string::*;
 use crate::result::JavaResult;
 use crate::token::NoException;
-
 use crate::vm::*;
 use jni_sys;
 use std::panic;

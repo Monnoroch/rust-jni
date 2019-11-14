@@ -1,13 +1,10 @@
 use crate::class::Class;
+use crate::env::JniEnv;
 use crate::method_calls::call_method;
 use crate::result::JavaResult;
 use crate::string::String;
 use crate::token::*;
-use crate::vm::Cast;
-use crate::vm::FromJni;
-use crate::vm::JavaType;
-use crate::vm::JniEnv;
-use crate::vm::ToJni;
+use crate::vm::{Cast, FromJni, JavaType, ToJni};
 use jni_sys;
 use std;
 use std::fmt;
@@ -269,8 +266,9 @@ pub fn test_object<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) 
 mod object_tests {
     use super::*;
     use crate::class::test_class;
+    use crate::env::test_env;
     use crate::testing::*;
-    use crate::vm::{test_env, test_vm};
+    use crate::vm::test_vm;
     use std::mem;
 
     #[cfg(test)]

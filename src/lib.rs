@@ -18,6 +18,7 @@ pub mod testing;
 
 mod attach_arguments;
 mod class;
+mod env;
 mod error;
 mod generate;
 mod init_arguments;
@@ -36,12 +37,13 @@ mod version;
 mod vm;
 
 pub use attach_arguments::AttachArguments;
+pub use env::JniEnv;
 pub use error::JniError;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
 pub use result::JavaResult;
 pub use token::{Exception, NoException};
 pub use version::JniVersion;
-pub use vm::{Cast, JavaType, JavaVM, JniEnv};
+pub use vm::{Cast, JavaType, JavaVM, JavaVMRef};
 
 pub mod java {
     pub mod lang {

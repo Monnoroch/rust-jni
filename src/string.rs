@@ -1,4 +1,5 @@
 use crate::class::Class;
+use crate::env::JniEnv;
 use crate::java_string::*;
 use crate::method_calls::call_static_method;
 #[cfg(test)]
@@ -144,6 +145,7 @@ java_class!(
 #[cfg(test)]
 mod string_tests {
     use super::*;
+    use crate::env::test_env;
     use crate::testing::*;
     use std::mem;
     use std::ops::Deref;

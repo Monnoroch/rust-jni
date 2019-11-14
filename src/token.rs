@@ -1,6 +1,7 @@
+use crate::env::JniEnv;
 use crate::result::JavaResult;
 use crate::throwable::Throwable;
-use crate::vm::{FromJni, JniEnv};
+use crate::vm::FromJni;
 use core::marker::PhantomData;
 use std::mem;
 use std::ptr::{self, NonNull};
@@ -220,8 +221,8 @@ impl<'this> Exception<'this> {
 #[cfg(test)]
 mod exception_tests {
     use super::*;
+    use crate::env::test_env;
     use crate::testing::*;
-    use crate::vm::test_env;
     use crate::vm::test_vm;
 
     #[test]
@@ -270,7 +271,7 @@ pub(crate) unsafe fn from_nullable<'a, T>(
 #[cfg(test)]
 mod from_nullable_tests {
     use super::*;
-    use crate::vm::test_env;
+    use crate::env::test_env;
     use crate::vm::test_vm;
 
     #[test]
@@ -312,8 +313,8 @@ pub(crate) fn get_and_clear_exception_if_thrown<'a>(env: &'a JniEnv<'a>) -> Opti
 #[cfg(test)]
 mod maybe_get_and_clear_exception_tests {
     use super::*;
+    use crate::env::test_env;
     use crate::testing::*;
-    use crate::vm::test_env;
     use crate::vm::test_vm;
 
     #[test]

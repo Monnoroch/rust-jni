@@ -1,3 +1,4 @@
+use crate::env::JniEnv;
 use crate::java_string::*;
 #[cfg(test)]
 use crate::object::test_object;
@@ -132,6 +133,7 @@ pub fn test_class<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -
 #[cfg(test)]
 mod class_tests {
     use super::*;
+    use crate::env::test_env;
     use crate::testing::*;
     use std::mem;
     use std::ops::Deref;

@@ -1,4 +1,5 @@
 use crate::class::*;
+use crate::env::JniEnv;
 #[cfg(test)]
 use crate::object::test_object;
 use crate::object::Object;
@@ -85,6 +86,7 @@ macro_rules! generate_jni_type_tests {
         #[cfg(test)]
         mod $module {
             use super::*;
+            use crate::env::test_env;
             use crate::testing::*;
             use std::mem;
 
@@ -656,6 +658,7 @@ macro_rules! generate_to_jni_tuple_tests {
 #[cfg(test)]
 mod to_jni_tuple_tests {
     use super::*;
+    use crate::env::test_env;
     use crate::object::test_object;
     use crate::testing::*;
     use std::mem;
@@ -927,6 +930,7 @@ impl<'env> FromJni<'env> for bool {
 #[cfg(test)]
 mod bool_tests {
     use super::*;
+    use crate::env::test_env;
 
     #[test]
     fn signature() {
@@ -1024,6 +1028,7 @@ impl<'env> FromJni<'env> for char {
 #[cfg(test)]
 mod char_tests {
     use super::*;
+    use crate::env::test_env;
 
     #[test]
     fn signature() {
@@ -1175,6 +1180,7 @@ jni_io_traits!(
 #[cfg(test)]
 mod void_tests {
     use super::*;
+    use crate::env::test_env;
 
     #[test]
     fn signature() {
@@ -1219,6 +1225,7 @@ mod void_tests {
 #[cfg(test)]
 mod byte_tests {
     use super::*;
+    use crate::env::test_env;
 
     #[test]
     fn signature() {
@@ -1265,12 +1272,13 @@ mod byte_tests {
 
 #[cfg(test)]
 mod short_tests {
+    use super::*;
+    use crate::env::test_env;
 
     #[test]
     fn signature() {
         assert_eq!(i16::__signature(), "S");
     }
-    use super::*;
 
     #[test]
     fn to_jni() {
@@ -1310,6 +1318,7 @@ mod short_tests {
 #[cfg(test)]
 mod int_tests {
     use super::*;
+    use crate::env::test_env;
 
     #[test]
     fn signature() {
@@ -1354,6 +1363,7 @@ mod int_tests {
 #[cfg(test)]
 mod long_tests {
     use super::*;
+    use crate::env::test_env;
 
     #[test]
     fn signature() {
@@ -1398,6 +1408,7 @@ mod long_tests {
 #[cfg(test)]
 mod double_tests {
     use super::*;
+    use crate::env::test_env;
 
     #[test]
     fn signature() {

@@ -1,4 +1,5 @@
 use crate::class::Class;
+use crate::env::JniEnv;
 use crate::java_string::*;
 use crate::object::Object;
 use crate::primitives::ToJniTuple;
@@ -103,6 +104,7 @@ pub unsafe fn call_method<
 #[cfg(test)]
 mod call_method_tests {
     use super::*;
+    use crate::env::test_env;
     use crate::object::test_object;
     use crate::testing::*;
     use std::mem;
@@ -312,6 +314,7 @@ pub unsafe fn call_static_method<
 #[cfg(test)]
 mod call_static_method_tests {
     use super::*;
+    use crate::env::test_env;
     use crate::testing::*;
     use std::mem;
     use std::ptr;
@@ -539,6 +542,7 @@ pub unsafe fn call_constructor<
 #[cfg(test)]
 mod call_constructor_tests {
     use super::*;
+    use crate::env::test_env;
     use crate::testing::*;
     use std::mem;
     use std::ptr;
