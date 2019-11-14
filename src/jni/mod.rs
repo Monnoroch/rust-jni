@@ -247,20 +247,76 @@ impl JavaVM {
         self.java_vm.raw_jvm()
     }
 
-    /// Attach the current thread to the Java VM with a specific thread name.
-    /// Returns a [`JniEnv`](struct.JniEnv.html) instance for this thread.
+    /// Attach the current thread to the Java VM and execute code that calls JNI on it.
+    ///
+    /// Runs a closure passing it a newly attached [`JniEnv`](struct.JniEnv.html) and
+    /// a [`NoException`](struct.NoException.html) token. The closure must return the
+    /// [`NoException`](struct.NoException.html) token thus guaranteeing that there are no exceptions in flight after
+    /// the closure is done executing.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
-    pub fn attach(&self, arguments: &AttachArguments) -> Result<JniEnv, JniError> {
+    pub fn with_attached<'vm, T>(
+        &'vm self,
+        arguments: &AttachArguments,
+        closure: impl for<'token> FnOnce(&JniEnv, NoException<'token>) -> (T, NoException<'token>),
+    ) -> Result<T, JniError> {
+        let env = self.attach(arguments)?;
+        // Safe because we work with a freshly created JniEnv that doens't have an exception in flight.
+        let token = unsafe { NoException::new(&env) };
+        let (result, _token) = closure(&env, token);
+        Ok(result)
+    }
+
+    /// Attach the current thread to the Java VM as a daemon and execute code that calls JNI on it.
+    ///
+    /// Runs a closure passing it a newly attached [`JniEnv`](struct.JniEnv.html) and
+    /// a [`NoException`](struct.NoException.html) token. The closure must return the
+    /// [`NoException`](struct.NoException.html) token thus guaranteeing that there are no exceptions in flight after
+    /// the closure is done executing.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
+    pub fn with_attached_daemon<'vm, T>(
+        &'vm self,
+        arguments: &AttachArguments,
+        closure: impl for<'token> FnOnce(&JniEnv, NoException<'token>) -> (T, NoException<'token>),
+    ) -> Result<T, JniError> {
+        let env = self.attach_daemon(arguments)?;
+        // Safe because we work with a freshly created JniEnv that doens't have an exception in flight.
+        let token = unsafe { NoException::new(&env) };
+        let (result, _token) = closure(&env, token);
+        Ok(result)
+    }
+
+    /// Attach the current thread to the Java VM with.
+    /// Returns a [`JniEnv`](struct.JniEnv.html) instance for this thread.
+    ///
+    /// Exception-safety is based on the [`NoException`](struct.NoException.html) token and guaranteed in run time.
+    /// To have compile-time guarantees use `with_attached` instead.
+    ///
+    /// Use this method only when ownership of the [`JniEnv`](struct.JniEnv.html) is required.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
+    pub fn attach<'vm: 'env, 'env>(
+        &'vm self,
+        arguments: &AttachArguments,
+    ) -> Result<JniEnv<'env>, JniError> {
         // Safe because the argument is ensured to be the correct method.
         unsafe { self.attach_generic(arguments, (**self.raw_jvm()).AttachCurrentThread.unwrap()) }
     }
 
-    /// Attach the current thread to the Java VM as a daemon with a specific thread name.
+    /// Attach the current thread to the Java VM as a daemon.
     /// Returns a [`JniEnv`](struct.JniEnv.html) instance for this thread.
     ///
+    /// Exception-safety is based on the [`NoException`](struct.NoException.html) token and guaranteed in run time.
+    /// To have compile-time guarantees use `with_attached_daemon` instead.
+    ///
+    /// Use this method only when ownership of the [`JniEnv`](struct.JniEnv.html) is required.
+    ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthreadasdaemon)
-    pub fn attach_daemon(&self, arguments: &AttachArguments) -> Result<JniEnv, JniError> {
+    pub fn attach_daemon<'vm: 'env, 'env>(
+        &'vm self,
+        arguments: &AttachArguments,
+    ) -> Result<JniEnv<'env>, JniError> {
         // Safe because the argument is ensured to be the correct method.
         unsafe {
             self.attach_generic(
@@ -701,10 +757,6 @@ mod java_vm_list_tests {
 mod java_vm_tests_legacy {
     use super::*;
     use crate::init_arguments;
-    
-    
-    
-    
 
     fn default_args() -> InitArguments {
         init_arguments::init_arguments_manipulation_tests::default_args()
