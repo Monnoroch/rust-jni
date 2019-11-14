@@ -24,8 +24,8 @@ unsafe fn get_method_id<
     // `GetMethodID` throws an exception before returning `null`.
     call_nullable_jni_method!(
         class.env(),
-        GetMethodID,
         token,
+        GetMethodID,
         class.raw_object(),
         name.as_ptr() as *const c_char,
         signature.as_ptr() as *const c_char
@@ -50,8 +50,8 @@ unsafe fn get_static_method_id<
     // `GetStaticMethodID` throws an exception before returning `null`.
     call_nullable_jni_method!(
         class.env(),
-        GetStaticMethodID,
         token,
+        GetStaticMethodID,
         class.raw_object(),
         name.as_ptr() as *const c_char,
         signature.as_ptr() as *const c_char

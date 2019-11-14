@@ -18,10 +18,10 @@ macro_rules! call_jni_method {
 // It's actually used.
 #[allow(unused_macros)]
 macro_rules! call_nullable_jni_method {
-    ($env:expr, $method:ident, $token:expr, $($argument:expr),*) => {
+    ($env:expr, $token:expr, $method:ident, $($argument:expr),*) => {
         $token.with_owned(|token| {
             let result = call_jni_method!($env, $method, $($argument),*);
-            from_nullable($env, result, token)
+            from_nullable($env, token, result)
         })
     }
 }

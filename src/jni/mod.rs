@@ -1627,7 +1627,7 @@ impl<'env> Object<'env> {
         // Safe because arguments are ensured to be the correct by construction and because
         // `NewLocalRef` throws an exception before returning `null`.
         let raw_object =
-            unsafe { call_nullable_jni_method!(self.env, NewLocalRef, token, self.raw_object)? };
+            unsafe { call_nullable_jni_method!(self.env, token, NewLocalRef, self.raw_object)? };
         // Safe because the argument is a valid class reference.
         Ok(unsafe { Self::from_raw(self.env, raw_object) })
     }

@@ -27,7 +27,7 @@ impl<'env> String<'env> {
         // Safe because arguments are ensured to be the correct by construction and because
         // `NewString` throws an exception before returning `null`.
         let raw_string = unsafe {
-            call_nullable_jni_method!(env, NewString, token, ptr::null(), 0 as jni_sys::jsize)?
+            call_nullable_jni_method!(env, token, NewString, ptr::null(), 0 as jni_sys::jsize)?
         };
         // Safe because the argument is a valid string reference.
         Ok(unsafe { Self::from_raw(env, raw_string) })
@@ -49,7 +49,7 @@ impl<'env> String<'env> {
         // Safe because arguments are ensured to be the correct by construction and because
         // `NewStringUTF` throws an exception before returning `null`.
         let raw_string = unsafe {
-            call_nullable_jni_method!(env, NewStringUTF, token, buffer.as_ptr() as *const c_char)?
+            call_nullable_jni_method!(env, token, NewStringUTF, buffer.as_ptr() as *const c_char)?
         };
         // Safe because the argument is a valid string reference.
         Ok(unsafe { Self::from_raw(env, raw_string) })

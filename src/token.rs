@@ -257,8 +257,8 @@ pub(crate) type JniResult<'env, T> = Result<(T, NoException<'env>), Exception<'e
 /// Unsafe because there might not be a pending exception.
 pub(crate) unsafe fn from_nullable<'a, T>(
     env: &'a JniEnv<'a>,
-    value: *mut T,
     token: NoException<'a>,
+    value: *mut T,
 ) -> JniResult<'a, *mut T> {
     if value == ptr::null_mut() {
         Err(token.exchange(env))
@@ -278,7 +278,7 @@ mod from_nullable_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert!(from_nullable(&env, ptr::null_mut() as *mut i32, NoException::test()).is_err());
+            assert!(from_nullable(&env, NoException::test(), ptr::null_mut() as *mut i32).is_err());
         }
     }
 
@@ -288,7 +288,7 @@ mod from_nullable_tests {
         let env = test_env(&vm, ptr::null_mut());
         let ptr = 0x1234 as *mut i32;
         unsafe {
-            let value = from_nullable(&env, ptr, NoException::test());
+            let value = from_nullable(&env, NoException::test(), ptr);
             assert!(value.is_ok());
             assert_eq!(value.unwrap().0, ptr);
         }

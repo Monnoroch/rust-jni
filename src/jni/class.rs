@@ -32,7 +32,7 @@ impl<'env> Class<'env> {
         // Safe because the arguments are correct and because `FindClass` throws an exception
         // before returning `null`.
         let raw_class = unsafe {
-            call_nullable_jni_method!(env, FindClass, token, class_name.as_ptr() as *const c_char)?
+            call_nullable_jni_method!(env, token, FindClass, class_name.as_ptr() as *const c_char)?
         };
         // Safe because the argument is a valid class reference.
         Ok(unsafe { Self::from_raw(env, raw_class) })
@@ -51,8 +51,8 @@ impl<'env> Class<'env> {
         let raw_class = unsafe {
             call_nullable_jni_method!(
                 env,
-                DefineClass,
                 token,
+                DefineClass,
                 ptr::null() as *const c_char,
                 ptr::null_mut() as jni_sys::jobject,
                 bytes.as_ptr() as *const jni_sys::jbyte,
