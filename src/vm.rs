@@ -350,7 +350,6 @@ impl JavaVM {
                 match error {
                     None => {
                         let mut env = JniEnv {
-                            version: arguments.version(),
                             vm: &self.java_vm,
                             jni_env,
                             has_token: RefCell::new(true),
@@ -1150,7 +1149,6 @@ mod java_vm_tests_legacy {
 // TODO: docs about panicing on detach when there's a pending exception.
 #[derive(Debug)]
 pub struct JniEnv<'this> {
-    version: JniVersion,
     vm: &'this JavaVMRef,
     jni_env: *mut jni_sys::JNIEnv,
     has_token: RefCell<bool>,
@@ -1195,20 +1193,18 @@ impl<'this> JniEnv<'this> {
         }
     }
 
-    /// Get JNI version.
+    /// Get JNI versoin.
     ///
-    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getversion)
+    /// [JNI documentation](https://docs.oracle.com/en/java/javase/11/docs/specs/jni/functions.html#getversion)
     pub fn version(&self) -> JniVersion {
-        self.version
+        JniVersion::from_raw(unsafe { call_jni_method!(self, GetVersion) })
     }
 
     pub(crate) fn native<'vm: 'env, 'env>(
         vm: &'vm JavaVMRef,
         jni_env: *mut jni_sys::JNIEnv,
-        version: JniVersion,
     ) -> JniEnv<'env> {
         JniEnv {
-            version,
             vm,
             jni_env,
             has_token: RefCell::new(true),
@@ -1260,7 +1256,6 @@ pub(crate) fn test_vm(ptr: *mut jni_sys::JavaVM) -> JavaVMRef {
 #[cfg(test)]
 pub(crate) fn test_env<'vm>(vm: &'vm JavaVMRef, ptr: *mut jni_sys::JNIEnv) -> JniEnv<'vm> {
     JniEnv {
-        version: JniVersion::V8,
         vm: &vm,
         jni_env: ptr,
         has_token: RefCell::new(true),
@@ -1294,9 +1289,12 @@ mod jni_env_tests {
 
     #[test]
     fn version() {
+        let calls = test_raw_jni_env!(vec![JniCall::GetVersion(GetVersion {
+            result: jni_sys::JNI_VERSION_1_4,
+        })]);
         let vm = test_vm(ptr::null_mut());
-        let env = test_env(&vm, ptr::null_mut());
-        assert_eq!(env.version(), JniVersion::V8);
+        let env = test_env(&vm, calls.env);
+        assert_eq!(env.version(), JniVersion::V4);
     }
 
     #[test]
@@ -1318,7 +1316,6 @@ mod jni_env_tests {
         let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
         {
             let _env = JniEnv {
-                version: JniVersion::V8,
                 vm: &vm,
                 jni_env: calls.env,
                 has_token: RefCell::new(true),
@@ -1363,7 +1360,6 @@ mod jni_env_tests {
         };
         let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
         JniEnv {
-            version: JniVersion::V8,
             vm: &vm,
             jni_env: calls.env,
             has_token: RefCell::new(true),
@@ -1386,7 +1382,6 @@ mod jni_env_tests {
         };
         let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
         JniEnv {
-            version: JniVersion::V8,
             vm: &vm,
             jni_env: calls.env,
             has_token: RefCell::new(true),
@@ -1421,7 +1416,6 @@ mod jni_env_tests {
         };
         let vm = test_vm(&mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM);
         let env = JniEnv {
-            version: JniVersion::V8,
             vm: &vm,
             jni_env: calls.env,
             has_token: RefCell::new(false),

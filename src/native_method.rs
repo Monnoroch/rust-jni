@@ -60,8 +60,7 @@ where
 
         // Safe because we pass a correct `java_vm` pointer.
         let vm = JavaVMRef::from_ptr(java_vm);
-        let get_version_fn = ((**raw_env).GetVersion).unwrap();
-        let env = JniEnv::native(&vm, raw_env, JniVersion::from_raw(get_version_fn(raw_env)));
+        let env = JniEnv::native(&vm, raw_env);
         // Safe because we checked for a pending exception.
         let token = NoException::new(&env);
         let result = callback(&env, token);
@@ -107,16 +106,12 @@ mod native_method_wrapper_tests {
                 vm: JAVA_VM,
                 result: jni_sys::JNI_OK,
             }),
-            JniCall::GetVersion(GetVersion {
-                result: jni_sys::JNI_VERSION_1_4,
-            }),
         ]);
         let result = 10;
         unsafe {
             let actual_result = native_method_wrapper(calls.env, |env, _| {
                 assert_eq!(env.raw_env(), calls.env);
                 assert_eq!(env.raw_jvm(), JAVA_VM);
-                assert_eq!(env.version(), JniVersion::V4);
                 Ok(result)
             });
             assert_eq!(actual_result, result);
@@ -135,9 +130,6 @@ mod native_method_wrapper_tests {
                 vm: JAVA_VM,
                 result: jni_sys::JNI_OK,
             }),
-            JniCall::GetVersion(GetVersion {
-                result: jni_sys::JNI_VERSION_1_4,
-            }),
             JniCall::Throw(Throw {
                 object: EXCEPTION,
                 result: jni_sys::JNI_OK,
@@ -148,7 +140,6 @@ mod native_method_wrapper_tests {
             let result: i32 = native_method_wrapper(calls.env, |env, _| {
                 assert_eq!(env.raw_env(), calls.env);
                 assert_eq!(env.raw_jvm(), JAVA_VM);
-                assert_eq!(env.version(), JniVersion::V4);
                 Err(test_throwable(env, EXCEPTION))
             });
             assert_eq!(result, <i32 as JniType>::default());
@@ -167,9 +158,6 @@ mod native_method_wrapper_tests {
                 vm: JAVA_VM,
                 result: jni_sys::JNI_OK,
             }),
-            JniCall::GetVersion(GetVersion {
-                result: jni_sys::JNI_VERSION_1_4,
-            }),
             JniCall::FindClass(FindClass {
                 name: "java/lang/RuntimeException".to_owned(),
                 result: RAW_CLASS,
@@ -184,7 +172,6 @@ mod native_method_wrapper_tests {
             let actual_result: i32 = native_method_wrapper(calls.env, |env, _| {
                 assert_eq!(env.raw_env(), calls.env);
                 assert_eq!(env.raw_jvm(), JAVA_VM);
-                assert_eq!(env.version(), JniVersion::V4);
                 panic!("ERROR");
             });
             assert_eq!(actual_result, <i32 as JniType>::default());
@@ -203,9 +190,6 @@ mod native_method_wrapper_tests {
                 vm: JAVA_VM,
                 result: jni_sys::JNI_OK,
             }),
-            JniCall::GetVersion(GetVersion {
-                result: jni_sys::JNI_VERSION_1_4,
-            }),
             JniCall::FindClass(FindClass {
                 name: "java/lang/RuntimeException".to_owned(),
                 result: RAW_CLASS,
@@ -220,7 +204,6 @@ mod native_method_wrapper_tests {
             let actual_result: i32 = native_method_wrapper(calls.env, |env, _| {
                 assert_eq!(env.raw_env(), calls.env);
                 assert_eq!(env.raw_jvm(), JAVA_VM);
-                assert_eq!(env.version(), JniVersion::V4);
                 panic!("ERROR".to_owned());
             });
             assert_eq!(actual_result, <i32 as JniType>::default());
@@ -238,9 +221,6 @@ mod native_method_wrapper_tests {
             JniCall::GetJavaVM(GetJavaVM {
                 vm: JAVA_VM,
                 result: jni_sys::JNI_OK,
-            }),
-            JniCall::GetVersion(GetVersion {
-                result: jni_sys::JNI_VERSION_1_4,
             }),
             JniCall::FindClass(FindClass {
                 name: "java/lang/RuntimeException".to_owned(),
@@ -323,9 +303,6 @@ mod native_method_wrapper_tests {
             JniCall::GetJavaVM(GetJavaVM {
                 vm: JAVA_VM,
                 result: jni_sys::JNI_OK,
-            }),
-            JniCall::GetVersion(GetVersion {
-                result: jni_sys::JNI_VERSION_1_4,
             }),
             JniCall::Throw(Throw {
                 object: EXCEPTION,
