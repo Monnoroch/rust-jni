@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, feature = "libjvm"))]
 mod default_jvm_arguments {
     #[test]
     fn supported_versions() {

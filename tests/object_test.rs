@@ -1,7 +1,7 @@
 mod object;
 
 /// An integration test for the `java::lang::Object` type.
-#[cfg(test)]
+#[cfg(all(test, feature = "libjvm"))]
 mod class {
     use crate::object;
     use rust_jni::*;

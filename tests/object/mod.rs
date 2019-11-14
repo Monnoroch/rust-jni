@@ -1,7 +1,10 @@
+#[cfg(all(test, feature = "libjvm"))]
 use rust_jni::java::lang::Object;
+#[cfg(all(test, feature = "libjvm"))]
 use rust_jni::*;
 
 /// An common integration test for types, that inherit from `java::lang::Object`.
+#[cfg(all(test, feature = "libjvm"))]
 pub fn test_object<'env>(
     object: &Object,
     class_name: &str,

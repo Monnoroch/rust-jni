@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, feature = "libjvm"))]
 mod create_jvm {
     use jni_sys;
     use rust_jni::*;

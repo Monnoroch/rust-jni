@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, feature = "libjvm"))]
 mod native_method_env {
     use rust_jni::__generator::*;
     use rust_jni::{self, *};

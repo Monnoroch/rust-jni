@@ -1,4 +1,4 @@
-#[cfg(test)]
+#[cfg(all(test, feature = "libjvm"))]
 mod create_envs {
     use rust_jni::*;
     use std::sync::Arc;
