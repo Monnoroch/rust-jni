@@ -28,7 +28,6 @@ mod methods;
 mod native_method;
 mod object;
 mod primitives;
-mod raw;
 mod result;
 mod string;
 mod throwable;

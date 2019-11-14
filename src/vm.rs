@@ -1633,7 +1633,7 @@ cfg_if! {
             _jni_env: *mut *mut c_void,
             _arguments: *mut c_void,
         ) -> jni_sys::jint {
-            jni_sys::JNI_OK
+            unimplemented!()
         }
     }
 }
@@ -1652,7 +1652,7 @@ cfg_if! {
             _buffer_size: jni_sys::jsize,
             _vms_count: *mut jni_sys::jsize,
         ) -> jni_sys::jint {
-            jni_sys::JNI_OK
+            unimplemented!()
         }
     }
 }
