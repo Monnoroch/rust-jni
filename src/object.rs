@@ -5,7 +5,7 @@ use crate::method_calls::call_method;
 use crate::result::JavaResult;
 use crate::string::String;
 use crate::token::{from_nullable, NoException};
-use crate::traits::{Cast, FromJni, JavaType, ToJni};
+use crate::traits::{Cast, FromJni, FromObject, JavaType, ToJni};
 use jni_sys;
 use std;
 use std::fmt;
@@ -110,7 +110,7 @@ impl<'env> Object<'env> {
     /// Construct from a raw pointer. Unsafe because an invalid pointer may be passed
     /// as the argument.
     /// Unsafe because an incorrect object reference can be passed.
-    unsafe fn from_raw(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Self {
+    pub(crate) unsafe fn from_raw(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) -> Self {
         Self { env, raw_object }
     }
 }
@@ -133,9 +133,9 @@ object_java_class!(
 
 /// Make [`Object`](struct.Object.html) convertible from
 /// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'env> FromJni<'env> for Object<'env> {
-    unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
-        Self::from_raw(env, value)
+impl<'env> FromObject<'env> for Object<'env> {
+    fn __from_object(object: Self) -> Self {
+        object
     }
 }
 

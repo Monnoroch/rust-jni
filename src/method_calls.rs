@@ -5,7 +5,7 @@ use crate::object::Object;
 use crate::primitives::ToJniTuple;
 use crate::result::JavaResult;
 use crate::token::{from_nullable, get_and_clear_exception_if_thrown, NoException};
-use crate::traits::{Cast, FromJni, JavaMethodSignature, JniType};
+use crate::traits::{Cast, FromJni, FromObject, JavaMethodSignature, JniType};
 use jni_sys;
 use std::os::raw::c_char;
 
@@ -72,6 +72,19 @@ unsafe fn from_method_call_result<'env, Out: FromJni<'env>>(
     match get_and_clear_exception_if_thrown(env) {
         // Safe because arguments are ensured to be the correct by construction.
         None => Ok(Out::__from_jni(env, result)),
+        Some(exception) => Err(exception),
+    }
+}
+
+/// Get the id of a static method by it's name and type.
+/// Unsafe, because it's possible to pass an incorrect result.
+unsafe fn from_object_method_call_result<'env, Out: FromObject<'env>>(
+    env: &'env JniEnv<'env>,
+    result: jni_sys::jobject,
+) -> JavaResult<'env, Out> {
+    match get_and_clear_exception_if_thrown(env) {
+        // Safe because arguments are ensured to be the correct by construction.
+        None => Ok(Out::__from_object(Object::__from_jni(env, result))),
         Some(exception) => Err(exception),
     }
 }
@@ -538,7 +551,7 @@ pub unsafe fn call_constructor<
     let method_id = get_method_id::<_, _, T>(&class, "<init>", token)?;
     // Safe because arguments are ensured to be the correct by construction.
     let result = In::call_constructor(&class, method_id, arguments);
-    from_method_call_result(env, result)
+    from_object_method_call_result(env, result)
 }
 
 #[cfg(test)]

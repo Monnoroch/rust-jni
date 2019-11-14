@@ -171,11 +171,11 @@ macro_rules! java_class {
 
         /// Make
         #[doc = $link]
-        /// convertible from [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-        impl<'env> FromJni<'env> for $class<'env> {
-            unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
+        /// convertible from [`Object`](struct.Object.html).
+        impl<'env> FromObject<'env> for $class<'env> {
+            fn __from_object(object: Object<'env>) -> Self {
                 Self {
-                    object: Object::__from_jni(env, value),
+                    object,
                 }
             }
         }
@@ -356,6 +356,20 @@ macro_rules! generate_object_tests {
             unsafe {
                 let object = $class::__from_jni(&env, raw_object);
                 assert_eq!(object.__to_jni(), raw_object);
+                mem::forget(object);
+            }
+        }
+
+        #[test]
+        fn from_object() {
+            let vm = test_vm(ptr::null_mut());
+            let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+            let env = test_env(&vm, jni_env);
+            let raw_object = 0x91011 as jni_sys::jobject;
+            unsafe {
+                let object = $class::__from_object(test_object(&env, raw_object));
+                assert_eq!(object.raw_object(), raw_object);
+                assert_eq!(object.env().raw_env(), jni_env);
                 mem::forget(object);
             }
         }

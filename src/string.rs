@@ -7,7 +7,7 @@ use crate::object::test_object;
 use crate::object::Object;
 use crate::result::JavaResult;
 use crate::token::{from_nullable, NoException};
-use crate::traits::{Cast, FromJni, JavaType, ToJni};
+use crate::traits::{Cast, FromJni, FromObject, JavaType, ToJni};
 use jni_sys;
 use std;
 use std::fmt;

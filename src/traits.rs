@@ -92,6 +92,31 @@ pub trait FromJni<'env>: JavaType {
     unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self;
 }
 
+/// A trait for constructing values for Java class types from [`Object`](struct.Object.html).
+/// This trait has to be implemented for all types that  map Java classes.
+///
+/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+///
+/// This trait should only be implemented and used by generated code.
+#[doc(hidden)]
+pub trait FromObject<'env>: JavaType<__JniType = jni_sys::jobject> {
+    /// Construct a value from a JNI type value.
+    ///
+    /// THIS METHOD SHOULD NOT BE CALLED MANUALLY.
+    ///
+    /// Should only be implemented and used by generated code.
+    fn __from_object(value: Object<'env>) -> Self;
+}
+
+impl<'env, T> FromJni<'env> for T
+where
+    T: FromObject<'env>,
+{
+    unsafe fn __from_jni(env: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
+        <Self as FromObject<'env>>::__from_object(Object::from_raw(env, value))
+    }
+}
+
 /// Make references mappable to JNI types of their referenced types.
 impl<'a, T> JavaType for &'a T
 where
@@ -134,7 +159,7 @@ pub trait JavaMethodSignature<In: ?Sized, Out: ?Sized> {
 
 /// A trait for casting Java object types to their superclasses.
 pub trait Cast<'env, As: Cast<'env, Object<'env>>>:
-    JavaType<__JniType = jni_sys::jobject> + ToJni + FromJni<'env>
+    JavaType<__JniType = jni_sys::jobject> + FromObject<'env>
 {
     /// Cast the object to itself or one of it's superclasses.
     ///

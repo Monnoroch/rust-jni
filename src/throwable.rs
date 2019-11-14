@@ -9,7 +9,7 @@ use crate::object::Object;
 use crate::result::JavaResult;
 use crate::string::String;
 use crate::token::{Exception, NoException};
-use crate::traits::{Cast, FromJni, JavaType, ToJni};
+use crate::traits::{Cast, FromObject, JavaType, ToJni};
 use jni_sys;
 use std::fmt;
 
@@ -78,6 +78,7 @@ mod throwable_tests {
     use super::*;
     use crate::env::test_env;
     use crate::testing::*;
+    use crate::traits::FromJni;
     use crate::vm::test_vm;
     use std::mem;
     use std::ops::Deref;
