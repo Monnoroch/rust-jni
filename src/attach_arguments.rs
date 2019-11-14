@@ -1,4 +1,3 @@
-use crate::init_arguments::InitArguments;
 use crate::java_string::*;
 use crate::version::JniVersion;
 use jni_sys;
@@ -12,38 +11,37 @@ use std::ptr;
 ///
 /// # Example
 /// ```
-/// use rust_jni::{AttachArguments, InitArguments, JniVersion};
+/// use rust_jni::{AttachArguments, JniVersion};
 ///
-/// let options = InitArguments::get_default(JniVersion::V8).unwrap();
-/// let attach_arguments = AttachArguments::new(&options);
+/// let attach_arguments = AttachArguments::new(JniVersion::V8);
 ///
 /// assert_eq!(attach_arguments.version(), JniVersion::V8);
 /// ```
 #[derive(Debug, PartialEq, Eq)]
-pub struct AttachArguments<'a> {
+pub struct AttachArguments {
     version: JniVersion,
-    thread_name: Option<&'a str>,
+    thread_name: Option<String>,
     // TODO(#7): support thread groups.
 }
 
-impl<'a> AttachArguments<'a> {
+impl AttachArguments {
     /// Create attach arguments with the default thread name.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
-    pub fn new(init_arguments: &InitArguments) -> Self {
+    pub fn new(version: JniVersion) -> Self {
         AttachArguments {
             thread_name: None,
-            version: init_arguments.version(),
+            version: version,
         }
     }
 
     /// Create attach arguments with a specified thread name.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
-    pub fn named(init_arguments: &InitArguments, thread_name: &'a str) -> Self {
+    pub fn named(version: JniVersion, thread_name: impl Into<String>) -> Self {
         AttachArguments {
-            thread_name: Some(thread_name),
-            version: init_arguments.version(),
+            thread_name: Some(thread_name.into()),
+            version: version,
         }
     }
 
@@ -53,17 +51,23 @@ impl<'a> AttachArguments<'a> {
     pub fn version(&self) -> JniVersion {
         self.version
     }
+
+    /// Return the JNI version these arguments will request when attaching a thread to a Java VM.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
+    pub fn thread_name(&self) -> &Option<String> {
+        &self.thread_name
+    }
 }
 
 #[cfg(test)]
-mod attach_arguments_tests {
+mod tests {
     use super::*;
 
     #[test]
     fn new() {
-        let init_arguments = InitArguments::default().with_version(JniVersion::V4);
         assert_eq!(
-            AttachArguments::new(&init_arguments),
+            AttachArguments::new(JniVersion::V4),
             AttachArguments {
                 thread_name: None,
                 version: JniVersion::V4
@@ -73,11 +77,10 @@ mod attach_arguments_tests {
 
     #[test]
     fn named() {
-        let init_arguments = InitArguments::default().with_version(JniVersion::V4);
         assert_eq!(
-            AttachArguments::named(&init_arguments, "test-name"),
+            AttachArguments::named(JniVersion::V4, "test-name"),
             AttachArguments {
-                thread_name: Some("test-name"),
+                thread_name: Some("test-name".into()),
                 version: JniVersion::V4,
             }
         );
@@ -91,37 +94,58 @@ mod attach_arguments_tests {
         };
         assert_eq!(arguments.version(), JniVersion::V4);
     }
+
+    #[test]
+    fn thread_name() {
+        let arguments = AttachArguments {
+            version: JniVersion::V4,
+            thread_name: Some("test-name".into()),
+        };
+        assert_eq!(arguments.thread_name(), &Some("test-name".to_owned()));
+    }
+
+    #[test]
+    fn no_thread_name() {
+        let arguments = AttachArguments {
+            version: JniVersion::V4,
+            thread_name: None,
+        };
+        assert_eq!(arguments.thread_name(), &None);
+    }
 }
 
 /// A wrapper around `jni_sys::JavaVMAttachArgs` with a lifetime to ensure
 /// there's no access to freed memory.
-pub struct RawAttachArguments<'a> {
+pub(crate) struct RawAttachArguments<'a> {
     pub raw_arguments: jni_sys::JavaVMAttachArgs,
+    // Used by JNI.
     #[allow(dead_code)]
     buffer_len: usize,
     _buffer: PhantomData<&'a Vec<u8>>,
 }
 
-/// Convert `AttachArguments` to `jni_sys::JavaVMAttachArgs`. Uses a buffer for storing
-/// the Java string with the thread name.
-pub fn to_raw<'a>(arguments: &AttachArguments, buffer: &'a mut Vec<u8>) -> RawAttachArguments<'a> {
-    let version = arguments.version.to_raw();
-    let group = ptr::null_mut();
-    let raw_arguments = jni_sys::JavaVMAttachArgs {
-        name: match arguments.thread_name {
-            None => ptr::null_mut(),
-            Some(ref thread_name) => {
-                *buffer = to_java_string(thread_name);
-                buffer.as_ptr() as *mut c_char
-            }
-        },
-        version,
-        group,
-    };
-    RawAttachArguments {
-        raw_arguments,
-        buffer_len: buffer.len(),
-        _buffer: PhantomData::<&'a Vec<u8>>,
+impl AttachArguments {
+    /// Convert `AttachArguments` to `jni_sys::JavaVMAttachArgs`. Uses a buffer for storing
+    /// the Java string with the thread name.
+    pub(crate) fn to_raw<'a>(&self, buffer: &'a mut Vec<u8>) -> RawAttachArguments<'a> {
+        let version = self.version().to_raw();
+        let group = ptr::null_mut();
+        let raw_arguments = jni_sys::JavaVMAttachArgs {
+            name: match self.thread_name() {
+                None => ptr::null_mut(),
+                Some(ref thread_name) => {
+                    *buffer = to_java_string(thread_name);
+                    buffer.as_ptr() as *mut c_char
+                }
+            },
+            version,
+            group,
+        };
+        RawAttachArguments {
+            raw_arguments,
+            buffer_len: buffer.len(),
+            _buffer: PhantomData::<&'a Vec<u8>>,
+        }
     }
 }
 
@@ -132,10 +156,9 @@ mod to_raw_tests {
 
     #[test]
     fn to_raw() {
-        let init_arguments = InitArguments::default().with_version(JniVersion::V8);
-        let arguments = AttachArguments::new(&init_arguments);
+        let arguments = AttachArguments::new(JniVersion::V8);
         let mut buffer: Vec<u8> = vec![];
-        let raw_arguments = super::to_raw(&arguments, &mut buffer);
+        let raw_arguments = arguments.to_raw(&mut buffer);
         assert_eq!(raw_arguments.raw_arguments.group, ptr::null_mut());
         assert_eq!(raw_arguments.raw_arguments.name, ptr::null_mut());
         assert_eq!(raw_arguments.raw_arguments.version, JniVersion::V8.to_raw());
@@ -143,11 +166,10 @@ mod to_raw_tests {
 
     #[test]
     fn to_raw_named() {
-        let init_arguments = InitArguments::default().with_version(JniVersion::V8);
         let test_name = "test-name";
-        let arguments = AttachArguments::named(&init_arguments, test_name);
+        let arguments = AttachArguments::named(JniVersion::V8, test_name);
         let mut buffer: Vec<u8> = vec![];
-        let raw_arguments = super::to_raw(&arguments, &mut buffer);
+        let raw_arguments = arguments.to_raw(&mut buffer);
         assert_eq!(raw_arguments.raw_arguments.group, ptr::null_mut());
         assert_eq!(raw_arguments.raw_arguments.version, JniVersion::V8.to_raw());
         assert_eq!(

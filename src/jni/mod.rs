@@ -52,7 +52,7 @@ include!("generate_class.rs");
 ///
 /// let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// let vm = JavaVM::create(&init_arguments).unwrap();
-/// let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 /// let token = env.token();
 /// ```
 /// Once obtained, the token can be used to call JNI methods:
@@ -61,7 +61,7 @@ include!("generate_class.rs");
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
-/// # let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// # let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 /// let token = env.token();
 /// let string = java::lang::String::empty(&env, &token).unwrap();
 /// ```
@@ -76,7 +76,7 @@ include!("generate_class.rs");
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
-/// # let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// # let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 /// let token = env.token();
 /// let string = java::lang::Class::find(&env, "java/lang/String", &token).unwrap();
 /// let exception = java::lang::Class::find(&env, "invalid", &token).unwrap_err();
@@ -87,7 +87,7 @@ include!("generate_class.rs");
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
-/// let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 /// let token = env.token();
 /// let token = env.token(); // panics!
 /// ```
@@ -99,7 +99,7 @@ include!("generate_class.rs");
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
 /// let token = {
-///     let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+///     let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 ///     let token = env.token();
 ///     token
 /// }; // doesn't compile!
@@ -110,7 +110,7 @@ include!("generate_class.rs");
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
-/// # let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// # let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 /// let token = env.token();
 /// let exception = java::lang::String::empty(&env, &token).unwrap_err();
 /// exception.throw(token);
@@ -127,7 +127,7 @@ include!("generate_class.rs");
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
-/// # let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// # let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 /// let token = env.token();
 /// let exception = java::lang::Class::find(&env, "invalid", &token).unwrap_err();
 /// let exception_token = exception.throw(token); // there is a pending exception now.
@@ -485,7 +485,7 @@ impl JavaVM {
         ) -> jni_sys::jint,
     ) -> Result<JniEnv, JniError> {
         let mut buffer: Vec<u8> = vec![];
-        let mut raw_arguments = attach_arguments::to_raw(arguments, &mut buffer);
+        let mut raw_arguments = arguments.to_raw(&mut buffer);
         let mut jni_env: *mut jni_sys::JNIEnv = ::std::ptr::null_mut();
         let get_env_fn = (**self.raw_jvm()).GetEnv.unwrap();
         // Safe, because the arguments are correct.
@@ -905,10 +905,7 @@ mod java_vm_tests {
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(
-            &InitArguments::default().with_version(JniVersion::V8),
-        ))
-        .unwrap();
+        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
     }
 
     #[test]
@@ -935,10 +932,7 @@ mod java_vm_tests {
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(
-            &InitArguments::default().with_version(JniVersion::V8),
-        ))
-        .unwrap();
+        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
     }
 
     #[test]
@@ -965,10 +959,7 @@ mod java_vm_tests {
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(
-            &InitArguments::default().with_version(JniVersion::V8),
-        ))
-        .unwrap();
+        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
     }
 
     #[test]
@@ -995,10 +986,7 @@ mod java_vm_tests {
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(
-            &InitArguments::default().with_version(JniVersion::V8),
-        ))
-        .unwrap();
+        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
     }
 
     #[test]
@@ -1025,10 +1013,8 @@ mod java_vm_tests {
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
         assert_eq!(
-            vm.attach(&AttachArguments::new(
-                &InitArguments::default().with_version(JniVersion::V8)
-            ))
-            .unwrap_err(),
+            vm.attach(&AttachArguments::new(JniVersion::V8))
+                .unwrap_err(),
             JniError::Unknown(jni_sys::JNI_ERR as i32)
         );
     }
@@ -1065,10 +1051,7 @@ mod java_vm_tests {
         unsafe {
             ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
         }
-        vm.attach(&AttachArguments::new(
-            &InitArguments::default().with_version(JniVersion::V8),
-        ))
-        .unwrap();
+        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
     }
 
     // #[test]
@@ -1156,7 +1139,7 @@ mod java_vm_tests {
 ///
 /// let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// let vm = JavaVM::create(&init_arguments).unwrap();
-/// let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 /// unsafe {
 ///     assert_ne!(env.raw_env(), ptr::null_mut());
 /// }
@@ -1169,7 +1152,7 @@ mod java_vm_tests {
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
-/// let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 /// {
 ///     ::std::thread::spawn(move || {
 ///         unsafe { env.raw_env() }; // doesn't compile!
@@ -1184,11 +1167,11 @@ mod java_vm_tests {
 ///
 /// let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// let vm = Arc::new(JavaVM::create(&init_arguments).unwrap());
-/// let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 /// {
 ///     let vm = vm.clone();
 ///     ::std::thread::spawn(move || {
-///         let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
+///         let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
 ///         unsafe {
 ///             assert_ne!(env.raw_env(), ptr::null_mut());
 ///         }
@@ -1208,7 +1191,7 @@ mod java_vm_tests {
 /// let env = {
 ///     let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 ///     let vm = JavaVM::create(&init_arguments).unwrap();
-///     vm.attach(&AttachArguments::new(&init_arguments)).unwrap() // doesn't compile!
+///     vm.attach(&AttachArguments::new(init_arguments.version())).unwrap() // doesn't compile!
 /// };
 /// ```
 /// [`JniEnv`](struct.JniEnv.html) represents a thread, attached to the Java VM. Thus there
@@ -1219,8 +1202,8 @@ mod java_vm_tests {
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
-/// let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
-/// let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap(); // panics!
+/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
+/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap(); // panics!
 /// ```
 // TODO: docs about panicing on detach when there's a pending exception.
 #[derive(Debug)]
