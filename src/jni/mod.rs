@@ -701,10 +701,10 @@ mod java_vm_list_tests {
 mod java_vm_tests_legacy {
     use super::*;
     use crate::init_arguments;
-    use crate::java_string::*;
-    use crate::testing::*;
-    use std::ffi::CStr;
-    use std::mem;
+    
+    
+    
+    
 
     fn default_args() -> InitArguments {
         init_arguments::init_arguments_manipulation_tests::default_args()

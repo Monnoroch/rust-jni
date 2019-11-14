@@ -920,7 +920,7 @@ macro_rules! generate_tests {
             let env = test_env(&vm, ptr::null_mut());
             let object = test_value(&env, ptr::null_mut());
             // Will not compile if is not deref-able.
-            &object as &Deref<Target = Object>;
+            &object as &dyn Deref<Target = Object>;
             mem::forget(object);
         }
 
