@@ -26,10 +26,8 @@ mod class {
             &token,
         );
 
-        assert!(
-            object
-                .class(&token)
-                .is_same_as(&java::lang::Class::get_class(&env, &token).unwrap(), &token)
-        );
+        assert!(object
+            .class(&token)
+            .is_same_as(&java::lang::Class::get_class(&env, &token).unwrap(), &token));
     }
 }

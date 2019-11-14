@@ -358,7 +358,8 @@ impl InitArguments {
         InitArguments {
             version: self.version,
             ignore_unrecognized: self.ignore_unrecognized,
-            options: self.options
+            options: self
+                .options
                 .iter()
                 .filter(|&option| *option != JvmOption::CheckedJni)
                 .cloned()

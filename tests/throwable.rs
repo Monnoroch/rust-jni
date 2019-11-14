@@ -19,7 +19,8 @@ mod throwable {
             &env,
             &java::lang::String::new(&env, "test-string", &token).unwrap(),
             &token,
-        ).unwrap();
+        )
+        .unwrap();
 
         object::test_object(
             &throwable,

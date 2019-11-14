@@ -862,7 +862,8 @@ mod java_vm_tests {
         unsafe {
             ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
         }
-        let env = vm.attach(&AttachArguments::named(&init_arguments, "test-name"))
+        let env = vm
+            .attach(&AttachArguments::named(&init_arguments, "test-name"))
             .unwrap();
         unsafe {
             assert_eq!(GET_ENV_CALLS, 1);
@@ -874,7 +875,8 @@ mod java_vm_tests {
                 from_java_string(
                     CStr::from_ptr((*(ATTACH_ARGUMENT as *mut jni_sys::JavaVMAttachArgs)).name)
                         .to_bytes_with_nul()
-                ).unwrap(),
+                )
+                .unwrap(),
                 "test-name"
             );
             assert_eq!(env.raw_jvm(), raw_java_vm_ptr);
@@ -1108,7 +1110,8 @@ mod java_vm_tests {
         unsafe {
             ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
         }
-        let env = vm.attach_daemon(&AttachArguments::named(&init_arguments, "test-name"))
+        let env = vm
+            .attach_daemon(&AttachArguments::named(&init_arguments, "test-name"))
             .unwrap();
         unsafe {
             assert_eq!(GET_ENV_CALLS, 1);
@@ -1120,7 +1123,8 @@ mod java_vm_tests {
                 from_java_string(
                     CStr::from_ptr((*(ATTACH_ARGUMENT as *mut jni_sys::JavaVMAttachArgs)).name)
                         .to_bytes_with_nul()
-                ).unwrap(),
+                )
+                .unwrap(),
                 "test-name"
             );
             assert_eq!(env.raw_jvm(), raw_java_vm_ptr);
@@ -1616,9 +1620,9 @@ mod with_checked_exception_tests {
 
     #[test]
     fn no_exception() {
-        let result = with_checked_exception(&NoException::test(), |_| {
-            Ok((17, NoException::test()))
-        }).unwrap();
+        let result =
+            with_checked_exception(&NoException::test(), |_| Ok((17, NoException::test())))
+                .unwrap();
         assert_eq!(result, 17);
     }
 
@@ -1631,9 +1635,9 @@ mod with_checked_exception_tests {
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
-        let exception = with_checked_exception::<i32, _>(&NoException::test(), |_| {
-            Err(Exception::test(&env))
-        }).unwrap_err();
+        let exception =
+            with_checked_exception::<i32, _>(&NoException::test(), |_| Err(Exception::test(&env)))
+                .unwrap_err();
         calls.assert_eq(&exception, EXCEPTION);
     }
 }
@@ -2360,10 +2364,8 @@ mod object_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
         let object = test_value(&env, RAW_OBJECT);
-        assert!(
-            format!("{:?}", object)
-                .contains("string: <Object::toString threw an exception: \"test-string\">")
-        );
+        assert!(format!("{:?}", object)
+            .contains("string: <Object::toString threw an exception: \"test-string\">"));
     }
 
     #[test]

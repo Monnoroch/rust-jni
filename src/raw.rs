@@ -144,7 +144,8 @@ pub unsafe fn JNI_GetDefaultJavaVMInitArgs(arguments: *mut c_void) -> jni_sys::j
         .lock()
         .unwrap()
         .set_input
-        .0 != ptr::null_mut()
+        .0
+        != ptr::null_mut()
     {
         let test_value = TEST_JNI_GetDefaultJavaVMInitArgs
             .lock()

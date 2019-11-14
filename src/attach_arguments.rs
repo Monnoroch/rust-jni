@@ -164,7 +164,8 @@ mod to_raw_tests {
                     raw_arguments.raw_arguments.name as *const u8,
                     raw_arguments.buffer_len,
                 )
-            }).unwrap(),
+            })
+            .unwrap(),
             test_name
         );
     }

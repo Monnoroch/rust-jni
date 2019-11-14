@@ -388,8 +388,11 @@ pub struct GetMethodID {
 
 generate_method_check_impl!(
     GetMethodID,
-    fn(class: jni_sys::jobject, name: *const c_char, signature: *const c_char)
-        -> jni_sys::jmethodID,
+    fn(
+        class: jni_sys::jobject,
+        name: *const c_char,
+        signature: *const c_char,
+    ) -> jni_sys::jmethodID,
     |call: &Self| {
         assert_eq!(class, call.class);
         assert_eq!(
@@ -415,8 +418,11 @@ pub struct GetStaticMethodID {
 
 generate_method_check_impl!(
     GetStaticMethodID,
-    fn(class: jni_sys::jobject, name: *const c_char, signature: *const c_char)
-        -> jni_sys::jmethodID,
+    fn(
+        class: jni_sys::jobject,
+        name: *const c_char,
+        signature: *const c_char,
+    ) -> jni_sys::jmethodID,
     |call: &Self| {
         assert_eq!(class, call.class);
         assert_eq!(
@@ -442,8 +448,12 @@ pub struct GetStringUTFRegion {
 
 generate_method_check_impl!(
     GetStringUTFRegion,
-    fn(string: jni_sys::jstring, start: jni_sys::jsize, len: jni_sys::jsize, buffer: *mut c_char)
-        -> (),
+    fn(
+        string: jni_sys::jstring,
+        start: jni_sys::jsize,
+        len: jni_sys::jsize,
+        buffer: *mut c_char,
+    ) -> (),
     |call: &Self| {
         assert_eq!(string, call.string);
         assert_eq!(start, call.start);

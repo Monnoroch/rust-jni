@@ -168,14 +168,13 @@ mod call_method_tests {
         let object = test_object(&env, RAW_OBJECT);
         let arguments = (17 as i32, 19. as f64);
         unsafe {
-            assert!(
-                super::call_method::<Object, _, _, fn(i32, f64) -> bool>(
-                    &object,
-                    "test-method",
-                    arguments,
-                    &NoException::test()
-                ).unwrap()
-            );
+            assert!(super::call_method::<Object, _, _, fn(i32, f64) -> bool>(
+                &object,
+                "test-method",
+                arguments,
+                &NoException::test()
+            )
+            .unwrap());
             assert_eq!(METHOD_CALLS, 1);
             assert_eq!(METHOD_ENV_ARGUMENT, calls.env);
             assert_eq!(METHOD_ARGUMENT0, arguments.0);
@@ -211,7 +210,8 @@ mod call_method_tests {
                 "test-method",
                 (),
                 &NoException::test(),
-            ).unwrap_err();
+            )
+            .unwrap_err();
             calls.assert_eq(&exception, EXCEPTION);
         }
     }
@@ -271,7 +271,8 @@ mod call_method_tests {
                 "test-method",
                 (),
                 &NoException::test(),
-            ).unwrap_err();
+            )
+            .unwrap_err();
             calls.assert_eq(&exception, EXCEPTION);
         }
     }
@@ -378,7 +379,8 @@ mod call_static_method_tests {
                     "test-method",
                     arguments,
                     &NoException::test()
-                ).unwrap()
+                )
+                .unwrap()
             );
             assert_eq!(METHOD_CALLS, 1);
             assert_eq!(METHOD_ENV_ARGUMENT, calls.env);
@@ -406,7 +408,8 @@ mod call_static_method_tests {
                 "",
                 (),
                 &NoException::test(),
-            ).unwrap_err();
+            )
+            .unwrap_err();
             calls.assert_eq(&exception, EXCEPTION);
         }
     }
@@ -437,7 +440,8 @@ mod call_static_method_tests {
                 "test-method",
                 (),
                 &NoException::test(),
-            ).unwrap_err();
+            )
+            .unwrap_err();
             calls.assert_eq(&exception, EXCEPTION);
         }
     }
@@ -495,7 +499,8 @@ mod call_static_method_tests {
                 "test-method",
                 (),
                 &NoException::test(),
-            ).unwrap_err();
+            )
+            .unwrap_err();
             calls.assert_eq(&exception, EXCEPTION);
         }
     }
@@ -599,7 +604,8 @@ mod call_constructor_tests {
                 &env,
                 arguments,
                 &NoException::test(),
-            ).unwrap();
+            )
+            .unwrap();
             calls.assert_eq(&object, RAW_OBJECT);
             assert_eq!(METHOD_CALLS, 1);
             assert_eq!(METHOD_ENV_ARGUMENT, calls.env);
@@ -714,7 +720,8 @@ mod call_constructor_tests {
                 &env,
                 arguments,
                 &NoException::test(),
-            ).unwrap_err();
+            )
+            .unwrap_err();
             calls.assert_eq(&exception, EXCEPTION);
         }
     }
