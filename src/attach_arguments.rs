@@ -56,7 +56,7 @@ impl<'a> AttachArguments<'a> {
 }
 
 #[cfg(test)]
-mod tests {
+mod attach_arguments_tests {
     use super::*;
     use init_arguments;
 

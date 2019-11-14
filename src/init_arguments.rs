@@ -458,7 +458,7 @@ pub fn test(version: JniVersion) -> InitArguments {
 }
 
 #[cfg(test)]
-pub mod tests {
+pub mod init_arguments_tests {
     use super::*;
 
     fn default_options() -> Vec<JvmOption> {

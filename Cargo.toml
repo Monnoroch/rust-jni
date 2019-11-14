@@ -16,6 +16,7 @@ include = [
 	"README.md",
 	"LICENSE",
 ]
+edition = "2018"
 
 [badges]
 travis-ci = { repository = "Monnoroch/rust-jni", branch = "master" }
