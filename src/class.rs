@@ -1,5 +1,6 @@
 use crate::env::JniEnv;
 use crate::java_string::*;
+use crate::jni_bool;
 #[cfg(test)]
 use crate::object::test_object;
 use crate::object::Object;
@@ -103,8 +104,7 @@ impl<'env> Class<'env> {
                 class.raw_object() as jni_sys::jclass
             )
         };
-        // Safe because `bool` conversion is safe internally.
-        unsafe { bool::__from_jni(self.env(), assignable) }
+        jni_bool::to_rust(assignable)
     }
 
     /// Unsafe because the argument mught not be a valid class reference.

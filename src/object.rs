@@ -1,5 +1,6 @@
 use crate::class::Class;
 use crate::env::JniEnv;
+use crate::jni_bool;
 use crate::method_calls::call_method;
 use crate::result::JavaResult;
 use crate::string::String;
@@ -68,8 +69,7 @@ impl<'env> Object<'env> {
                 other.raw_object()
             )
         };
-        // Safe because `bool` conversion is safe internally.
-        unsafe { bool::__from_jni(self.env(), same) }
+        jni_bool::to_rust(same)
     }
 
     /// Check if the object is an instance of the class.
@@ -85,8 +85,7 @@ impl<'env> Object<'env> {
                 class.raw_object()
             )
         };
-        // Safe because `bool` conversion is safe internally.
-        unsafe { bool::__from_jni(self.env(), is_instance) }
+        jni_bool::to_rust(is_instance)
     }
 
     /// Clone the [`Object`](struct.Object.html). This is not a deep clone of the Java object,

@@ -1,5 +1,6 @@
 use crate::class::Class;
 use crate::env::JniEnv;
+use crate::jni_bool;
 #[cfg(test)]
 use crate::object::test_object;
 use crate::object::Object;
@@ -923,11 +924,7 @@ impl ToJni for bool {
 /// [`jboolean`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jboolean.html).
 impl<'env> FromJni<'env> for bool {
     unsafe fn __from_jni(_: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
-        match value {
-            jni_sys::JNI_TRUE => true,
-            jni_sys::JNI_FALSE => false,
-            value => panic!("Unexpected jboolean value {:?}", value),
-        }
+        jni_bool::to_rust(value)
     }
 }
 
