@@ -12,6 +12,113 @@ use std::ptr;
 
 include!("call_jni_method.rs");
 
+#[doc(hidden)]
+pub(crate) trait JniPrimitiveType {
+    fn default() -> Self;
+    fn signature() -> &'static str;
+
+    unsafe fn call_method<In: ToJniTuple>(
+        object: &Object,
+        method_id: jni_sys::jmethodID,
+        arguments: In,
+    ) -> Self;
+
+    unsafe fn call_static_method<In: ToJniTuple>(
+        class: &Class,
+        method_id: jni_sys::jmethodID,
+        arguments: In,
+    ) -> Self;
+}
+
+/// A macro for generating [`JniPrimitiveType`](trait.JniPrimitiveType.html) implementation for primitive types.
+macro_rules! jni_primitive_type_trait {
+    ($type:ty, $default:expr, $signature:expr, $method:ident, $static_method:ident) => {
+        impl JniPrimitiveType for $type {
+            fn default() -> Self {
+                $default
+            }
+
+            fn signature() -> &'static str {
+                $signature
+            }
+
+            unsafe fn call_method<In: ToJniTuple>(
+                object: &Object,
+                method_id: jni_sys::jmethodID,
+                arguments: In,
+            ) -> Self {
+                In::$method(object, method_id, arguments)
+            }
+
+            unsafe fn call_static_method<In: ToJniTuple>(
+                class: &Class,
+                method_id: jni_sys::jmethodID,
+                arguments: In,
+            ) -> Self {
+                In::$static_method(class, method_id, arguments)
+            }
+        }
+    };
+}
+
+jni_primitive_type_trait!((), (), "V", call_void_method, call_static_void_method);
+jni_primitive_type_trait!(
+    jni_sys::jboolean,
+    jni_sys::JNI_FALSE,
+    "Z",
+    call_boolean_method,
+    call_static_boolean_method
+);
+jni_primitive_type_trait!(
+    jni_sys::jchar,
+    0,
+    "C",
+    call_char_method,
+    call_static_char_method
+);
+jni_primitive_type_trait!(
+    jni_sys::jbyte,
+    0,
+    "B",
+    call_byte_method,
+    call_static_byte_method
+);
+jni_primitive_type_trait!(
+    jni_sys::jshort,
+    0,
+    "S",
+    call_short_method,
+    call_static_short_method
+);
+jni_primitive_type_trait!(
+    jni_sys::jint,
+    0,
+    "I",
+    call_int_method,
+    call_static_int_method
+);
+jni_primitive_type_trait!(
+    jni_sys::jlong,
+    0,
+    "J",
+    call_long_method,
+    call_static_long_method
+);
+jni_primitive_type_trait!(
+    jni_sys::jfloat,
+    0.,
+    "F",
+    call_float_method,
+    call_static_float_method
+);
+jni_primitive_type_trait!(
+    jni_sys::jdouble,
+    0.,
+    "D",
+    call_double_method,
+    call_static_double_method
+);
+
 /// A macro for generating [`JniType`](trait.JniType.html) implementation for primitive types.
 macro_rules! jni_type_trait {
     ($type:ty, $default:expr, $method:ident, $static_method:ident) => {
@@ -150,7 +257,7 @@ macro_rules! generate_jni_type_tests {
                 unsafe {
                     METHOD_RESULT = result;
                     assert_eq!(
-                        <$jni_type>::call_method(&object, method_id, arguments),
+                        <$jni_type as JniType>::call_method(&object, method_id, arguments),
                         result
                     );
                     assert_eq!(METHOD_CALLS, 1);
@@ -216,7 +323,7 @@ macro_rules! generate_jni_type_tests {
                 unsafe {
                     METHOD_RESULT = result;
                     assert_eq!(
-                        <$jni_type>::call_static_method(&class, method_id, arguments),
+                        <$jni_type as JniType>::call_static_method(&class, method_id, arguments),
                         result
                     );
                     assert_eq!(METHOD_CALLS, 1);
@@ -1079,7 +1186,7 @@ mod char_tests {
 /// A macro for generating [`JavaType`](trait.JavaType.html) implementations for most primitive
 /// Rust types.
 macro_rules! jni_io_traits {
-    ($type:ty, $jni_type:ty, $signature:expr, $link:expr, $jni_sys_link:expr) => {
+    ($type:ty, $jni_type:ty, $link:expr, $jni_sys_link:expr) => {
         /// Make
         #[doc = $link]
         /// mappable to
@@ -1091,7 +1198,7 @@ macro_rules! jni_io_traits {
 
             #[doc(hidden)]
             fn __signature() -> &'static str {
-                $signature
+                <$jni_type as JniPrimitiveType>::signature()
             }
         }
 
@@ -1124,35 +1231,30 @@ macro_rules! jni_io_traits {
 jni_io_traits!(
     (),
     (),
-    "V",
     "[`()`](https://doc.rust-lang.org/std/primitive.unit.html)",
     "[`()`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jchar.html)"
 );
 jni_io_traits!(
     u8,
     jni_sys::jbyte,
-    "B",
     "[`u8`](https://doc.rust-lang.org/std/primitive.u8.html)",
     "[`jbyte`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jbyte.html)"
 );
 jni_io_traits!(
     i16,
     jni_sys::jshort,
-    "S",
     "[`i16`](https://doc.rust-lang.org/std/primitive.i16.html)",
     "[`jshort`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jshort.html)"
 );
 jni_io_traits!(
     i32,
     jni_sys::jint,
-    "I",
     "[`i32`](https://doc.rust-lang.org/std/primitive.i32.html)",
     "[`jint`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jint.html)"
 );
 jni_io_traits!(
     i64,
     jni_sys::jlong,
-    "J",
     "[`i64`](https://doc.rust-lang.org/std/primitive.i64.html)",
     "[`jlong`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jlong.html)"
 );
@@ -1168,14 +1270,12 @@ jni_io_traits!(
 // jni_io_traits!(
 //     f32,
 //     jni_sys::jfloat,
-//     "F",
 //     "[`f32`](https://doc.rust-lang.org/std/primitive.f32.html)",
 //     "[`jfloat`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jfloat.html)"
 // );
 jni_io_traits!(
     f64,
     jni_sys::jdouble,
-    "D",
     "[`f64`](https://doc.rust-lang.org/std/primitive.f64.html)",
     "[`jdouble`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jdouble.html)"
 );
