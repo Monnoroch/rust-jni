@@ -2,6 +2,7 @@ use crate::java_string::*;
 use crate::jni::*;
 use jni_sys;
 use std::cell::RefCell;
+use std::mem;
 use std::panic;
 use std::ptr;
 use std::string;
@@ -56,7 +57,7 @@ where
         }
 
         // Safe because we pass a correct `java_vm` pointer.
-        let vm = JavaVM::from_ptr(java_vm);
+        let vm = JavaVMRef::from_ptr(java_vm);
         let get_version_fn = ((**raw_env).GetVersion).unwrap();
         let env = JniEnv {
             version: JniVersion::from_raw(get_version_fn(raw_env)),

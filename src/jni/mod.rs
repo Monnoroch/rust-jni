@@ -11,7 +11,7 @@ mod primitives;
 pub mod string;
 pub mod throwable;
 
-use crate::attach_arguments::{self, AttachArguments};
+use crate::attach_arguments::AttachArguments;
 use crate::init_arguments::InitArguments;
 use crate::jni::class::Class;
 pub use crate::jni::error::JniError;
@@ -19,8 +19,8 @@ use crate::jni::method_calls::call_method;
 use crate::jni::primitives::ToJniTuple;
 use crate::jni::string::String;
 use crate::jni::throwable::Throwable;
-use crate::raw::*;
 use crate::version::JniVersion;
+use cfg_if::cfg_if;
 use jni_sys;
 use std;
 use std::cell::RefCell;
@@ -301,6 +301,72 @@ mod jni_result_tests {
 /// A struct for interacting with the Java VM.
 ///
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+pub struct JavaVMRef {
+    java_vm: *mut jni_sys::JavaVM,
+}
+
+/// Make [`JavaVMRef`](struct.JavaVMRef.html) sendable between threads.
+/// Guaranteed to be safe by JNI.
+///
+/// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
+unsafe impl Send for JavaVMRef {}
+
+/// Make [`JavaVMRef`](struct.JavaVMRef.html) shareable by multiple threads.
+/// Guaranteed to be safe by JNI.
+///
+/// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
+unsafe impl Sync for JavaVMRef {}
+
+impl JavaVMRef {
+    /// Get the raw Java VM pointer.
+    ///
+    /// This function provides low-level access to all of JNI and thus is unsafe.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/en/java/javase/11/docs/specs/jni/invocation.html#invocation-api-functions).
+    pub unsafe fn raw_jvm(&self) -> *mut jni_sys::JavaVM {
+        self.java_vm
+    }
+
+    /// Unsafe because one can pass an invalid `java_vm` pointer.
+    unsafe fn from_ptr(java_vm: *mut jni_sys::JavaVM) -> Self {
+        Self { java_vm }
+    }
+
+    /// Unsafe because:
+    /// 1. A user might pass an incorrect pointer.
+    /// 2. The current thread might not be attached.
+    pub(crate) unsafe fn detach(java_vm: *mut jni_sys::JavaVM) {
+        let detach_fn = (**java_vm).DetachCurrentThread.unwrap();
+        let error = JniError::from_raw(detach_fn(java_vm));
+        // There is no way to recover from detach failure, except leak or fail.
+        if error.is_some() {
+            panic!(
+                "Could not detach the current thread. Status: {:?}",
+                error.unwrap()
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod java_vm_ref_tests {
+    use super::*;
+
+    #[test]
+    fn as_ref() {
+        let vm = JavaVMRef {
+            java_vm: 0x1234 as *mut jni_sys::JavaVM,
+        };
+
+        // Safe because we're not using the pointer.
+        assert_eq!(unsafe { vm.raw_jvm() }, vm.java_vm);
+    }
+}
+
+/// A struct for interacting with the Java VM.
+///
+/// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
 ///
 /// # Examples
 /// ```
@@ -346,8 +412,7 @@ mod jni_result_tests {
 /// [`JniEnv`](struct.JniEnv.html)-s.
 #[derive(Debug)]
 pub struct JavaVM {
-    java_vm: *mut jni_sys::JavaVM,
-    owned: bool,
+    java_vm: JavaVMRef,
 }
 
 impl JavaVM {
@@ -364,7 +429,7 @@ impl JavaVM {
         let mut strings_buffer = vec![];
         let mut options_buffer = vec![];
         let mut raw_arguments = arguments.to_raw(&mut strings_buffer, &mut options_buffer);
-        // Safe because we pass pointers to correct data structures.
+        // Safe because we pass pointers to valid values which we just initialized.
         let error = JniError::from_raw(unsafe {
             JNI_CreateJavaVM(
                 (&mut java_vm) as *mut *mut jni_sys::JavaVM,
@@ -380,11 +445,12 @@ impl JavaVM {
                 // Safe because `JNI_CreateJavaVM` returned OK and hence `java_vm`
                 // is a valid `jni_sys::JavaVM` pointer and because `JNI_CreateJavaVM` attaches
                 // the current thread.
-                unsafe { Self::detach(java_vm) };
+                // [JNI documentation](https://docs.oracle.com/en/java/javase/11/docs/specs/jni/invocation.html#detachcurrentthread)
+                // says trying to detach a thread that is not attached is a no-op.
+                unsafe { JavaVMRef::detach(java_vm) };
 
                 Ok(Self {
-                    java_vm,
-                    owned: true,
+                    java_vm: JavaVMRef { java_vm },
                 })
             }
             Some(JniError::UnsupportedVersion) => panic!(
@@ -402,7 +468,7 @@ impl JavaVM {
     /// Get a list of created Java VMs.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getcreatedjavavms)
-    pub fn list() -> Result<Vec<Self>, JniError> {
+    pub fn list() -> Result<Vec<JavaVMRef>, JniError> {
         let mut vms_created: jni_sys::jsize = 0;
         // Safe because arguments are correct.
         let error = JniError::from_raw(unsafe {
@@ -417,7 +483,7 @@ impl JavaVM {
                 let mut java_vms: Vec<*mut jni_sys::JavaVM> = vec![];
                 java_vms.resize(vms_created as usize, ::std::ptr::null_mut());
                 let mut tmp: jni_sys::jsize = 0;
-                // Safe because arguments are ensured to be correct.
+                // Safe because arguments are valid.
                 let error = JniError::from_raw(unsafe {
                     JNI_GetCreatedJavaVMs(
                         (java_vms.as_mut_ptr()) as *mut *mut jni_sys::JavaVM,
@@ -432,8 +498,8 @@ impl JavaVM {
                     None => Ok(java_vms
                         .iter()
                         .cloned()
-                        // Safe because a correct pointer is passed.
-                        .map(|java_vm| unsafe { Self::from_ptr(java_vm) })
+                        // Safe as the validity of the pointer is guaranteed by JNI.
+                        .map(|java_vm| unsafe { JavaVMRef::from_ptr(java_vm) })
                         .collect()),
                     Some(error) => Err(error),
                 }
@@ -445,8 +511,10 @@ impl JavaVM {
     /// Get the raw Java VM pointer.
     ///
     /// This function provides low-level access to all of JNI and thus is unsafe.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/en/java/javase/11/docs/specs/jni/invocation.html#invocation-api-functions).
     pub unsafe fn raw_jvm(&self) -> *mut jni_sys::JavaVM {
-        self.java_vm
+        self.java_vm.raw_jvm()
     }
 
     /// Attach the current thread to the Java VM with a specific thread name.
@@ -506,7 +574,7 @@ impl JavaVM {
                     None => {
                         let mut env = JniEnv {
                             version: arguments.version(),
-                            vm: self,
+                            vm: &self.java_vm,
                             jni_env,
                             has_token: RefCell::new(true),
                             // We don't want to drop `JniEnv` with a pending exception.
@@ -560,46 +628,347 @@ impl JavaVM {
             )
         }
     }
+}
 
-    /// Unsafe because one can pass an invalid `java_vm` pointer.
-    unsafe fn from_ptr(java_vm: *mut jni_sys::JavaVM) -> JavaVM {
-        JavaVM {
-            java_vm,
-            owned: false,
-        }
+/// Implement [`AsRef`](https://doc.rust-lang.org/std/convert/trait.AsRef.html)
+/// for [`JavaVM`](struct.JavaVm.html) to cast it to a reference to
+/// [`JavaVMRef`](struct.JavaVMRef.html).
+///
+/// As [`JavaVM`](struct.JavaVm.html) will be destroyed when dropped, references to it's
+/// [`JavaVMRef`-s](struct.JavaVMRef.html) should not outlive it.
+/// This impl is not very useful and mostly serves as the documentation of this fact.
+impl AsRef<JavaVMRef> for JavaVM {
+    fn as_ref<'vm>(&'vm self) -> &'vm JavaVMRef {
+        &self.java_vm
     }
 }
 
-/// Make [`JavaVM`](struct.JavaVM.html) be destroyed when the value is dropped.
+/// Destroy [`JavaVM`](struct.JavaVM.html) when the value is dropped.
 ///
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#destroyjavavm)
 impl Drop for JavaVM {
     fn drop(&mut self) {
-        if !self.owned {
-            return;
-        }
-
-        // Safe because the argument is ensured to be the correct by construction.
+        // Safe because JavaVM can't be created from an invalid or non-owned Java VM pointer.
         let error = JniError::from_raw(unsafe {
-            let destroy_fn = (**self.java_vm).DestroyJavaVM.unwrap();
-            destroy_fn(self.java_vm)
+            let destroy_fn = (**self.raw_jvm()).DestroyJavaVM.unwrap();
+            destroy_fn(self.raw_jvm())
         });
-
         if error.is_some() {
+            // Drop is supposed to always succeed. We can't do anything besides panicing in case of failure.
             panic!("Failed destroying the JavaVm. Status: {:?}", error.unwrap());
         }
     }
 }
 
-/// Make [`JavaVM`](struct.JavaVM.html) sendable between threads. Guaranteed to be safe by JNI.
-unsafe impl Send for JavaVM {}
-
-/// Make [`JavaVM`](struct.JavaVM.html) shareable by multiple threads. Guaranteed to be safe
-/// by JNI.
-unsafe impl Sync for JavaVM {}
-
 #[cfg(test)]
 mod java_vm_tests {
+    use super::*;
+    use std::mem;
+
+    #[test]
+    fn as_ref() {
+        let vm_ref = JavaVMRef {
+            java_vm: 0x1234 as *mut jni_sys::JavaVM,
+        };
+        let vm = JavaVM { java_vm: vm_ref };
+
+        assert_eq!(vm.as_ref(), &vm_ref);
+        // Do not drop: we didn't mock the destructor.
+        mem::forget(vm);
+    }
+}
+
+#[cfg(test)]
+mod java_vm_drop_tests {
+    use super::*;
+    use crate::jni::testing::empty_raw_java_vm;
+    use mockall::*;
+    use serial_test_derive::serial;
+
+    #[automock(mod mock;)]
+    // We're not using the non-test function.
+    #[allow(dead_code)]
+    extern "Rust" {
+        pub fn destroy_vm(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint;
+    }
+
+    unsafe extern "system" fn destroy_vm_impl(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint {
+        mock::destroy_vm(java_vm)
+    }
+
+    fn raw_java_vm() -> jni_sys::JNIInvokeInterface_ {
+        jni_sys::JNIInvokeInterface_ {
+            DestroyJavaVM: Some(destroy_vm_impl),
+            ..empty_raw_java_vm()
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn drop() {
+        let raw_java_vm = raw_java_vm();
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        // Need to pass a number to the closure below as pointers are not Send.
+        let raw_java_vm_ptr_usize = raw_java_vm_ptr as usize;
+        let destroy_vm_mock = mock::destroy_vm_context();
+        {
+            let _vm = JavaVM {
+                java_vm: JavaVMRef {
+                    java_vm: raw_java_vm_ptr,
+                },
+            };
+            // Nothing has happened yet.
+            destroy_vm_mock.checkpoint();
+            destroy_vm_mock
+                .expect()
+                .times(1)
+                .withf(move |x| *x as usize == raw_java_vm_ptr_usize)
+                .return_const(jni_sys::JNI_OK);
+        }
+        // Expectations are checked after the scope has ended.
+    }
+
+    #[test]
+    #[serial]
+    // `serial` messes up compiler lints for other attributes.
+    #[allow(unused_attributes)]
+    #[should_panic(expected = "Failed destroying the JavaVm. Status: Unknown(-1)")]
+    fn drop_panics() {
+        let raw_java_vm = raw_java_vm();
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        let destroy_vm_mock = mock::destroy_vm_context();
+        destroy_vm_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_ERR);
+        {
+            let _vm = JavaVM {
+                java_vm: JavaVMRef {
+                    java_vm: raw_java_vm_ptr,
+                },
+            };
+        }
+        // Nothing has happened.
+        destroy_vm_mock.checkpoint();
+    }
+}
+
+#[cfg(test)]
+mod java_vm_create_tests {
+    use super::*;
+    use crate::jni::testing::empty_raw_java_vm;
+    use mockall::*;
+    use serial_test_derive::serial;
+    use std::mem;
+
+    #[automock(mod mock;)]
+    // We're not using the non-test function.
+    #[allow(dead_code)]
+    extern "Rust" {
+        pub fn detach_thread(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint;
+    }
+
+    unsafe extern "system" fn detach_thread_impl(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint {
+        mock::detach_thread(java_vm)
+    }
+
+    fn raw_java_vm() -> jni_sys::JNIInvokeInterface_ {
+        jni_sys::JNIInvokeInterface_ {
+            DetachCurrentThread: Some(detach_thread_impl),
+            ..empty_raw_java_vm()
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn create() {
+        let raw_java_vm = raw_java_vm();
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        // Need to pass a number to the closure below as pointers are not Send.
+        let raw_java_vm_ptr_usize = raw_java_vm_ptr as usize;
+        let mut sequence = Sequence::new();
+        let create_vm_mock = ffi::mock::JNI_CreateJavaVM_context();
+        create_vm_mock
+            .expect()
+            .times(1)
+            .withf(move |java_vm, _jni_env, arguments| {
+                let arguments = *arguments as *mut jni_sys::JavaVMInitArgs;
+                // We know that this pointer points to a valid value.
+                match unsafe { arguments.as_ref() } {
+                    None => false,
+                    Some(arguments) => {
+                        // We know raw arguments value is valid.
+                        let arguments = unsafe { InitArguments::from_raw(arguments) };
+                        if arguments != InitArguments::default() {
+                            false
+                        } else {
+                            // Safe because we allocated a valid value on the stack in JavaVM::create().
+                            unsafe {
+                                **java_vm = raw_java_vm_ptr_usize as *mut jni_sys::JavaVM;
+                            }
+                            true
+                        }
+                    }
+                }
+            })
+            .return_const(jni_sys::JNI_OK)
+            .in_sequence(&mut sequence);
+        let detach_thread_mock = mock::detach_thread_context();
+        detach_thread_mock
+            .expect()
+            .times(1)
+            .withf(move |java_vm| *java_vm as usize == raw_java_vm_ptr_usize)
+            .return_const(jni_sys::JNI_OK)
+            .in_sequence(&mut sequence);
+        let vm = JavaVM::create(&InitArguments::default()).unwrap();
+        unsafe {
+            assert_eq!(vm.raw_jvm(), raw_java_vm_ptr);
+        }
+        // Do not drop: we didn't mock the destructor.
+        mem::forget(vm);
+    }
+
+    #[test]
+    #[serial]
+    fn create_error() {
+        let create_vm_mock = ffi::mock::JNI_CreateJavaVM_context();
+        create_vm_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_ERR);
+        assert_eq!(
+            JavaVM::create(&InitArguments::default()).err().unwrap(),
+            JniError::Unknown(jni_sys::JNI_ERR)
+        );
+    }
+
+    #[test]
+    #[serial]
+    // `serial` messes up compiler lints for other attributes.
+    #[allow(unused_attributes)]
+    // Result unused because the funtion will panic.
+    #[allow(unused_must_use)]
+    #[should_panic(expected = "upsupported version")]
+    fn create_error_version() {
+        let create_vm_mock = ffi::mock::JNI_CreateJavaVM_context();
+        create_vm_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EVERSION);
+        JavaVM::create(&InitArguments::default());
+    }
+
+    #[test]
+    #[serial]
+    // `serial` messes up compiler lints for other attributes.
+    #[allow(unused_attributes)]
+    // Result unused because the funtion will panic.
+    #[allow(unused_must_use)]
+    #[should_panic(expected = "Unexpected `EDETACHED`")]
+    fn create_error_detached() {
+        let create_vm_mock = ffi::mock::JNI_CreateJavaVM_context();
+        create_vm_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EDETACHED);
+        JavaVM::create(&InitArguments::default());
+    }
+}
+
+#[cfg(test)]
+mod java_vm_list_tests {
+    use super::*;
+    use crate::jni::testing::empty_raw_java_vm;
+    use mockall::*;
+    use serial_test_derive::serial;
+
+    #[test]
+    #[serial]
+    fn list() {
+        let raw_java_vm_1 = empty_raw_java_vm();
+        let raw_java_vm_ptr_1 = &mut (&raw_java_vm_1 as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        let raw_java_vm_2 = empty_raw_java_vm();
+        let raw_java_vm_ptr_2 = &mut (&raw_java_vm_2 as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        assert_ne!(raw_java_vm_ptr_1, raw_java_vm_ptr_2);
+
+        // Need to pass a number to the closure below as pointers are not Send.
+        let raw_java_vm_ptr_1_usize = raw_java_vm_ptr_1 as usize;
+        let raw_java_vm_ptr_2_usize = raw_java_vm_ptr_2 as usize;
+
+        let mut sequence = Sequence::new();
+        let list_vms_mock = ffi::mock::JNI_GetCreatedJavaVMs_context();
+        list_vms_mock
+            .expect()
+            .times(1)
+            .withf(move |java_vms, buffer_size, vms_count| {
+                if *java_vms != ptr::null_mut() || *buffer_size != 0 {
+                    false
+                } else {
+                    // Safe because the data is allocated on the stack in `list()`.
+                    unsafe {
+                        **vms_count = 2 as jni_sys::jint;
+                    }
+                    true
+                }
+            })
+            .return_const(jni_sys::JNI_OK)
+            .in_sequence(&mut sequence);
+        list_vms_mock
+            .expect()
+            .times(1)
+            .withf(move |java_vms, buffer_size, vms_count| {
+                if *buffer_size != 2 {
+                    false
+                } else {
+                    unsafe {
+                        **java_vms = raw_java_vm_ptr_1_usize as *mut jni_sys::JavaVM;
+                        *((*java_vms).offset(1)) = raw_java_vm_ptr_2_usize as *mut jni_sys::JavaVM;
+                        **vms_count = 2 as jni_sys::jint;
+                    }
+                    true
+                }
+            })
+            .return_const(jni_sys::JNI_OK)
+            .in_sequence(&mut sequence);
+        let vms = JavaVM::list().unwrap();
+        unsafe {
+            assert_eq!(vms[0].raw_jvm(), raw_java_vm_ptr_1);
+            assert_eq!(vms[1].raw_jvm(), raw_java_vm_ptr_2);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn list_error_first_call() {
+        let list_vms_mock = ffi::mock::JNI_GetCreatedJavaVMs_context();
+        list_vms_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_ERR);
+        assert_eq!(JavaVM::list(), Err(JniError::Unknown(jni_sys::JNI_ERR)));
+    }
+
+    #[test]
+    #[serial]
+    fn list_error_second_call() {
+        let mut sequence = Sequence::new();
+        let list_vms_mock = ffi::mock::JNI_GetCreatedJavaVMs_context();
+        list_vms_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_OK)
+            .in_sequence(&mut sequence);
+        list_vms_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_ERR)
+            .in_sequence(&mut sequence);
+        assert_eq!(JavaVM::list(), Err(JniError::Unknown(jni_sys::JNI_ERR)));
+    }
+}
+
+#[cfg(test)]
+mod java_vm_tests_legacy {
     use super::*;
     use crate::init_arguments;
     use crate::java_string::*;
@@ -609,206 +978,6 @@ mod java_vm_tests {
 
     fn default_args() -> InitArguments {
         init_arguments::init_arguments_manipulation_tests::default_args()
-    }
-
-    #[test]
-    fn create() {
-        static mut DETACH_CALLS: i32 = 0;
-        static mut DETACH_ARGUMENT: *mut jni_sys::JavaVM = ptr::null_mut();
-        unsafe extern "system" fn detach(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint {
-            DETACH_CALLS += 1;
-            DETACH_ARGUMENT = java_vm;
-            jni_sys::JNI_OK
-        }
-
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            DetachCurrentThread: Some(detach),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let _locked =
-            setup_create_java_vm_call(CreateJavaVMCall::new(jni_sys::JNI_OK, raw_java_vm_ptr));
-        let arguments = default_args();
-        let vm = JavaVM::create(&arguments).unwrap();
-        assert_eq!(vm.java_vm, raw_java_vm_ptr);
-        assert_eq!(vm.owned, true);
-        assert_eq!(arguments, get_create_java_vm_call_input());
-        unsafe {
-            assert_eq!(DETACH_CALLS, 1);
-            assert_eq!(DETACH_ARGUMENT, raw_java_vm_ptr);
-        };
-        mem::forget(vm);
-    }
-
-    #[test]
-    #[should_panic(expected = "Could not detach the current thread. Status: Unknown(-1)")]
-    fn create_detach_error() {
-        unsafe extern "system" fn detach(_: *mut jni_sys::JavaVM) -> jni_sys::jint {
-            jni_sys::JNI_ERR
-        }
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            DetachCurrentThread: Some(detach),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let _locked =
-            setup_create_java_vm_call(CreateJavaVMCall::new(jni_sys::JNI_OK, raw_java_vm_ptr));
-        JavaVM::create(&default_args()).unwrap();
-    }
-
-    #[test]
-    #[should_panic(expected = "upsupported version")]
-    fn create_version_error() {
-        let raw_java_vm = 0x1234 as *mut jni_sys::JavaVM;
-        let _locked =
-            setup_create_java_vm_call(CreateJavaVMCall::new(jni_sys::JNI_EVERSION, raw_java_vm));
-        let arguments = default_args();
-        let _ = JavaVM::create(&arguments);
-    }
-
-    #[test]
-    #[should_panic(expected = "Unexpected `EDETACHED`")]
-    fn create_detached_error() {
-        let raw_java_vm = 0x1234 as *mut jni_sys::JavaVM;
-        let _locked =
-            setup_create_java_vm_call(CreateJavaVMCall::new(jni_sys::JNI_EDETACHED, raw_java_vm));
-        let arguments = default_args();
-        let _ = JavaVM::create(&arguments);
-    }
-
-    #[test]
-    fn create_error() {
-        let raw_java_vm = 0x1234 as *mut jni_sys::JavaVM;
-        let _locked =
-            setup_create_java_vm_call(CreateJavaVMCall::new(jni_sys::JNI_ERR, raw_java_vm));
-        let arguments = default_args();
-        assert_eq!(
-            JavaVM::create(&arguments).unwrap_err(),
-            JniError::Unknown(jni_sys::JNI_ERR as i32),
-        );
-    }
-
-    #[test]
-    fn drop() {
-        static mut DESTROY_CALLS: i32 = 0;
-        static mut DESTROY_ARGUMENT: *mut jni_sys::JavaVM = ptr::null_mut();
-        unsafe extern "system" fn destroy_vm(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint {
-            DESTROY_CALLS += 1;
-            DESTROY_ARGUMENT = java_vm;
-            jni_sys::JNI_OK
-        }
-
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            DestroyJavaVM: Some(destroy_vm),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        {
-            let _vm = JavaVM {
-                java_vm: raw_java_vm_ptr,
-                owned: true,
-            };
-            unsafe { assert_eq!(DESTROY_CALLS, 0) };
-        }
-        unsafe {
-            assert_eq!(DESTROY_CALLS, 1);
-            assert_eq!(DESTROY_ARGUMENT, raw_java_vm_ptr);
-        };
-    }
-
-    #[test]
-    fn drop_not_owned() {
-        static mut DESTROY_CALLS: i32 = 0;
-        static mut DESTROY_ARGUMENT: *mut jni_sys::JavaVM = ptr::null_mut();
-        unsafe extern "system" fn destroy_vm(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint {
-            DESTROY_CALLS += 1;
-            DESTROY_ARGUMENT = java_vm;
-            jni_sys::JNI_OK
-        }
-
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            DestroyJavaVM: Some(destroy_vm),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        {
-            let _vm = test_vm(raw_java_vm_ptr);
-        }
-        unsafe {
-            assert_eq!(DESTROY_CALLS, 0);
-        };
-    }
-
-    #[test]
-    #[should_panic(expected = "Failed destroying the JavaVm. Status: Unknown(-1)")]
-    fn drop_destroy_error() {
-        unsafe extern "system" fn destroy_vm(_: *mut jni_sys::JavaVM) -> jni_sys::jint {
-            jni_sys::JNI_ERR
-        }
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            DestroyJavaVM: Some(destroy_vm),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        JavaVM {
-            java_vm: raw_java_vm,
-            owned: true,
-        };
-    }
-
-    #[test]
-    fn list() {
-        let raw_java_vm_ptr0 = 0x1234 as *mut jni_sys::JavaVM;
-        let raw_java_vm_ptr1 = 0x5678 as *mut jni_sys::JavaVM;
-        let mut java_vm_ptrs: [*mut jni_sys::JavaVM; 2] = [raw_java_vm_ptr0, raw_java_vm_ptr1];
-        let _locked = setup_get_created_java_vms_call(GetCreatedJavaVMsCall::new(
-            jni_sys::JNI_OK,
-            2,
-            java_vm_ptrs.as_mut_ptr(),
-        ));
-        let vms = JavaVM::list().unwrap();
-        assert_eq!(vms[0].java_vm, raw_java_vm_ptr0);
-        assert_eq!(vms[1].java_vm, raw_java_vm_ptr1);
-    }
-
-    #[test]
-    fn list_error_count() {
-        let _locked = setup_get_created_java_vms_call(GetCreatedJavaVMsCall::new(
-            jni_sys::JNI_ERR,
-            0,
-            ptr::null_mut(),
-        ));
-        assert_eq!(
-            JavaVM::list().unwrap_err(),
-            JniError::Unknown(jni_sys::JNI_ERR as i32)
-        );
-    }
-
-    #[test]
-    fn list_error_list() {
-        let raw_java_vm_ptr0 = 0x1234 as *mut jni_sys::JavaVM;
-        let raw_java_vm_ptr1 = 0x5678 as *mut jni_sys::JavaVM;
-        let mut java_vm_ptrs: [*mut jni_sys::JavaVM; 2] = [raw_java_vm_ptr0, raw_java_vm_ptr1];
-        let _locked = setup_get_created_java_vms_call(GetCreatedJavaVMsCall::new_twice(
-            jni_sys::JNI_OK,
-            jni_sys::JNI_ERR,
-            2,
-            java_vm_ptrs.as_mut_ptr(),
-        ));
-        assert_eq!(
-            JavaVM::list().unwrap_err(),
-            JniError::Unknown(jni_sys::JNI_ERR as i32)
-        );
-    }
-
-    #[test]
-    fn raw_vm() {
-        let raw_java_vm = 0x1234 as *mut jni_sys::JavaVM;
-        let vm = test_vm(raw_java_vm);
-        unsafe {
-            assert_eq!(vm.raw_jvm(), raw_java_vm);
-        }
-        mem::forget(vm);
     }
 
     // #[test]
@@ -881,178 +1050,178 @@ mod java_vm_tests {
     //     mem::forget(env);
     // }
 
-    #[test]
-    #[should_panic(expected = "already attached")]
-    fn attach_already_attached() {
-        unsafe extern "system" fn get_env(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: jni_sys::jint,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_OK
-        }
-        unsafe extern "system" fn attach(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: *mut c_void,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_OK
-        }
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            GetEnv: Some(get_env),
-            AttachCurrentThread: Some(attach),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
-    }
+    // #[test]
+    // #[should_panic(expected = "already attached")]
+    // fn attach_already_attached() {
+    //     unsafe extern "system" fn get_env(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: jni_sys::jint,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_OK
+    //     }
+    //     unsafe extern "system" fn attach(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: *mut c_void,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_OK
+    //     }
+    //     let raw_java_vm = jni_sys::JNIInvokeInterface_ {
+    //         GetEnv: Some(get_env),
+    //         AttachCurrentThread: Some(attach),
+    //         ..empty_raw_java_vm()
+    //     };
+    //     let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+    //     let vm = test_vm(raw_java_vm_ptr);
+    //     vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
+    // }
 
-    #[test]
-    #[should_panic(expected = "GetEnv JNI method returned an unexpected error code Unknown(-1)")]
-    fn attach_get_env_error() {
-        unsafe extern "system" fn get_env(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: jni_sys::jint,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_ERR
-        }
-        unsafe extern "system" fn attach(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: *mut c_void,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_OK
-        }
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            GetEnv: Some(get_env),
-            AttachCurrentThread: Some(attach),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
-    }
+    // #[test]
+    // #[should_panic(expected = "GetEnv JNI method returned an unexpected error code Unknown(-1)")]
+    // fn attach_get_env_error() {
+    //     unsafe extern "system" fn get_env(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: jni_sys::jint,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_ERR
+    //     }
+    //     unsafe extern "system" fn attach(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: *mut c_void,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_OK
+    //     }
+    //     let raw_java_vm = jni_sys::JNIInvokeInterface_ {
+    //         GetEnv: Some(get_env),
+    //         AttachCurrentThread: Some(attach),
+    //         ..empty_raw_java_vm()
+    //     };
+    //     let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+    //     let vm = test_vm(raw_java_vm_ptr);
+    //     vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
+    // }
 
-    #[test]
-    #[should_panic(expected = "Got `EDETACHED` when trying to attach a thread")]
-    fn attach_cant_attach() {
-        unsafe extern "system" fn get_env(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: jni_sys::jint,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_EDETACHED
-        }
-        unsafe extern "system" fn attach(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: *mut c_void,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_EDETACHED
-        }
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            GetEnv: Some(get_env),
-            AttachCurrentThread: Some(attach),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
-    }
+    // #[test]
+    // #[should_panic(expected = "Got `EDETACHED` when trying to attach a thread")]
+    // fn attach_cant_attach() {
+    //     unsafe extern "system" fn get_env(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: jni_sys::jint,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_EDETACHED
+    //     }
+    //     unsafe extern "system" fn attach(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: *mut c_void,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_EDETACHED
+    //     }
+    //     let raw_java_vm = jni_sys::JNIInvokeInterface_ {
+    //         GetEnv: Some(get_env),
+    //         AttachCurrentThread: Some(attach),
+    //         ..empty_raw_java_vm()
+    //     };
+    //     let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+    //     let vm = test_vm(raw_java_vm_ptr);
+    //     vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
+    // }
 
-    #[test]
-    #[should_panic(expected = "upsupported version")]
-    fn attach_unsupported_version() {
-        unsafe extern "system" fn get_env(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: jni_sys::jint,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_EDETACHED
-        }
-        unsafe extern "system" fn attach(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: *mut c_void,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_EVERSION
-        }
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            GetEnv: Some(get_env),
-            AttachCurrentThread: Some(attach),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
-    }
+    // #[test]
+    // #[should_panic(expected = "upsupported version")]
+    // fn attach_unsupported_version() {
+    //     unsafe extern "system" fn get_env(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: jni_sys::jint,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_EDETACHED
+    //     }
+    //     unsafe extern "system" fn attach(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: *mut c_void,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_EVERSION
+    //     }
+    //     let raw_java_vm = jni_sys::JNIInvokeInterface_ {
+    //         GetEnv: Some(get_env),
+    //         AttachCurrentThread: Some(attach),
+    //         ..empty_raw_java_vm()
+    //     };
+    //     let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+    //     let vm = test_vm(raw_java_vm_ptr);
+    //     vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
+    // }
 
-    #[test]
-    fn attach_attach_error() {
-        unsafe extern "system" fn get_env(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: jni_sys::jint,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_EDETACHED
-        }
-        unsafe extern "system" fn attach(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: *mut c_void,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_ERR
-        }
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            GetEnv: Some(get_env),
-            AttachCurrentThread: Some(attach),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = test_vm(raw_java_vm_ptr);
-        assert_eq!(
-            vm.attach(&AttachArguments::new(JniVersion::V8))
-                .unwrap_err(),
-            JniError::Unknown(jni_sys::JNI_ERR as i32)
-        );
-    }
+    // #[test]
+    // fn attach_attach_error() {
+    //     unsafe extern "system" fn get_env(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: jni_sys::jint,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_EDETACHED
+    //     }
+    //     unsafe extern "system" fn attach(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: *mut c_void,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_ERR
+    //     }
+    //     let raw_java_vm = jni_sys::JNIInvokeInterface_ {
+    //         GetEnv: Some(get_env),
+    //         AttachCurrentThread: Some(attach),
+    //         ..empty_raw_java_vm()
+    //     };
+    //     let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+    //     let vm = test_vm(raw_java_vm_ptr);
+    //     assert_eq!(
+    //         vm.attach(&AttachArguments::new(JniVersion::V8))
+    //             .unwrap_err(),
+    //         JniError::Unknown(jni_sys::JNI_ERR as i32)
+    //     );
+    // }
 
-    #[test]
-    #[should_panic(expected = "Newly attached thread has a pending exception")]
-    fn attach_pending_exception() {
-        let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheck {
-            result: jni_sys::JNI_TRUE,
-        })]);
-        unsafe extern "system" fn get_env(
-            _: *mut jni_sys::JavaVM,
-            _: *mut *mut c_void,
-            _: jni_sys::jint,
-        ) -> jni_sys::jint {
-            jni_sys::JNI_EDETACHED
-        }
-        static mut ATTACH_ENV_ARGUMENT: *mut c_void = ptr::null_mut();
-        unsafe extern "system" fn attach(
-            _: *mut jni_sys::JavaVM,
-            jni_env: *mut *mut c_void,
-            _: *mut c_void,
-        ) -> jni_sys::jint {
-            *jni_env = ATTACH_ENV_ARGUMENT;
-            jni_sys::JNI_OK
-        }
-        let raw_java_vm = jni_sys::JNIInvokeInterface_ {
-            GetEnv: Some(get_env),
-            AttachCurrentThread: Some(attach),
-            ..empty_raw_java_vm()
-        };
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let vm = test_vm(raw_java_vm_ptr);
-        unsafe {
-            ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
-        }
-        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
-    }
+    // #[test]
+    // #[should_panic(expected = "Newly attached thread has a pending exception")]
+    // fn attach_pending_exception() {
+    //     let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheck {
+    //         result: jni_sys::JNI_TRUE,
+    //     })]);
+    //     unsafe extern "system" fn get_env(
+    //         _: *mut jni_sys::JavaVM,
+    //         _: *mut *mut c_void,
+    //         _: jni_sys::jint,
+    //     ) -> jni_sys::jint {
+    //         jni_sys::JNI_EDETACHED
+    //     }
+    //     static mut ATTACH_ENV_ARGUMENT: *mut c_void = ptr::null_mut();
+    //     unsafe extern "system" fn attach(
+    //         _: *mut jni_sys::JavaVM,
+    //         jni_env: *mut *mut c_void,
+    //         _: *mut c_void,
+    //     ) -> jni_sys::jint {
+    //         *jni_env = ATTACH_ENV_ARGUMENT;
+    //         jni_sys::JNI_OK
+    //     }
+    //     let raw_java_vm = jni_sys::JNIInvokeInterface_ {
+    //         GetEnv: Some(get_env),
+    //         AttachCurrentThread: Some(attach),
+    //         ..empty_raw_java_vm()
+    //     };
+    //     let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+    //     let vm = test_vm(raw_java_vm_ptr);
+    //     unsafe {
+    //         ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
+    //     }
+    //     vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
+    // }
 
     // #[test]
     // fn attach_daemon() {
@@ -1209,7 +1378,7 @@ mod java_vm_tests {
 #[derive(Debug)]
 pub struct JniEnv<'vm> {
     version: JniVersion,
-    vm: &'vm JavaVM,
+    vm: &'vm JavaVMRef,
     jni_env: *mut jni_sys::JNIEnv,
     has_token: RefCell<bool>,
     native_method_call: bool,
@@ -1297,15 +1466,12 @@ impl<'vm> Drop for JniEnv<'vm> {
 }
 
 #[cfg(test)]
-fn test_vm(ptr: *mut jni_sys::JavaVM) -> JavaVM {
-    JavaVM {
-        java_vm: ptr,
-        owned: false,
-    }
+fn test_vm(ptr: *mut jni_sys::JavaVM) -> JavaVMRef {
+    JavaVMRef { java_vm: ptr }
 }
 
 #[cfg(test)]
-fn test_env<'vm>(vm: &'vm JavaVM, ptr: *mut jni_sys::JNIEnv) -> JniEnv<'vm> {
+fn test_env<'vm>(vm: &'vm JavaVMRef, ptr: *mut jni_sys::JNIEnv) -> JniEnv<'vm> {
     JniEnv {
         version: JniVersion::V8,
         vm: &vm,
@@ -2441,5 +2607,77 @@ mod object_tests {
         let env = test_env(&vm, calls.env);
         let object = test_value(&env, RAW_OBJECT);
         assert!(format!("{:?}", object).contains("string: <Object::toString threw an exception>"));
+    }
+}
+
+#[cfg(test)]
+// JNI API.
+#[allow(non_snake_case)]
+mod ffi {
+    use mockall::*;
+
+    #[automock(mod create_vm_mock;)]
+    // We're not using the non-test function.
+    #[allow(dead_code)]
+    extern "C" {
+        pub fn JNI_CreateJavaVM(
+            java_vm: *mut *mut jni_sys::JavaVM,
+            jni_env: *mut *mut ::std::os::raw::c_void,
+            arguments: *mut ::std::os::raw::c_void,
+        ) -> jni_sys::jint;
+    }
+
+    #[automock(mod get_created_vms_mock;)]
+    // We're not using the non-test function.
+    #[allow(dead_code)]
+    extern "C" {
+        pub fn JNI_GetCreatedJavaVMs(
+            java_vms: *mut *mut jni_sys::JavaVM,
+            buffer_size: jni_sys::jsize,
+            vms_count: *mut jni_sys::jsize,
+        ) -> jni_sys::jint;
+    }
+
+    pub mod mock {
+        pub use super::create_vm_mock::*;
+        pub use super::get_created_vms_mock::*;
+    }
+}
+
+cfg_if! {
+    if #[cfg(test)] {
+        use self::ffi::mock::JNI_CreateJavaVM;
+    } else if #[cfg(all(not(test), feature = "libjvm"))] {
+        use jni_sys::JNI_CreateJavaVM;
+    } else if #[cfg(all(not(test), not(feature = "libjvm")))] {
+        /// This is a stub for when we can't link to libjvm.
+        // JNI API.
+        #[allow(non_snake_case)]
+        pub unsafe extern "system" fn JNI_CreateJavaVM(
+            _java_vm: *mut *mut jni_sys::JavaVM,
+            _jni_env: *mut *mut c_void,
+            _arguments: *mut c_void,
+        ) -> jni_sys::jint {
+            jni_sys::JNI_OK
+        }
+    }
+}
+
+cfg_if! {
+    if #[cfg(test)] {
+        use self::ffi::mock::JNI_GetCreatedJavaVMs;
+    } else if #[cfg(all(not(test), feature = "libjvm"))] {
+        use jni_sys::JNI_GetCreatedJavaVMs;
+    } else if #[cfg(all(not(test), not(feature = "libjvm")))] {
+        /// This is a stub for when we can't link to libjvm.
+        // JNI API.
+        #[allow(non_snake_case)]
+        pub unsafe extern "system" fn JNI_GetCreatedJavaVMs(
+            _java_vms: *mut *mut jni_sys::JavaVM,
+            _buffer_size: jni_sys::jsize,
+            _vms_count: *mut jni_sys::jsize,
+        ) -> jni_sys::jint {
+            jni_sys::JNI_OK
+        }
     }
 }
