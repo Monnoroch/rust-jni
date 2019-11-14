@@ -2,6 +2,9 @@ use crate::class::Class;
 use crate::error::JniError;
 use crate::method_calls::call_constructor;
 use crate::method_calls::call_method;
+#[cfg(test)]
+use crate::object::test_object;
+use crate::object::Object;
 use crate::result::JavaResult;
 use crate::string::String;
 use crate::token::{Exception, NoException};

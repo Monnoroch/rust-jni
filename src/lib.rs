@@ -26,6 +26,7 @@ mod jni_bool;
 mod method_calls;
 mod methods;
 mod native_method;
+mod object;
 mod primitives;
 mod raw;
 mod result;
@@ -46,9 +47,9 @@ pub use vm::{Cast, JavaType, JavaVM, JniEnv};
 pub mod java {
     pub mod lang {
         pub use crate::class::Class;
+        pub use crate::object::Object;
         pub use crate::string::String;
         pub use crate::throwable::Throwable;
-        pub use crate::vm::Object;
     }
 }
 

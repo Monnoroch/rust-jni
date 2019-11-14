@@ -1,4 +1,7 @@
 use crate::class::*;
+#[cfg(test)]
+use crate::object::test_object;
+use crate::object::Object;
 use crate::vm::*;
 use jni_sys;
 use std::char;
@@ -653,6 +656,7 @@ macro_rules! generate_to_jni_tuple_tests {
 #[cfg(test)]
 mod to_jni_tuple_tests {
     use super::*;
+    use crate::object::test_object;
     use crate::testing::*;
     use std::mem;
 

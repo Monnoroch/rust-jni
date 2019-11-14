@@ -1,5 +1,6 @@
 use crate::class::Class;
 use crate::java_string::*;
+use crate::object::Object;
 use crate::primitives::ToJniTuple;
 use crate::result::JavaResult;
 use crate::token::{from_nullable, get_and_clear_exception_if_thrown, NoException};
@@ -102,6 +103,7 @@ pub unsafe fn call_method<
 #[cfg(test)]
 mod call_method_tests {
     use super::*;
+    use crate::object::test_object;
     use crate::testing::*;
     use std::mem;
     use std::ptr;

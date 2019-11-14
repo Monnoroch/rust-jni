@@ -1,4 +1,7 @@
 use crate::java_string::*;
+#[cfg(test)]
+use crate::object::test_object;
+use crate::object::Object;
 use crate::result::JavaResult;
 use crate::string::String;
 use crate::token::{from_nullable, NoException};

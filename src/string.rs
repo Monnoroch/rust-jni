@@ -1,6 +1,9 @@
 use crate::class::Class;
 use crate::java_string::*;
 use crate::method_calls::call_static_method;
+#[cfg(test)]
+use crate::object::test_object;
+use crate::object::Object;
 use crate::result::JavaResult;
 use crate::token::{from_nullable, NoException};
 use crate::vm::*;
