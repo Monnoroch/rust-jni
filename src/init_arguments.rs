@@ -1,4 +1,4 @@
-use crate::jni::error::JniError;
+use crate::error::JniError;
 use crate::jni_bool;
 use crate::version::JniVersion;
 use cfg_if::cfg_if;

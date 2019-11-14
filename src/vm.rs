@@ -1,20 +1,11 @@
-pub mod class;
-pub mod error;
-pub mod method_calls;
-mod methods;
-pub mod native_method;
-mod primitives;
-pub mod string;
-pub mod throwable;
-
 use crate::attach_arguments::AttachArguments;
+use crate::class::Class;
+use crate::error::JniError;
 use crate::init_arguments::InitArguments;
-use crate::jni::class::Class;
-pub use crate::jni::error::JniError;
-use crate::jni::method_calls::call_method;
-use crate::jni::primitives::ToJniTuple;
-use crate::jni::string::String;
+use crate::method_calls::call_method;
+use crate::primitives::ToJniTuple;
 use crate::result::JavaResult;
+use crate::string::String;
 use crate::token::*;
 use crate::version::JniVersion;
 use cfg_if::cfg_if;
@@ -59,7 +50,7 @@ impl JavaVMRef {
     }
 
     /// Unsafe because one can pass an invalid `java_vm` pointer.
-    unsafe fn from_ptr(java_vm: *mut jni_sys::JavaVM) -> Self {
+    pub(crate) unsafe fn from_ptr(java_vm: *mut jni_sys::JavaVM) -> Self {
         Self { java_vm }
     }
 
@@ -1158,9 +1149,9 @@ mod java_vm_tests_legacy {
 /// ```
 // TODO: docs about panicing on detach when there's a pending exception.
 #[derive(Debug)]
-pub struct JniEnv<'vm> {
+pub struct JniEnv<'this> {
     version: JniVersion,
-    vm: &'vm JavaVMRef,
+    vm: &'this JavaVMRef,
     jni_env: *mut jni_sys::JNIEnv,
     has_token: RefCell<bool>,
     native_method_call: bool,
@@ -1171,7 +1162,7 @@ pub struct JniEnv<'vm> {
 // impl<'vm> !Send for JniEnv<'vm> {}
 // impl<'vm> !Sync for JniEnv<'vm> {}
 
-impl<'vm> JniEnv<'vm> {
+impl<'this> JniEnv<'this> {
     /// Get the raw Java VM pointer.
     ///
     /// This function provides low-level access to all of JNI and thus is unsafe.
@@ -1209,6 +1200,20 @@ impl<'vm> JniEnv<'vm> {
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getversion)
     pub fn version(&self) -> JniVersion {
         self.version
+    }
+
+    pub(crate) fn native<'vm: 'env, 'env>(
+        vm: &'vm JavaVMRef,
+        jni_env: *mut jni_sys::JNIEnv,
+        version: JniVersion,
+    ) -> JniEnv<'env> {
+        JniEnv {
+            version,
+            vm,
+            jni_env,
+            has_token: RefCell::new(true),
+            native_method_call: true,
+        }
     }
 
     fn has_exception(&self) -> bool {
@@ -1841,7 +1846,7 @@ pub fn test_object<'env>(env: &'env JniEnv<'env>, raw_object: jni_sys::jobject) 
 #[cfg(test)]
 mod object_tests {
     use super::*;
-    use crate::jni::class::test_class;
+    use crate::class::test_class;
     use crate::testing::*;
     use std::mem;
 

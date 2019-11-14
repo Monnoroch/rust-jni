@@ -1,4 +1,4 @@
-use crate::jni::throwable::Throwable;
+use crate::throwable::Throwable;
 
 /// A type that represents a result of a Java method call. A Java method can either return
 /// a result or throw a

@@ -1,7 +1,10 @@
+use crate::error::JniError;
 use crate::java_string::*;
-use crate::jni::*;
+use crate::result::JavaResult;
+use crate::token::NoException;
+use crate::version::JniVersion;
+use crate::vm::*;
 use jni_sys;
-use std::cell::RefCell;
 use std::panic;
 use std::ptr;
 use std::string;
@@ -58,14 +61,7 @@ where
         // Safe because we pass a correct `java_vm` pointer.
         let vm = JavaVMRef::from_ptr(java_vm);
         let get_version_fn = ((**raw_env).GetVersion).unwrap();
-        let env = JniEnv {
-            version: JniVersion::from_raw(get_version_fn(raw_env)),
-            vm: &vm,
-            jni_env: raw_env,
-            has_token: RefCell::new(true),
-            native_method_call: true,
-        };
-
+        let env = JniEnv::native(&vm, raw_env, JniVersion::from_raw(get_version_fn(raw_env)));
         // Safe because we checked for a pending exception.
         let token = NoException::new(&env);
         let result = callback(&env, token);
@@ -97,8 +93,8 @@ where
 #[cfg(test)]
 mod native_method_wrapper_tests {
     use super::*;
-    use crate::jni::throwable::test_throwable;
     use crate::testing::*;
+    use crate::throwable::test_throwable;
 
     #[test]
     fn success() {

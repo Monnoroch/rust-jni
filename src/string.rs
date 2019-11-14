@@ -1,6 +1,9 @@
+use crate::class::Class;
 use crate::java_string::*;
-use crate::jni::method_calls::call_static_method;
-use crate::jni::*;
+use crate::method_calls::call_static_method;
+use crate::result::JavaResult;
+use crate::token::{from_nullable, NoException};
+use crate::vm::*;
 use jni_sys;
 use std;
 use std::fmt;

@@ -1,6 +1,6 @@
 use crate::java_string::*;
 /// A module with tools used in unit tests.
-use crate::jni::{Cast, Object};
+use crate::vm::{Cast, Object};
 use jni_sys;
 use std::ffi::CStr;
 use std::mem;

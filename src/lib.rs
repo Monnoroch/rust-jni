@@ -17,29 +17,38 @@ extern crate lazy_static;
 pub mod testing;
 
 mod attach_arguments;
+mod class;
+mod error;
 mod generate;
 mod init_arguments;
 mod java_string;
-mod jni;
 mod jni_bool;
+mod method_calls;
+mod methods;
+mod native_method;
+mod primitives;
 mod raw;
 mod result;
+mod string;
+mod throwable;
 mod token;
 mod version;
+mod vm;
 
 pub use attach_arguments::AttachArguments;
+pub use error::JniError;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
-pub use jni::{Cast, JavaType, JavaVM, JniEnv, JniError};
 pub use result::JavaResult;
 pub use token::{Exception, NoException};
 pub use version::JniVersion;
+pub use vm::{Cast, JavaType, JavaVM, JniEnv};
 
 pub mod java {
     pub mod lang {
-        pub use crate::jni::class::Class;
-        pub use crate::jni::string::String;
-        pub use crate::jni::throwable::Throwable;
-        pub use crate::jni::Object;
+        pub use crate::class::Class;
+        pub use crate::string::String;
+        pub use crate::throwable::Throwable;
+        pub use crate::vm::Object;
     }
 }
 
@@ -48,12 +57,12 @@ pub mod java {
 /// SHOULD NOT BE USED MANUALLY.
 #[doc(hidden)]
 pub mod __generator {
-    pub use crate::jni::method_calls::call_constructor;
-    pub use crate::jni::method_calls::call_method;
-    pub use crate::jni::method_calls::call_static_method;
-    pub use crate::jni::native_method::native_method_wrapper;
-    pub use crate::jni::native_method::test_from_jni_type;
-    pub use crate::jni::native_method::test_jni_argument_type;
-    pub use crate::jni::FromJni;
-    pub use crate::jni::ToJni;
+    pub use crate::method_calls::call_constructor;
+    pub use crate::method_calls::call_method;
+    pub use crate::method_calls::call_static_method;
+    pub use crate::native_method::native_method_wrapper;
+    pub use crate::native_method::test_from_jni_type;
+    pub use crate::native_method::test_jni_argument_type;
+    pub use crate::vm::FromJni;
+    pub use crate::vm::ToJni;
 }

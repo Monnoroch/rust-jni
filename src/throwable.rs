@@ -1,8 +1,11 @@
-use crate::jni::class::Class;
-use crate::jni::method_calls::call_constructor;
-use crate::jni::method_calls::call_method;
-use crate::jni::string::String;
-use crate::jni::*;
+use crate::class::Class;
+use crate::error::JniError;
+use crate::method_calls::call_constructor;
+use crate::method_calls::call_method;
+use crate::result::JavaResult;
+use crate::string::String;
+use crate::token::{Exception, NoException};
+use crate::vm::*;
 use jni_sys;
 use std::fmt;
 

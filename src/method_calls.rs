@@ -1,6 +1,9 @@
+use crate::class::Class;
 use crate::java_string::*;
-use crate::jni::primitives::ToJniTuple;
-use crate::jni::*;
+use crate::primitives::ToJniTuple;
+use crate::result::JavaResult;
+use crate::token::{from_nullable, get_and_clear_exception_if_thrown, NoException};
+use crate::vm::*;
 use jni_sys;
 use std::os::raw::c_char;
 
@@ -309,6 +312,7 @@ mod call_static_method_tests {
     use super::*;
     use crate::testing::*;
     use std::mem;
+    use std::ptr;
 
     #[test]
     fn call() {
@@ -535,6 +539,7 @@ mod call_constructor_tests {
     use super::*;
     use crate::testing::*;
     use std::mem;
+    use std::ptr;
 
     #[test]
     fn call() {

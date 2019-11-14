@@ -1,11 +1,11 @@
-use crate::jni::throwable::Throwable;
-use crate::jni::{FromJni, JniEnv};
 use crate::result::JavaResult;
+use crate::throwable::Throwable;
+use crate::vm::{FromJni, JniEnv};
 use core::marker::PhantomData;
 use std::mem;
 use std::ptr::{self, NonNull};
 
-include!("jni/call_jni_method.rs");
+include!("call_jni_method.rs");
 
 /// A token that represents that there is no pending Java exception in the current thread.
 ///
@@ -220,9 +220,9 @@ impl<'this> Exception<'this> {
 #[cfg(test)]
 mod exception_tests {
     use super::*;
-    use crate::jni::test_env;
-    use crate::jni::test_vm;
     use crate::testing::*;
+    use crate::vm::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn unwrap() {
@@ -270,8 +270,8 @@ pub(crate) unsafe fn from_nullable<'a, T>(
 #[cfg(test)]
 mod from_nullable_tests {
     use super::*;
-    use crate::jni::test_env;
-    use crate::jni::test_vm;
+    use crate::vm::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn from_nullable_null() {
@@ -312,9 +312,9 @@ pub(crate) fn get_and_clear_exception_if_thrown<'a>(env: &'a JniEnv<'a>) -> Opti
 #[cfg(test)]
 mod maybe_get_and_clear_exception_tests {
     use super::*;
-    use crate::jni::test_env;
-    use crate::jni::test_vm;
     use crate::testing::*;
+    use crate::vm::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn exception() {

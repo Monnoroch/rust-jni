@@ -1,5 +1,5 @@
-use crate::jni::class::*;
-use crate::jni::*;
+use crate::class::*;
+use crate::vm::*;
 use jni_sys;
 use std::char;
 use std::iter;

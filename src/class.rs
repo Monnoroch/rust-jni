@@ -1,6 +1,8 @@
 use crate::java_string::*;
-use crate::jni::string::String;
-use crate::jni::*;
+use crate::result::JavaResult;
+use crate::string::String;
+use crate::token::{from_nullable, NoException};
+use crate::vm::*;
 use jni_sys;
 use std::fmt;
 use std::os::raw::c_char;
