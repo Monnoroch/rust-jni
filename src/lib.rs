@@ -17,6 +17,7 @@ mod generate;
 mod init_arguments;
 mod java_string;
 mod jni;
+mod jni_bool;
 mod raw;
 mod version;
 

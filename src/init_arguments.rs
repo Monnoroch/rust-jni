@@ -1,6 +1,7 @@
-use crate::jni::ToJni;
-use crate::raw::*;
+use crate::jni::error::JniError;
+use crate::jni_bool;
 use crate::version::JniVersion;
+use cfg_if::cfg_if;
 use jni_sys;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
@@ -11,7 +12,7 @@ use std::slice;
 /// Verbose options for starting a Java VM.
 ///
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JvmVerboseOption {
     /// Verbose class option.
     ///
@@ -27,11 +28,13 @@ pub enum JvmVerboseOption {
     Jni,
 }
 
-fn verbose_option_to_string(option: &JvmVerboseOption) -> &'static str {
-    match option {
-        JvmVerboseOption::Class => "class",
-        JvmVerboseOption::Gc => "gc",
-        JvmVerboseOption::Jni => "jni",
+impl JvmVerboseOption {
+    fn to_string(&self) -> &'static str {
+        match self {
+            JvmVerboseOption::Class => "class",
+            JvmVerboseOption::Gc => "gc",
+            JvmVerboseOption::Jni => "jni",
+        }
     }
 }
 
@@ -41,34 +44,29 @@ mod verbose_option_to_string_tests {
 
     #[test]
     fn test() {
-        assert_eq!(verbose_option_to_string(&JvmVerboseOption::Class), "class");
-        assert_eq!(verbose_option_to_string(&JvmVerboseOption::Gc), "gc");
-        assert_eq!(verbose_option_to_string(&JvmVerboseOption::Jni), "jni");
+        assert_eq!(JvmVerboseOption::Class.to_string(), "class");
+        assert_eq!(JvmVerboseOption::Gc.to_string(), "gc");
+        assert_eq!(JvmVerboseOption::Jni.to_string(), "jni");
     }
 }
 
 /// Options for starting a Java VM.
 ///
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
-// TODO(#13): support vfprintf, exit, abort options.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JvmOption {
-    /// Verbose option.
-    ///
-    /// Passed to the JVM as `-verbose:${verbose_option}`.
-    Verbose(JvmVerboseOption),
-    /// System property option string. Must have a key and a value.
-    ///
-    /// Is formatted as `-D{key}=${value}`.
-    SystemProperty(String, String),
-    /// Enable checking JNI calls.
-    ///
-    /// Passed to the JVM as `-check:jni`.
-    CheckedJni,
     /// Unknown option.
     /// Needed for forward compability and to set custom options.
     /// The string value is passed to the JVM without change.
     Unknown(String),
+    /// Enable checking JNI calls.
+    ///
+    /// Passed to the JVM as `-check:jni`.
+    CheckedJni,
+    /// Verbose option.
+    ///
+    /// Passed to the JVM as `-verbose:${verbose_option}`.
+    Verbose(JvmVerboseOption),
 }
 
 impl JvmOption {
@@ -76,26 +74,22 @@ impl JvmOption {
     unsafe fn from_raw(option: &jni_sys::JavaVMOption) -> Self {
         // TODO(#14): support platform encodings other than UTF-8.
         let option_string = CStr::from_ptr((*option).optionString).to_str().unwrap();
-        let system_property_prefix = "-D";
         match option_string {
+            "-Xcheck:jni" => JvmOption::CheckedJni,
             "-verbose:gc" => JvmOption::Verbose(JvmVerboseOption::Gc),
             "-verbose:jni" => JvmOption::Verbose(JvmVerboseOption::Jni),
             "-verbose:class" => JvmOption::Verbose(JvmVerboseOption::Class),
-            "-Xcheck:jni" => JvmOption::CheckedJni,
-            option if option.starts_with(system_property_prefix) => {
-                let parts: Vec<&str> = option
-                    .split_at(system_property_prefix.len())
-                    .1
-                    .splitn(2, "=")
-                    .collect();
-                if parts.len() != 2 {
-                    JvmOption::Unknown(option.to_owned())
-                } else {
-                    JvmOption::SystemProperty(parts[0].to_owned(), parts[1].to_owned())
-                }
-            }
             option => JvmOption::Unknown(option.to_owned()),
         }
+    }
+
+    fn to_string(&self) -> CString {
+        match self {
+            JvmOption::Unknown(value) => CString::new(value.as_str()),
+            JvmOption::CheckedJni => CString::new("-Xcheck:jni"),
+            JvmOption::Verbose(option) => CString::new(format!("-verbose:{}", option.to_string())),
+        }
+        .unwrap()
     }
 }
 
@@ -103,15 +97,29 @@ impl JvmOption {
 mod jvm_option_tests {
     use super::*;
 
+    fn raw_vm_option(option_string: &CStr) -> jni_sys::JavaVMOption {
+        jni_sys::JavaVMOption {
+            optionString: option_string.as_ptr() as *mut i8,
+            extraInfo: ptr::null_mut(),
+        }
+    }
+
+    #[test]
+    fn from_raw_unknown() {
+        let option_string = CStr::from_bytes_with_nul(b"tyhb\0").unwrap();
+        let option = raw_vm_option(&option_string);
+        assert_eq!(
+            unsafe { JvmOption::from_raw(&option) },
+            JvmOption::Unknown("tyhb".to_owned())
+        );
+    }
+
     #[test]
     fn from_raw_checked_jni() {
         let option_string = CStr::from_bytes_with_nul(b"-Xcheck:jni\0").unwrap();
-        let option = &jni_sys::JavaVMOption {
-            optionString: option_string.as_ptr() as *mut i8,
-            extraInfo: ptr::null_mut(),
-        };
+        let option = raw_vm_option(&option_string);
         assert_eq!(
-            unsafe { JvmOption::from_raw(option) },
+            unsafe { JvmOption::from_raw(&option) },
             JvmOption::CheckedJni
         );
     }
@@ -119,107 +127,25 @@ mod jvm_option_tests {
     #[test]
     fn from_raw_verbose() {
         let option_string = CStr::from_bytes_with_nul(b"-verbose:jni\0").unwrap();
-        let option = &jni_sys::JavaVMOption {
-            optionString: option_string.as_ptr() as *mut i8,
-            extraInfo: ptr::null_mut(),
-        };
+        let option = raw_vm_option(&option_string);
         assert_eq!(
-            unsafe { JvmOption::from_raw(option) },
+            unsafe { JvmOption::from_raw(&option) },
             JvmOption::Verbose(JvmVerboseOption::Jni)
         );
 
         let option_string = CStr::from_bytes_with_nul(b"-verbose:gc\0").unwrap();
-        let option = &jni_sys::JavaVMOption {
-            optionString: option_string.as_ptr() as *mut i8,
-            extraInfo: ptr::null_mut(),
-        };
+        let option = raw_vm_option(&option_string);
         assert_eq!(
-            unsafe { JvmOption::from_raw(option) },
+            unsafe { JvmOption::from_raw(&option) },
             JvmOption::Verbose(JvmVerboseOption::Gc)
         );
 
         let option_string = CStr::from_bytes_with_nul(b"-verbose:class\0").unwrap();
-        let option = &jni_sys::JavaVMOption {
-            optionString: option_string.as_ptr() as *mut i8,
-            extraInfo: ptr::null_mut(),
-        };
+        let option = raw_vm_option(&option_string);
         assert_eq!(
-            unsafe { JvmOption::from_raw(option) },
+            unsafe { JvmOption::from_raw(&option) },
             JvmOption::Verbose(JvmVerboseOption::Class)
         );
-    }
-
-    #[test]
-    fn from_raw_system_property() {
-        let option_string = CStr::from_bytes_with_nul(b"-Dkey=value\0").unwrap();
-        let option = &jni_sys::JavaVMOption {
-            optionString: option_string.as_ptr() as *mut i8,
-            extraInfo: ptr::null_mut(),
-        };
-        assert_eq!(
-            unsafe { JvmOption::from_raw(option) },
-            JvmOption::SystemProperty("key".to_owned(), "value".to_owned())
-        );
-    }
-
-    #[test]
-    fn from_raw_unknown() {
-        let option_string = CStr::from_bytes_with_nul(b"tyhb\0").unwrap();
-        let option = &jni_sys::JavaVMOption {
-            optionString: option_string.as_ptr() as *mut i8,
-            extraInfo: ptr::null_mut(),
-        };
-        assert_eq!(
-            unsafe { JvmOption::from_raw(option) },
-            JvmOption::Unknown("tyhb".to_owned())
-        );
-
-        let option_string = CStr::from_bytes_with_nul(b"-Dkey~value\0").unwrap();
-        let option = &jni_sys::JavaVMOption {
-            optionString: option_string.as_ptr() as *mut i8,
-            extraInfo: ptr::null_mut(),
-        };
-        assert_eq!(
-            unsafe { JvmOption::from_raw(option) },
-            JvmOption::Unknown("-Dkey~value".to_owned())
-        );
-    }
-
-    #[test]
-    fn to_string() {
-        assert_eq!(option_to_string(&JvmOption::CheckedJni), "-Xcheck:jni");
-        assert_eq!(
-            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Gc)),
-            "-verbose:gc"
-        );
-        assert_eq!(
-            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Jni)),
-            "-verbose:jni"
-        );
-        assert_eq!(
-            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Class)),
-            "-verbose:class"
-        );
-        assert_eq!(
-            option_to_string(&JvmOption::SystemProperty(
-                "key".to_owned(),
-                "value".to_owned()
-            )),
-            "-Dkey=value"
-        );
-        assert_eq!(
-            option_to_string(&JvmOption::Unknown("qwer".to_owned())),
-            "qwer"
-        );
-    }
-}
-
-fn option_to_string(option: &JvmOption) -> String {
-    match option {
-        JvmOption::CheckedJni => "-Xcheck:jni".to_owned(),
-        JvmOption::Verbose(option) => format!("-verbose:{}", verbose_option_to_string(option)),
-        JvmOption::SystemProperty(key, value) => format!("-D{}={}", key, value),
-        JvmOption::Unknown(value) => value.clone(),
     }
 }
 
@@ -228,30 +154,34 @@ mod option_to_string_tests {
     use super::*;
 
     #[test]
-    fn test() {
-        assert_eq!(option_to_string(&JvmOption::CheckedJni), "-Xcheck:jni");
+    fn to_string_unknown() {
         assert_eq!(
-            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Gc)),
-            "-verbose:gc"
+            JvmOption::Unknown("qwer".into()).to_string(),
+            CString::new("qwer").unwrap()
+        );
+    }
+
+    #[test]
+    fn to_string_checked_jni() {
+        assert_eq!(
+            JvmOption::CheckedJni.to_string(),
+            CString::new("-Xcheck:jni").unwrap()
+        );
+    }
+
+    #[test]
+    fn to_string_verbose() {
+        assert_eq!(
+            JvmOption::Verbose(JvmVerboseOption::Gc).to_string(),
+            CString::new("-verbose:gc").unwrap()
         );
         assert_eq!(
-            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Jni)),
-            "-verbose:jni"
+            JvmOption::Verbose(JvmVerboseOption::Jni).to_string(),
+            CString::new("-verbose:jni").unwrap()
         );
         assert_eq!(
-            option_to_string(&JvmOption::Verbose(JvmVerboseOption::Class)),
-            "-verbose:class"
-        );
-        assert_eq!(
-            option_to_string(&JvmOption::SystemProperty(
-                "key".to_owned(),
-                "value".to_owned()
-            )),
-            "-Dkey=value"
-        );
-        assert_eq!(
-            option_to_string(&JvmOption::Unknown("qwer".to_owned())),
-            "qwer"
+            JvmOption::Verbose(JvmVerboseOption::Class).to_string(),
+            CString::new("-verbose:class").unwrap()
         );
     }
 }
@@ -264,7 +194,7 @@ mod option_to_string_tests {
 /// ```
 /// use rust_jni::{InitArguments, JniVersion, JvmOption, JvmVerboseOption};
 ///
-/// let options = InitArguments::get_default(JniVersion::V8).unwrap()
+/// let options = InitArguments::default()
 ///     .with_option(JvmOption::Unknown("-Xgc:parallel".to_owned()))
 ///     .with_option(JvmOption::Verbose(JvmVerboseOption::Gc));
 ///
@@ -277,28 +207,43 @@ pub struct InitArguments {
     ignore_unrecognized: bool,
 }
 
+/// Default JVM init arguments.
+///
+/// Defaut argumets are conservative towards safety and use JDK 8 as the most common one.
+///
+/// [JNI documentation](https://docs.oracle.com/en/java/javase/11/docs/specs/jni/invocation.html#jni_createjavavm)
+impl Default for InitArguments {
+    fn default() -> Self {
+        InitArguments {
+            version: JniVersion::V8,
+            options: vec![],
+            ignore_unrecognized: true,
+        }
+        // We enable CheckedJni by default for exatra safety.
+        // It can always be explicitly disabled with .unchecked().
+        .checked()
+        // We enable failing on unrecognized JVM aruments by default for exatra safety.
+        // It can always be explicitly disabled with .ignore_unrecognized_options().
+        .fail_on_unrecognized_options()
+    }
+}
+
 impl InitArguments {
-    /// Get default Java VM init arguments for a JNI version.
-    /// If the requested JNI version is not supported, returns
-    /// [`None`](https://doc.rust-lang.org/std/option/enum.Option.html#variant.None).
+    /// Get default init arguments for the latest supported JNI version.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
-    pub fn get_default(version: JniVersion) -> Option<Self> {
-        let arguments = Self::get_default_or_closest_supported(version);
-        if arguments.version == version {
-            Some(arguments)
-        } else {
-            None
-        }
+    pub fn get_latest_default() -> Result<Self, JniError> {
+        Self::get_default(JniVersion::V10)
     }
 
     /// Get default Java VM init arguments for a JNI version.
-    /// If the requested JNI version is not supported, returns default arguments for the closest
-    /// supported JNI version. The new version can be obtained with the
-    /// [`InitArguments::version()`](struct.InitArguments.html#method.version) method.
+    /// If the requested JNI version is not supported, returns [`JniError`](enum.JniError.html).
+    ///
+    /// Unlike [`InitArguments::default()`](struct.InitArguments.html#impl-Default), gets the defaut arguments
+    /// from a JNI call.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
-    pub fn get_default_or_closest_supported(version: JniVersion) -> Self {
+    pub fn get_default(version: JniVersion) -> Result<Self, JniError> {
         let mut raw_arguments = jni_sys::JavaVMInitArgs {
             version: version.to_raw(),
             nOptions: 0,
@@ -309,33 +254,50 @@ impl InitArguments {
         unsafe {
             // It is fine if the requested version is not supported, we'll just use
             // a supported one.
-            JNI_GetDefaultJavaVMInitArgs(
+            let error = JniError::from_raw(JNI_GetDefaultJavaVMInitArgs(
                 &mut raw_arguments as *mut jni_sys::JavaVMInitArgs as *mut c_void,
-            );
+            ));
+            if error.is_some() {
+                return Err(error.unwrap());
+            }
         }
         // Safe because raw arguments were correctly initialized by the
         // `JNI_GetDefaultJavaVMInitArgs`.
-        unsafe { Self::from_raw(&raw_arguments).with_option(JvmOption::CheckedJni) }
+        let init_arguments = unsafe { Self::from_raw(&raw_arguments) };
+        // Version must be the same as the one specified before.
+        // See [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
+        // for details.
+        if version != init_arguments.version {
+            return Err(JniError::UnsupportedVersion);
+        }
+        Ok(init_arguments
+            // We enable CheckedJni by default for exatra safety.
+            // It can always be explicitly disabled with .unchecked().
+            .checked()
+            // We enable failing on unrecognized JVM aruments by default for exatra safety.
+            // It can always be explicitly disabled with .ignore_unrecognized_options().
+            .fail_on_unrecognized_options())
     }
 
     /// Unsafe because one can pass incorrect options.
-    unsafe fn from_raw(raw_arguments: &jni_sys::JavaVMInitArgs) -> InitArguments {
+    pub(crate) unsafe fn from_raw(raw_arguments: &jni_sys::JavaVMInitArgs) -> InitArguments {
         let options = slice::from_raw_parts(raw_arguments.options, raw_arguments.nOptions as usize)
             .iter()
             .map(|value| JvmOption::from_raw(value))
             .collect();
         InitArguments {
             version: JniVersion::from_raw(raw_arguments.version),
-            ignore_unrecognized: to_bool(raw_arguments.ignoreUnrecognized),
+            ignore_unrecognized: jni_bool::to_rust(raw_arguments.ignoreUnrecognized),
             options,
         }
     }
 
-    /// Get default init arguments for the latest supported JNI version.
+    /// Set requested JNI version in the Java VM init arguments.
     ///
-    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getdefaultjavavminitargs)
-    pub fn get_latest_default() -> Self {
-        Self::get_default_or_closest_supported(JniVersion::V8)
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
+    pub fn with_version(mut self, version: JniVersion) -> Self {
+        self.version = version;
+        self
     }
 
     /// Add init options to the Java VM init arguments.
@@ -398,110 +360,385 @@ impl InitArguments {
     }
 }
 
-/// A wrapper around `jni_sys::JavaVMInitArgs` with a lifetime to ensure
-/// there's no access to freed memory.
-pub struct RawInitArguments<'a> {
-    pub raw_arguments: jni_sys::JavaVMInitArgs,
-    _buffer: PhantomData<&'a Vec<CString>>,
-}
-
-pub fn to_raw<'a, 'b, 'c: 'a + 'b>(
-    arguments: &InitArguments,
-    strings_buffer: &'a mut Vec<CString>,
-    options_buffer: &'b mut Vec<jni_sys::JavaVMOption>,
-) -> RawInitArguments<'c> {
-    *strings_buffer = arguments
-        .options
-        .iter()
-        .map(|_| "")
-        .map(CString::new)
-        .map(Result::unwrap)
-        .collect();
-    *options_buffer = arguments
-        .options
-        .iter()
-        .zip(strings_buffer.iter_mut())
-        .map(|(option, ref mut buffer)| {
-            // TODO(#14): support platform encodings other than UTF-8.
-            let buffer: &mut CString = buffer;
-            *buffer = CString::new(option_to_string(option)).unwrap();
-            jni_sys::JavaVMOption {
-                optionString: buffer.as_ptr() as *mut i8,
-                extraInfo: ptr::null_mut(),
-            }
-        })
-        .collect();
-    RawInitArguments {
-        raw_arguments: jni_sys::JavaVMInitArgs {
-            version: arguments.version.to_raw(),
-            nOptions: options_buffer.len() as i32,
-            options: options_buffer.as_mut_ptr(),
-            // Safe because `bool` conversion is safe internally.
-            ignoreUnrecognized: unsafe { bool::__to_jni(&arguments.ignore_unrecognized) },
-        },
-        _buffer: PhantomData::<&'c Vec<CString>>,
-    }
-}
-
 #[cfg(test)]
-pub unsafe fn from_raw(raw_arguments: &jni_sys::JavaVMInitArgs) -> InitArguments {
-    InitArguments::from_raw(raw_arguments)
-}
-
-#[cfg(test)]
-pub fn test(version: JniVersion) -> InitArguments {
-    InitArguments {
-        version: version,
-        options: vec![],
-        ignore_unrecognized: true,
-    }
-}
-
-#[cfg(test)]
-pub mod init_arguments_tests {
+pub mod init_arguments_manipulation_tests {
     use super::*;
-
-    fn default_options() -> Vec<JvmOption> {
-        vec![
-            JvmOption::SystemProperty("key".to_owned(), "value".to_owned()),
-            JvmOption::Unknown("qwer".to_owned()),
-        ]
-    }
-
-    fn resulting_options() -> Vec<JvmOption> {
-        vec![
-            JvmOption::SystemProperty("key".to_owned(), "value".to_owned()),
-            JvmOption::Unknown("qwer".to_owned()),
-            JvmOption::CheckedJni,
-        ]
-    }
 
     pub fn default_args() -> InitArguments {
         InitArguments {
             version: JniVersion::V4,
-            options: default_options(),
+            options: vec![],
             ignore_unrecognized: false,
         }
     }
 
-    fn check_arguments(version: JniVersion) {
-        let actual_arguments = get_default_java_vm_init_args_call_input();
-        assert_eq!(actual_arguments.version, version.to_raw());
-        assert_eq!(actual_arguments.nOptions, 0);
-        assert_eq!(actual_arguments.options, ptr::null_mut());
-        assert_eq!(actual_arguments.ignoreUnrecognized, jni_sys::JNI_FALSE);
+    #[test]
+    fn default() {
+        assert_eq!(
+            InitArguments::default(),
+            InitArguments {
+                version: JniVersion::V8,
+                options: vec![JvmOption::CheckedJni],
+                ignore_unrecognized: false,
+            }
+        );
     }
+
+    #[test]
+    fn with_version() {
+        let arguments = InitArguments {
+            version: JniVersion::V4,
+            ..default_args()
+        };
+        assert_eq!(
+            arguments.with_version(JniVersion::V8),
+            InitArguments {
+                version: JniVersion::V8,
+                ..default_args()
+            }
+        );
+    }
+
+    #[test]
+    fn with_options() {
+        let arguments = InitArguments {
+            options: vec![JvmOption::CheckedJni],
+            ..default_args()
+        };
+        assert_eq!(
+            arguments.with_options(&[
+                JvmOption::Verbose(JvmVerboseOption::Gc),
+                JvmOption::Unknown("test".to_owned()),
+            ]),
+            InitArguments {
+                options: vec![
+                    JvmOption::CheckedJni,
+                    JvmOption::Verbose(JvmVerboseOption::Gc),
+                    JvmOption::Unknown("test".to_owned()),
+                ],
+                ..default_args()
+            }
+        );
+    }
+
+    #[test]
+    fn with_option() {
+        let arguments = InitArguments {
+            options: vec![JvmOption::CheckedJni],
+            ..default_args()
+        };
+        assert_eq!(
+            arguments.with_option(JvmOption::Verbose(JvmVerboseOption::Gc)),
+            InitArguments {
+                options: vec![
+                    JvmOption::CheckedJni,
+                    JvmOption::Verbose(JvmVerboseOption::Gc),
+                ],
+                ..default_args()
+            }
+        );
+    }
+
+    #[test]
+    fn unchecked() {
+        let arguments = InitArguments {
+            options: vec![
+                JvmOption::Verbose(JvmVerboseOption::Gc),
+                JvmOption::CheckedJni,
+            ],
+            ..default_args()
+        };
+        assert_eq!(
+            arguments.unchecked(),
+            InitArguments {
+                options: vec![JvmOption::Verbose(JvmVerboseOption::Gc)],
+                ..default_args()
+            }
+        );
+    }
+
+    #[test]
+    fn checked() {
+        let arguments = InitArguments {
+            options: vec![JvmOption::Verbose(JvmVerboseOption::Gc)],
+            ..default_args()
+        };
+        assert_eq!(
+            arguments.checked(),
+            InitArguments {
+                options: vec![
+                    JvmOption::Verbose(JvmVerboseOption::Gc),
+                    JvmOption::CheckedJni,
+                ],
+                ..default_args()
+            }
+        );
+    }
+
+    #[test]
+    fn ignore_unrecognized_options() {
+        let arguments = InitArguments {
+            ignore_unrecognized: false,
+            ..default_args()
+        };
+        assert_eq!(
+            arguments.ignore_unrecognized_options(),
+            InitArguments {
+                ignore_unrecognized: true,
+                ..default_args()
+            }
+        );
+    }
+
+    #[test]
+    fn fail_on_unrecognized_options() {
+        let arguments = InitArguments {
+            ignore_unrecognized: true,
+            ..default_args()
+        };
+        assert_eq!(
+            arguments.fail_on_unrecognized_options(),
+            InitArguments {
+                ignore_unrecognized: false,
+                ..default_args()
+            }
+        );
+    }
+
+    #[test]
+    fn version() {
+        let arguments = InitArguments {
+            version: JniVersion::V6,
+            ..default_args()
+        };
+        assert_eq!(arguments.version(), JniVersion::V6);
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod init_arguments_creation_tests {
+    use super::*;
+    use serial_test_derive::serial;
+
+    pub(crate) fn default_args() -> InitArguments {
+        InitArguments {
+            version: JniVersion::V4,
+            options: vec![],
+            ignore_unrecognized: false,
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn get_default() {
+        let resulting_arguments = InitArguments {
+            version: JniVersion::V4,
+            options: vec![
+                JvmOption::Unknown("qwer".to_owned()),
+                JvmOption::Verbose(JvmVerboseOption::Gc),
+            ],
+            ..default_args()
+        };
+        let mut strings_buffer = vec![];
+        let mut options_buffer = vec![];
+        let raw_resulting_arguments =
+            resulting_arguments.to_raw(&mut strings_buffer, &mut options_buffer);
+
+        let mock = ffi::mock::JNI_GetDefaultJavaVMInitArgs_context();
+        mock.expect()
+            .times(1)
+            .withf(move |arguments: &*mut ::std::os::raw::c_void| {
+                let arguments = *arguments as *mut jni_sys::JavaVMInitArgs;
+                // We know that this pointer points to a valid value.
+                match unsafe { arguments.as_mut() } {
+                    None => false,
+                    Some(arguments) => {
+                        if arguments.version != JniVersion::V4.to_raw()
+                            || arguments.nOptions != 0
+                            || arguments.options != ptr::null_mut()
+                            || arguments.ignoreUnrecognized != jni_sys::JNI_FALSE
+                        {
+                            false
+                        } else {
+                            *arguments = raw_resulting_arguments.raw_arguments;
+                            true
+                        }
+                    }
+                }
+            })
+            .return_const(jni_sys::JNI_OK);
+        assert_eq!(
+            InitArguments::get_default(JniVersion::V4),
+            Ok(InitArguments {
+                version: JniVersion::V4,
+                options: vec![
+                    JvmOption::Unknown("qwer".to_owned()),
+                    JvmOption::Verbose(JvmVerboseOption::Gc),
+                    JvmOption::CheckedJni,
+                ],
+                ..default_args()
+            })
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn get_default_error() {
+        let mock = ffi::mock::JNI_GetDefaultJavaVMInitArgs_context();
+        mock.expect().times(1).return_const(jni_sys::JNI_ERR);
+        assert_eq!(
+            InitArguments::get_default(JniVersion::V4),
+            Err(JniError::Unknown(jni_sys::JNI_ERR))
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn get_default_changed_version() {
+        let resulting_arguments = InitArguments {
+            version: JniVersion::V4,
+            ..default_args()
+        };
+        let mut strings_buffer = vec![];
+        let mut options_buffer = vec![];
+        let raw_resulting_arguments =
+            resulting_arguments.to_raw(&mut strings_buffer, &mut options_buffer);
+
+        let mock = ffi::mock::JNI_GetDefaultJavaVMInitArgs_context();
+        mock.expect()
+            .times(1)
+            .withf(move |arguments: &*mut ::std::os::raw::c_void| {
+                let arguments = *arguments as *mut jni_sys::JavaVMInitArgs;
+                // We know that this pointer points to a valid value.
+                match unsafe { arguments.as_mut() } {
+                    None => false,
+                    Some(arguments) => {
+                        if arguments.version != JniVersion::V8.to_raw() {
+                            false
+                        } else {
+                            *arguments = raw_resulting_arguments.raw_arguments;
+                            true
+                        }
+                    }
+                }
+            })
+            .return_const(jni_sys::JNI_OK);
+        assert_eq!(
+            InitArguments::get_default(JniVersion::V8),
+            Err(JniError::UnsupportedVersion)
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn get_latest_default() {
+        let resulting_arguments = InitArguments {
+            version: JniVersion::V10,
+            ..default_args()
+        };
+        let mut strings_buffer = vec![];
+        let mut options_buffer = vec![];
+        let raw_resulting_arguments =
+            resulting_arguments.to_raw(&mut strings_buffer, &mut options_buffer);
+
+        let mock = ffi::mock::JNI_GetDefaultJavaVMInitArgs_context();
+        mock.expect()
+            .times(1)
+            .withf(move |arguments: &*mut ::std::os::raw::c_void| {
+                let arguments = *arguments as *mut jni_sys::JavaVMInitArgs;
+                // We know that this pointer points to a valid value.
+                match unsafe { arguments.as_mut() } {
+                    None => false,
+                    Some(arguments) => {
+                        if arguments.version != JniVersion::V10.to_raw() {
+                            false
+                        } else {
+                            *arguments = raw_resulting_arguments.raw_arguments;
+                            true
+                        }
+                    }
+                }
+            })
+            .return_const(jni_sys::JNI_OK);
+        assert_eq!(
+            InitArguments::get_latest_default(),
+            Ok(InitArguments {
+                version: JniVersion::V10,
+                options: vec![JvmOption::CheckedJni],
+                ..default_args()
+            })
+        );
+    }
+}
+
+/// A wrapper around `jni_sys::JavaVMInitArgs` with a lifetime to ensure
+/// there's no access to freed memory.
+pub(crate) struct RawInitArguments<'a> {
+    pub raw_arguments: jni_sys::JavaVMInitArgs,
+    _buffer: PhantomData<&'a Vec<CString>>,
+}
+
+/// Test implementation of Send to allow passing
+/// these objects to mock arguments matchers.
+#[cfg(test)]
+unsafe impl<'a> Send for RawInitArguments<'a> {}
+
+impl InitArguments {
+    pub(crate) fn to_raw<'a, 'b, 'c: 'a + 'b>(
+        &self,
+        strings_buffer: &'a mut Vec<CString>,
+        options_buffer: &'b mut Vec<jni_sys::JavaVMOption>,
+    ) -> RawInitArguments<'c> {
+        *strings_buffer = self
+            .options
+            .iter()
+            .map(|_| "")
+            .map(CString::new)
+            .map(Result::unwrap)
+            .collect();
+        *options_buffer = self
+            .options
+            .iter()
+            .zip(strings_buffer.iter_mut())
+            .map(|(option, ref mut buffer)| {
+                // TODO(#14): support platform encodings other than UTF-8.
+                let buffer: &mut CString = buffer;
+                *buffer = option.to_string();
+                jni_sys::JavaVMOption {
+                    optionString: buffer.as_ptr() as *mut i8,
+                    extraInfo: ptr::null_mut(),
+                }
+            })
+            .collect();
+        RawInitArguments {
+            raw_arguments: jni_sys::JavaVMInitArgs {
+                version: self.version.to_raw(),
+                nOptions: options_buffer.len() as i32,
+                options: options_buffer.as_mut_ptr(),
+                ignoreUnrecognized: jni_bool::to_jni(self.ignore_unrecognized),
+            },
+            _buffer: PhantomData::<&'c Vec<CString>>,
+        }
+    }
+}
+
+#[cfg(test)]
+mod init_arguments_to_raw_tests {
+    use super::*;
 
     #[test]
     fn to_raw_test() {
         let arguments = InitArguments {
             version: JniVersion::V4,
-            options: default_options(),
+            options: vec![
+                JvmOption::Unknown("qwer".to_owned()),
+                JvmOption::Verbose(JvmVerboseOption::Gc),
+            ],
             ignore_unrecognized: false,
         };
         let mut strings_buffer = vec![];
         let mut options_buffer = vec![];
-        let raw_arguments = to_raw(&arguments, &mut strings_buffer, &mut options_buffer);
+        let raw_arguments = arguments.to_raw(&mut strings_buffer, &mut options_buffer);
         assert_eq!(raw_arguments.raw_arguments.version, JniVersion::V4.to_raw());
         assert_eq!(raw_arguments.raw_arguments.nOptions, 2);
         assert_eq!(
@@ -514,213 +751,42 @@ pub mod init_arguments_tests {
                 raw_arguments.raw_arguments.nOptions as usize,
             )
         };
-        for (raw_option, option) in raw_options.iter().zip(default_options().into_iter()) {
+        assert_eq!(raw_options.len(), 2);
+        for (raw_option, option) in raw_options.iter().zip(arguments.options.into_iter()) {
             assert_eq!(option, unsafe { JvmOption::from_raw(raw_option) });
         }
     }
+}
 
-    #[test]
-    fn get_default_supported() {
-        let mut strings_buffer = vec![];
-        let mut options_buffer = vec![];
-        let mut raw_arguments = to_raw(&default_args(), &mut strings_buffer, &mut options_buffer);
-        let _locked = setup_get_default_java_vm_init_args_call(GetDefaultJavaVMInitArgsCall::new(
-            &mut raw_arguments.raw_arguments as *mut jni_sys::JavaVMInitArgs as *mut c_void,
-        ));
-        assert_eq!(
-            InitArguments::get_default(JniVersion::V4),
-            Some(InitArguments {
-                version: JniVersion::V4,
-                options: resulting_options(),
-                ignore_unrecognized: false
-            })
-        );
-        check_arguments(JniVersion::V4);
-    }
+#[cfg(test)]
+// JNI API.
+#[allow(non_snake_case)]
+mod ffi {
+    use mockall::*;
 
-    #[test]
-    fn get_default_unsupported() {
-        let mut strings_buffer = vec![];
-        let mut options_buffer = vec![];
-        let mut raw_arguments = to_raw(&default_args(), &mut strings_buffer, &mut options_buffer);
-        let _locked = setup_get_default_java_vm_init_args_call(GetDefaultJavaVMInitArgsCall::new(
-            &mut raw_arguments.raw_arguments as *mut jni_sys::JavaVMInitArgs as *mut c_void,
-        ));
-        assert_eq!(InitArguments::get_default(JniVersion::V1), None);
-        check_arguments(JniVersion::V1);
-    }
-
-    #[test]
-    fn get_default_or_closest_supported() {
-        let mut strings_buffer = vec![];
-        let mut options_buffer = vec![];
-        let mut raw_arguments = to_raw(&default_args(), &mut strings_buffer, &mut options_buffer);
-        let _locked = setup_get_default_java_vm_init_args_call(GetDefaultJavaVMInitArgsCall::new(
-            &mut raw_arguments.raw_arguments as *mut jni_sys::JavaVMInitArgs as *mut c_void,
-        ));
-        assert_eq!(
-            InitArguments::get_default_or_closest_supported(JniVersion::V1),
-            InitArguments {
-                version: JniVersion::V4,
-                options: resulting_options(),
-                ignore_unrecognized: false
-            }
-        );
-        check_arguments(JniVersion::V1);
-    }
-
-    #[test]
-    fn get_latest_default() {
-        let mut strings_buffer = vec![];
-        let mut options_buffer = vec![];
-        let mut raw_arguments = to_raw(&default_args(), &mut strings_buffer, &mut options_buffer);
-        let _locked = setup_get_default_java_vm_init_args_call(GetDefaultJavaVMInitArgsCall::new(
-            &mut raw_arguments.raw_arguments as *mut jni_sys::JavaVMInitArgs as *mut c_void,
-        ));
-        assert_eq!(
-            InitArguments::get_latest_default(),
-            InitArguments {
-                version: JniVersion::V4,
-                options: resulting_options(),
-                ignore_unrecognized: false
-            }
-        );
-        check_arguments(JniVersion::V8);
-    }
-
-    #[test]
-    fn with_options() {
-        let arguments = InitArguments {
-            version: JniVersion::V4,
-            options: vec![JvmOption::CheckedJni],
-            ignore_unrecognized: false,
-        };
-        assert_eq!(
-            arguments.with_options(&[
-                JvmOption::Verbose(JvmVerboseOption::Gc),
-                JvmOption::Unknown("test".to_owned()),
-            ]),
-            InitArguments {
-                version: JniVersion::V4,
-                options: vec![
-                    JvmOption::CheckedJni,
-                    JvmOption::Verbose(JvmVerboseOption::Gc),
-                    JvmOption::Unknown("test".to_owned()),
-                ],
-                ignore_unrecognized: false,
-            }
-        );
-    }
-
-    #[test]
-    fn with_option() {
-        let arguments = InitArguments {
-            version: JniVersion::V4,
-            options: vec![JvmOption::CheckedJni],
-            ignore_unrecognized: false,
-        };
-        assert_eq!(
-            arguments.with_option(JvmOption::Verbose(JvmVerboseOption::Gc)),
-            InitArguments {
-                version: JniVersion::V4,
-                options: vec![
-                    JvmOption::CheckedJni,
-                    JvmOption::Verbose(JvmVerboseOption::Gc),
-                ],
-                ignore_unrecognized: false,
-            }
-        );
-    }
-
-    #[test]
-    fn unchecked() {
-        let arguments = InitArguments {
-            version: JniVersion::V4,
-            options: vec![
-                JvmOption::Verbose(JvmVerboseOption::Gc),
-                JvmOption::CheckedJni,
-            ],
-            ignore_unrecognized: false,
-        };
-        assert_eq!(
-            arguments.unchecked(),
-            InitArguments {
-                version: JniVersion::V4,
-                options: vec![JvmOption::Verbose(JvmVerboseOption::Gc)],
-                ignore_unrecognized: false,
-            }
-        );
-    }
-
-    #[test]
-    fn checked() {
-        let arguments = InitArguments {
-            version: JniVersion::V4,
-            options: vec![JvmOption::Verbose(JvmVerboseOption::Gc)],
-            ignore_unrecognized: false,
-        };
-        assert_eq!(
-            arguments.checked(),
-            InitArguments {
-                version: JniVersion::V4,
-                options: vec![
-                    JvmOption::Verbose(JvmVerboseOption::Gc),
-                    JvmOption::CheckedJni,
-                ],
-                ignore_unrecognized: false,
-            }
-        );
-    }
-
-    #[test]
-    fn ignore_unrecognized_options() {
-        let arguments = InitArguments {
-            version: JniVersion::V4,
-            options: vec![],
-            ignore_unrecognized: false,
-        };
-        assert_eq!(
-            arguments.ignore_unrecognized_options(),
-            InitArguments {
-                version: JniVersion::V4,
-                options: vec![],
-                ignore_unrecognized: true,
-            }
-        );
-    }
-
-    #[test]
-    fn fail_on_unrecognized_options() {
-        let arguments = InitArguments {
-            version: JniVersion::V4,
-            options: vec![],
-            ignore_unrecognized: true,
-        };
-        assert_eq!(
-            arguments.fail_on_unrecognized_options(),
-            InitArguments {
-                version: JniVersion::V4,
-                options: vec![],
-                ignore_unrecognized: false,
-            }
-        );
-    }
-
-    #[test]
-    fn version() {
-        let arguments = InitArguments {
-            version: JniVersion::V4,
-            options: vec![],
-            ignore_unrecognized: true,
-        };
-        assert_eq!(arguments.version(), JniVersion::V4);
+    #[automock(mod mock;)]
+    // We're not using the non-test function.
+    #[allow(dead_code)]
+    extern "C" {
+        pub fn JNI_GetDefaultJavaVMInitArgs(
+            arguments: *mut ::std::os::raw::c_void,
+        ) -> jni_sys::jint;
     }
 }
 
-fn to_bool(value: jni_sys::jboolean) -> bool {
-    match value {
-        jni_sys::JNI_TRUE => true,
-        jni_sys::JNI_FALSE => false,
-        value => panic!("Unexpected jboolean value {}", value),
+cfg_if! {
+    if #[cfg(test)] {
+        use self::ffi::mock::JNI_GetDefaultJavaVMInitArgs;
+    } else if #[cfg(all(not(test), feature = "libjvm"))] {
+        use jni_sys::JNI_GetDefaultJavaVMInitArgs;
+    } else if #[cfg(all(not(test), not(feature = "libjvm")))] {
+        /// This is a stub for when we can't link to libjvm.
+        // JNI API.
+        #[allow(non_snake_case)]
+        pub unsafe extern "system" fn JNI_GetDefaultJavaVMInitArgs(
+            _arguments: *mut c_void,
+        ) -> jni_sys::jint {
+            jni_sys::JNI_OK
+        }
     }
 }

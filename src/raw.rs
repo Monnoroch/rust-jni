@@ -2,7 +2,7 @@
 #![allow(non_upper_case_globals)]
 
 #[cfg(test)]
-use crate::init_arguments;
+use crate::init_arguments::InitArguments;
 use jni_sys;
 use std::os::raw::c_void;
 #[cfg(test)]
@@ -159,7 +159,7 @@ pub unsafe fn JNI_GetDefaultJavaVMInitArgs(arguments: *mut c_void) -> jni_sys::j
 
 #[cfg(test)]
 pub struct CreateJavaVMCall {
-    input: Option<init_arguments::InitArguments>,
+    input: Option<InitArguments>,
     result: jni_sys::jint,
     set_input: SendPtr<jni_sys::JavaVM>,
 }
@@ -215,7 +215,7 @@ pub fn setup_create_java_vm_call(call: CreateJavaVMCall) -> MutexGuard<'static, 
 }
 
 #[cfg(test)]
-pub fn get_create_java_vm_call_input() -> init_arguments::InitArguments {
+pub fn get_create_java_vm_call_input() -> InitArguments {
     TEST_JNI_CreateJavaVM_Value
         .lock()
         .unwrap()
@@ -231,7 +231,7 @@ pub unsafe fn JNI_CreateJavaVM(
     arguments: *mut c_void,
 ) -> jni_sys::jint {
     let arguments = arguments as *mut jni_sys::JavaVMInitArgs;
-    TEST_JNI_CreateJavaVM_Value.lock().unwrap().input = Some(init_arguments::from_raw(&*arguments));
+    TEST_JNI_CreateJavaVM_Value.lock().unwrap().input = Some(InitArguments::from_raw(&*arguments));
     if TEST_JNI_CreateJavaVM_Value.lock().unwrap().set_input.0 != ptr::null_mut() {
         let test_value = TEST_JNI_CreateJavaVM_Value.lock().unwrap().set_input.0;
         *java_vm = test_value;

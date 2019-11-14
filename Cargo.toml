@@ -24,12 +24,16 @@ travis-ci = { repository = "Monnoroch/rust-jni", branch = "master" }
 [dependencies]
 cesu8 = "1.1.0"
 jni-sys = "0.3.0"
+cfg-if = "0.1.10"
 
 [dev-dependencies]
 lazy_static = "1"
+mockall = "0.5.2"
+serial_test = "0.2.0"
+serial_test_derive = "0.2.0"
 
 [build-dependencies]
-walkdir = "2"
+walkdir = "2.2.9"
 
 [features]
 libjvm = []

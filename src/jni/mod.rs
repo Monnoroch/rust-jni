@@ -12,7 +12,7 @@ pub mod string;
 pub mod throwable;
 
 use crate::attach_arguments::{self, AttachArguments};
-use crate::init_arguments::{self, InitArguments};
+use crate::init_arguments::InitArguments;
 use crate::jni::class::Class;
 pub use crate::jni::error::JniError;
 use crate::jni::method_calls::call_method;
@@ -363,8 +363,7 @@ impl JavaVM {
         let mut jni_env: *mut jni_sys::JNIEnv = ptr::null_mut();
         let mut strings_buffer = vec![];
         let mut options_buffer = vec![];
-        let mut raw_arguments =
-            init_arguments::to_raw(&arguments, &mut strings_buffer, &mut options_buffer);
+        let mut raw_arguments = arguments.to_raw(&mut strings_buffer, &mut options_buffer);
         // Safe because we pass pointers to correct data structures.
         let error = JniError::from_raw(unsafe {
             JNI_CreateJavaVM(
@@ -609,7 +608,7 @@ mod java_vm_tests {
     use std::mem;
 
     fn default_args() -> InitArguments {
-        init_arguments::init_arguments_tests::default_args()
+        init_arguments::init_arguments_manipulation_tests::default_args()
     }
 
     #[test]
@@ -852,7 +851,7 @@ mod java_vm_tests {
     //     };
     //     let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
     //     let vm = test_vm(raw_java_vm_ptr);
-    //     let init_arguments = init_arguments::test(JniVersion::V8);
+    //     let init_arguments = InitArguments::default().with_version(JniVersion::V8);
     //     unsafe {
     //         ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
     //     }
@@ -906,8 +905,10 @@ mod java_vm_tests {
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(&init_arguments::test(JniVersion::V8)))
-            .unwrap();
+        vm.attach(&AttachArguments::new(
+            &InitArguments::default().with_version(JniVersion::V8),
+        ))
+        .unwrap();
     }
 
     #[test]
@@ -934,8 +935,10 @@ mod java_vm_tests {
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(&init_arguments::test(JniVersion::V8)))
-            .unwrap();
+        vm.attach(&AttachArguments::new(
+            &InitArguments::default().with_version(JniVersion::V8),
+        ))
+        .unwrap();
     }
 
     #[test]
@@ -962,8 +965,10 @@ mod java_vm_tests {
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(&init_arguments::test(JniVersion::V8)))
-            .unwrap();
+        vm.attach(&AttachArguments::new(
+            &InitArguments::default().with_version(JniVersion::V8),
+        ))
+        .unwrap();
     }
 
     #[test]
@@ -990,8 +995,10 @@ mod java_vm_tests {
         };
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(&init_arguments::test(JniVersion::V8)))
-            .unwrap();
+        vm.attach(&AttachArguments::new(
+            &InitArguments::default().with_version(JniVersion::V8),
+        ))
+        .unwrap();
     }
 
     #[test]
@@ -1018,8 +1025,10 @@ mod java_vm_tests {
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let vm = test_vm(raw_java_vm_ptr);
         assert_eq!(
-            vm.attach(&AttachArguments::new(&init_arguments::test(JniVersion::V8)))
-                .unwrap_err(),
+            vm.attach(&AttachArguments::new(
+                &InitArguments::default().with_version(JniVersion::V8)
+            ))
+            .unwrap_err(),
             JniError::Unknown(jni_sys::JNI_ERR as i32)
         );
     }
@@ -1056,8 +1065,10 @@ mod java_vm_tests {
         unsafe {
             ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
         }
-        vm.attach(&AttachArguments::new(&init_arguments::test(JniVersion::V8)))
-            .unwrap();
+        vm.attach(&AttachArguments::new(
+            &InitArguments::default().with_version(JniVersion::V8),
+        ))
+        .unwrap();
     }
 
     // #[test]
@@ -1100,7 +1111,7 @@ mod java_vm_tests {
     //     };
     //     let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
     //     let vm = test_vm(raw_java_vm_ptr);
-    //     let init_arguments = init_arguments::test(JniVersion::V8);
+    //     let init_arguments = InitArguments::default().with_version(JniVersion::V8);
     //     unsafe {
     //         ATTACH_ENV_ARGUMENT = calls.env as *mut c_void;
     //     }
