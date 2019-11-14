@@ -5,7 +5,7 @@ use crate::object::Object;
 use crate::primitives::ToJniTuple;
 use crate::result::JavaResult;
 use crate::token::{from_nullable, get_and_clear_exception_if_thrown, NoException};
-use crate::vm::*;
+use crate::traits::{Cast, FromJni, JavaMethodSignature, JniType};
 use jni_sys;
 use std::os::raw::c_char;
 
@@ -107,6 +107,7 @@ mod call_method_tests {
     use crate::env::test_env;
     use crate::object::test_object;
     use crate::testing::*;
+    use crate::vm::test_vm;
     use std::mem;
     use std::ptr;
 
@@ -316,6 +317,7 @@ mod call_static_method_tests {
     use super::*;
     use crate::env::test_env;
     use crate::testing::*;
+    use crate::vm::test_vm;
     use std::mem;
     use std::ptr;
 
@@ -544,6 +546,7 @@ mod call_constructor_tests {
     use super::*;
     use crate::env::test_env;
     use crate::testing::*;
+    use crate::vm::test_vm;
     use std::mem;
     use std::ptr;
 

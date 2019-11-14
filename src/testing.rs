@@ -1,6 +1,6 @@
 use crate::java_string::*;
 use crate::object::Object;
-use crate::vm::Cast;
+use crate::traits::Cast;
 use jni_sys;
 use std::ffi::CStr;
 use std::mem;

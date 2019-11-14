@@ -1,9 +1,9 @@
-use crate::class::*;
+use crate::class::Class;
 use crate::env::JniEnv;
 #[cfg(test)]
 use crate::object::test_object;
 use crate::object::Object;
-use crate::vm::*;
+use crate::traits::{FromJni, JavaType, JniArgumentType, JniType, ToJni};
 use jni_sys;
 use std::char;
 use std::iter;
@@ -86,8 +86,10 @@ macro_rules! generate_jni_type_tests {
         #[cfg(test)]
         mod $module {
             use super::*;
+            use crate::class::test_class;
             use crate::env::test_env;
             use crate::testing::*;
+            use crate::vm::test_vm;
             use std::mem;
 
             #[test]
@@ -658,9 +660,11 @@ macro_rules! generate_to_jni_tuple_tests {
 #[cfg(test)]
 mod to_jni_tuple_tests {
     use super::*;
+    use crate::class::test_class;
     use crate::env::test_env;
     use crate::object::test_object;
     use crate::testing::*;
+    use crate::vm::test_vm;
     use std::mem;
 
     generate_to_jni_tuple_tests!(
@@ -931,6 +935,7 @@ impl<'env> FromJni<'env> for bool {
 mod bool_tests {
     use super::*;
     use crate::env::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn signature() {
@@ -1029,6 +1034,7 @@ impl<'env> FromJni<'env> for char {
 mod char_tests {
     use super::*;
     use crate::env::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn signature() {
@@ -1181,6 +1187,7 @@ jni_io_traits!(
 mod void_tests {
     use super::*;
     use crate::env::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn signature() {
@@ -1226,6 +1233,7 @@ mod void_tests {
 mod byte_tests {
     use super::*;
     use crate::env::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn signature() {
@@ -1274,6 +1282,7 @@ mod byte_tests {
 mod short_tests {
     use super::*;
     use crate::env::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn signature() {
@@ -1319,6 +1328,7 @@ mod short_tests {
 mod int_tests {
     use super::*;
     use crate::env::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn signature() {
@@ -1364,6 +1374,7 @@ mod int_tests {
 mod long_tests {
     use super::*;
     use crate::env::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn signature() {
@@ -1409,6 +1420,7 @@ mod long_tests {
 mod double_tests {
     use super::*;
     use crate::env::test_env;
+    use crate::vm::test_vm;
 
     #[test]
     fn signature() {

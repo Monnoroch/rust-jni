@@ -1,4 +1,4 @@
-use crate::vm::*;
+use crate::traits::{FromJni, JavaMethodSignature, JniArgumentType, ToJni};
 use std::string;
 
 macro_rules! braces {

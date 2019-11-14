@@ -33,6 +33,7 @@ mod result;
 mod string;
 mod throwable;
 mod token;
+mod traits;
 mod version;
 mod vm;
 
@@ -42,8 +43,9 @@ pub use error::JniError;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
 pub use result::JavaResult;
 pub use token::{Exception, NoException};
+pub use traits::{Cast, JavaType};
 pub use version::JniVersion;
-pub use vm::{Cast, JavaType, JavaVM, JavaVMRef};
+pub use vm::{JavaVM, JavaVMRef};
 
 pub mod java {
     pub mod lang {
@@ -65,6 +67,6 @@ pub mod __generator {
     pub use crate::native_method::native_method_wrapper;
     pub use crate::native_method::test_from_jni_type;
     pub use crate::native_method::test_jni_argument_type;
-    pub use crate::vm::FromJni;
-    pub use crate::vm::ToJni;
+    pub use crate::traits::FromJni;
+    pub use crate::traits::ToJni;
 }

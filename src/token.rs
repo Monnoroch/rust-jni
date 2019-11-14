@@ -1,7 +1,7 @@
 use crate::env::JniEnv;
 use crate::result::JavaResult;
 use crate::throwable::Throwable;
-use crate::vm::FromJni;
+use crate::traits::FromJni;
 use core::marker::PhantomData;
 use std::mem;
 use std::ptr::{self, NonNull};

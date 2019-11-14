@@ -7,7 +7,7 @@ use crate::object::test_object;
 use crate::object::Object;
 use crate::result::JavaResult;
 use crate::token::{from_nullable, NoException};
-use crate::vm::*;
+use crate::traits::{Cast, FromJni, JavaType, ToJni};
 use jni_sys;
 use std;
 use std::fmt;
@@ -147,6 +147,7 @@ mod string_tests {
     use super::*;
     use crate::env::test_env;
     use crate::testing::*;
+    use crate::vm::test_vm;
     use std::mem;
     use std::ops::Deref;
 
