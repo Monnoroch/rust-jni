@@ -1148,7 +1148,7 @@ impl<'vm> JniEnv<'vm> {
         } else {
             *self.has_token.borrow_mut() = false;
             // Safe because there's no exception.
-            unsafe { NoException::new_env(self) }
+            unsafe { NoException::new(self) }
         }
     }
 
@@ -1694,7 +1694,7 @@ where
             panic!("Comparing Java objects with a pending exception in the current thread")
         } else {
             // Safe because we checked that there is no pending exception.
-            let token = unsafe { NoException::new_env(self.env()) };
+            let token = unsafe { NoException::new(self.env()) };
             self.is_same_as(other.cast(), &token)
         }
     }
@@ -1719,7 +1719,7 @@ impl<'env> fmt::Debug for Object<'env> {
             )
         } else {
             // Safe because we checked that there is no pending exception.
-            let token = unsafe { NoException::new_env(self.env) };
+            let token = unsafe { NoException::new(self.env) };
             match self.to_string(&token) {
                 Ok(string) => write!(
                     formatter,
@@ -1762,7 +1762,7 @@ impl<'env> fmt::Display for Object<'env> {
             panic!("Displaying a Java object with a pending exception in the current thread.");
         } else {
             // Safe because we checked that there is no pending exception.
-            let token = unsafe { NoException::new_env(self.env) };
+            let token = unsafe { NoException::new(self.env) };
             match self.to_string(&token) {
                 Ok(string) => write!(formatter, "{}", string.as_string(&token)),
                 Err(exception) => match exception.to_string(&token) {

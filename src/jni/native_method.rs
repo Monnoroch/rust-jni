@@ -67,13 +67,13 @@ where
         };
 
         // Safe because we checked for a pending exception.
-        let token = NoException::new_raw();
+        let token = NoException::new(&env);
         let result = callback(&env, token);
         match result {
             Ok(result) => result,
             Err(exception) => {
                 // Safe because we already cleared the pending exception at this point.
-                let token = NoException::new_raw();
+                let token = NoException::new(&env);
                 exception.throw(token);
                 R::default()
             }

@@ -64,7 +64,7 @@ unsafe fn from_method_call_result<'env, Out: FromJni<'env>>(
     env: &'env JniEnv<'env>,
     result: Out::__JniType,
 ) -> JavaResult<'env, Out> {
-    match maybe_get_and_clear_exception(env) {
+    match get_and_clear_exception_if_thrown(env) {
         // Safe because arguments are ensured to be the correct by construction.
         None => Ok(Out::__from_jni(env, result)),
         Some(exception) => Err(exception),

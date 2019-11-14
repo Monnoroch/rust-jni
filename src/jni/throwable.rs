@@ -22,7 +22,7 @@ impl<'env> Throwable<'env> {
     /// Throw the exception. Transfers ownership of the object to Java.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#throw)
-    pub fn throw(self, token: NoException) -> Exception<'env> {
+    pub fn throw(self, token: NoException<'env>) -> Exception<'env> {
         // Safe because the argument is ensured to be correct references by construction.
         let error = JniError::from_raw(unsafe {
             call_jni_method!(self.env(), Throw, self.raw_object() as jni_sys::jthrowable)
@@ -35,7 +35,7 @@ impl<'env> Throwable<'env> {
             );
         }
         // Safe becuase we just threw the exception.
-        unsafe { Exception::new(self.env(), token) }
+        unsafe { token.exchange(self.env()) }
     }
 }
 

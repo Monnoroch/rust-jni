@@ -2,7 +2,8 @@ use crate::jni::throwable::Throwable;
 use crate::jni::{FromJni, JniEnv};
 use crate::result::JavaResult;
 use core::marker::PhantomData;
-use std::ptr;
+use std::mem;
+use std::ptr::{self, NonNull};
 
 include!("jni/call_jni_method.rs");
 
@@ -109,36 +110,64 @@ include!("jni/call_jni_method.rs");
 /// java::lang::String::empty(&env, &new_token); // can call Java methods again.
 /// ```
 #[derive(Debug)]
-pub struct NoException<'env> {
-    _env: PhantomData<&'env JniEnv<'env>>,
+pub struct NoException<'this> {
+    _env: PhantomData<&'this JniEnv<'this>>,
 }
 
-impl<'env> NoException<'env> {
+impl<'this> NoException<'this> {
     /// Unsafe because it creates a new no-exception token when there might be a pending exception.
-    pub(crate) unsafe fn new_env<'a>(_env: &JniEnv<'a>) -> NoException<'a> {
-        // Safe because this function ensures correct lifetimes.
-        Self::new_raw()
-    }
-
-    /// Unsafe because:
-    /// 1. It creates a new no-exception token when there might be a pending exception
-    /// 2. Doesn't ensure a correct lifetime
-    pub(crate) unsafe fn new_raw<'a>() -> NoException<'a> {
+    pub(crate) unsafe fn new<'env: 'token, 'token>(
+        _env: &'token JniEnv<'env>,
+    ) -> NoException<'token> {
         NoException {
             _env: PhantomData::<&JniEnv>,
         }
     }
 
+    /// Exchange a [`NoException`](struct.NoException.html) for an
+    /// [`Exception`](struct.Exception.html) token. This means that [`rust-jni`](index.html)
+    /// no longer can prove that there is no pending exception.
+    /// Unsafe because there might not actually be a pending exception when this method is called.
+    pub(crate) unsafe fn exchange(self, env: &'this JniEnv<'this>) -> Exception<'this> {
+        Exception { env }
+    }
+
+    /// Execute core that can throw an exception without giving up the ownership of the
+    /// [`NoException`](struct.NoException.html) token.
+    ///
+    /// This function correctly handles thrown exceptions and is thus safe.
+    pub(crate) fn with_owned<Out>(
+        &self,
+        function: impl FnOnce(Self) -> JniResult<'this, Out>,
+    ) -> JavaResult<'this, Out> {
+        // Safe, because we check for a pending exception after the call
+        // and the additional token is dropped.
+        let token = unsafe { self.clone() };
+        let (result, token) = match function(token) {
+            Ok((value, token)) => (Ok(value), token),
+            Err(token) => {
+                let (throwable, token) = token.unwrap();
+                (Err(throwable), token)
+            }
+        };
+        // Drop the additional token so there's only one live token (borrowed by this method).
+        mem::drop(token);
+        result
+    }
+
     /// Unsafe, because having two tokens will allow calling methods when there is a
     /// pending exception.
-    pub(crate) unsafe fn clone(&self) -> Self {
-        Self::new_raw()
+    unsafe fn clone(&self) -> Self {
+        NoException {
+            _env: PhantomData::<&JniEnv>,
+        }
     }
 
     #[cfg(test)]
     pub(crate) fn test<'a>() -> NoException<'a> {
-        // Safe because only used for unit-testing.
-        unsafe { Self::new_raw() }
+        NoException {
+            _env: PhantomData::<&JniEnv>,
+        }
     }
 }
 
@@ -152,41 +181,39 @@ impl<'env> NoException<'env> {
 ///
 /// Read more about exception tokens in [`NoException`](struct.NoException.html) documentation.
 #[derive(Debug)]
-pub struct Exception<'env> {
-    pub(crate) env: &'env JniEnv<'env>,
+pub struct Exception<'this> {
+    pub(crate) env: &'this JniEnv<'this>,
 }
 
-impl<'env> Exception<'env> {
+impl<'this> Exception<'this> {
     /// Get and clear the pending exception and a [`NoException`](struct.NoException.html) token
-    /// to call more JNI methods. The [`Exception`](struct.Exception.html) token is consumed
-    /// by this method and can't be used any more.
-    pub fn unwrap(self) -> (Throwable<'env>, NoException<'env>) {
-        let throwable = get_and_clear_exception(self);
-        // Safe because we just cleared the pending exception.
-        let token = unsafe { NoException::new_raw() };
+    /// to call more JNI methods.
+    ///
+    /// [`Exception`](struct.Exception.html) guarantees that there must be an exception in flight.
+    ///
+    /// The [`Exception`](struct.Exception.html) token is consumed by this method and can't be used any more.
+    pub fn unwrap(self) -> (Throwable<'this>, NoException<'this>) {
+        let throwable = {
+            // Safe because there are no arguments to be invalid.
+            let raw_java_throwable = unsafe { call_jni_method!(self.env, ExceptionOccurred) };
+            // Safe because [`Exception`](struct.Exception.html) guarantees that there must be an exception in flight.
+            let raw_java_throwable = unsafe { NonNull::new_unchecked(raw_java_throwable) };
+            // Safe because we construct Throwable from a valid pointer.
+            unsafe { Throwable::__from_jni(self.env, raw_java_throwable.as_ptr()) }
+        };
+        let token = {
+            // Safe because the argument is ensured to be correct references by construction.
+            unsafe { call_jni_method!(self.env, ExceptionClear) };
+            // Safe because we just cleared the exception.
+            unsafe { NoException::new(self.env) }
+        };
         (throwable, token)
     }
 
-    /// Exchange a [`NoException`](struct.NoException.html) for an
-    /// [`Exception`](struct.Exception.html) token. This means that [`rust-jni`](index.html)
-    /// no onger can prove that there is no pending exception.
-    /// Unsafe because there might not actually be a pending exception when this method is called.
-    pub(crate) unsafe fn new<'a>(env: &'a JniEnv<'a>, _token: NoException) -> Exception<'a> {
-        Self::new_raw(env)
-    }
-
-    /// Unsafe because:
-    /// 1. Unsafe because there might not actually be a pending exception when this method is
-    /// called.
-    /// 2. Doesn't ensure a correct lifetime
-    pub(crate) unsafe fn new_raw<'a>(env: &'a JniEnv<'a>) -> Exception<'a> {
-        Exception { env }
-    }
-
+    // Safe because only used for unit-testing.
     #[cfg(test)]
-    pub(crate) fn test(env: &'env JniEnv<'env>) -> Self {
-        // Safe because only used for unit-testing.
-        unsafe { Self::new_raw(env) }
+    pub(crate) fn test(env: &'this JniEnv<'this>) -> Self {
+        Self { env }
     }
 }
 
@@ -234,7 +261,7 @@ pub(crate) unsafe fn from_nullable<'a, T>(
     token: NoException<'a>,
 ) -> JniResult<'a, *mut T> {
     if value == ptr::null_mut() {
-        Err(Exception::new(env, token))
+        Err(token.exchange(env))
     } else {
         Ok((value, token))
     }
@@ -269,18 +296,17 @@ mod from_nullable_tests {
 }
 
 /// Get and clear the pending exception.
-pub(crate) fn maybe_get_and_clear_exception<'a>(env: &'a JniEnv<'a>) -> Option<Throwable<'a>> {
+pub(crate) fn get_and_clear_exception_if_thrown<'a>(env: &'a JniEnv<'a>) -> Option<Throwable<'a>> {
     // Safe because the argument is ensured to be correct references by construction.
-    let raw_java_throwable = unsafe { call_jni_method!(env, ExceptionOccurred) };
-    if raw_java_throwable == ptr::null_mut() {
-        return None;
-    }
-    // Safe because the argument is ensured to be correct references by construction.
-    unsafe {
-        call_jni_method!(env, ExceptionClear);
-    }
-    // Safe because the arguments are correct.
-    Some(unsafe { Throwable::__from_jni(env, raw_java_throwable) })
+    let raw_java_throwable = NonNull::new(unsafe { call_jni_method!(env, ExceptionOccurred) });
+    raw_java_throwable.map(|raw_java_throwable| {
+        // Safe because the argument is ensured to be correct references by construction.
+        unsafe {
+            call_jni_method!(env, ExceptionClear);
+        }
+        // Safe because the arguments are correct.
+        unsafe { Throwable::__from_jni(env, raw_java_throwable.as_ptr()) }
+    })
 }
 
 #[cfg(test)]
@@ -299,7 +325,7 @@ mod maybe_get_and_clear_exception_tests {
         ]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
-        let exception = maybe_get_and_clear_exception(&env).unwrap();
+        let exception = get_and_clear_exception_if_thrown(&env).unwrap();
         calls.assert_eq(&exception, EXCEPTION);
     }
 
@@ -310,93 +336,6 @@ mod maybe_get_and_clear_exception_tests {
         })]);
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, calls.env);
-        assert_eq!(maybe_get_and_clear_exception(&env), None);
-    }
-}
-
-/// Get and clear the pending exception.
-pub(crate) fn get_and_clear_exception<'a>(token: Exception<'a>) -> Throwable<'a> {
-    match maybe_get_and_clear_exception(token.env) {
-        None => panic!(
-            "No pending exception in presence of an Exception token. Should not ever happen."
-        ),
-        Some(exception) => exception,
-    }
-}
-
-#[cfg(test)]
-mod get_and_clear_exception_tests {
-    use super::*;
-    use crate::jni::test_env;
-    use crate::jni::test_vm;
-    use crate::testing::*;
-
-    #[test]
-    fn exception() {
-        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![
-            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClear {}),
-        ]);
-        let vm = test_vm(ptr::null_mut());
-        let env = test_env(&vm, calls.env);
-        let exception = get_and_clear_exception(Exception::test(&env));
-        calls.assert_eq(&exception, EXCEPTION);
-    }
-
-    #[test]
-    #[should_panic(expected = "No pending exception in presence of an Exception token")]
-    fn exception_not_found() {
-        let calls = test_raw_jni_env!(vec![JniCall::ExceptionOccurred(ExceptionOccurred {
-            result: ptr::null_mut(),
-        })]);
-        let vm = test_vm(ptr::null_mut());
-        let env = test_env(&vm, calls.env);
-        get_and_clear_exception(Exception::test(&env));
-    }
-}
-
-/// Take a function that produces a [`JniResult`](type.JniResult.html), call it and produce
-/// a [`JavaResult`](type.JavaResult.html) from it.
-pub(crate) fn with_checked_exception<'a, Out, T: FnOnce(NoException<'a>) -> JniResult<'a, Out>>(
-    token: &NoException<'a>,
-    function: T,
-) -> JavaResult<'a, Out> {
-    // Safe, because we check for a pending exception after the call.
-    let token = unsafe { token.clone() };
-    match function(token) {
-        Ok((value, _)) => Ok(value),
-        Err(token) => Err(get_and_clear_exception(token)),
-    }
-}
-
-#[cfg(test)]
-mod with_checked_exception_tests {
-    use super::*;
-    use crate::jni::test_env;
-    use crate::jni::test_vm;
-    use crate::testing::*;
-
-    #[test]
-    fn no_exception() {
-        let result =
-            with_checked_exception(&NoException::test(), |_| Ok((17, NoException::test())))
-                .unwrap();
-        assert_eq!(result, 17);
-    }
-
-    #[test]
-    fn exception() {
-        const EXCEPTION: jni_sys::jobject = 0x2835 as jni_sys::jobject;
-        let calls = test_raw_jni_env!(vec![
-            JniCall::ExceptionOccurred(ExceptionOccurred { result: EXCEPTION }),
-            JniCall::ExceptionClear(ExceptionClear {}),
-        ]);
-        let vm = test_vm(ptr::null_mut());
-        let env = test_env(&vm, calls.env);
-        let exception =
-            with_checked_exception::<i32, _>(&NoException::test(), |_| Err(Exception::test(&env)))
-                .unwrap_err();
-        calls.assert_eq(&exception, EXCEPTION);
+        assert_eq!(get_and_clear_exception_if_thrown(&env), None);
     }
 }
