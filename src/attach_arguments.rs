@@ -1,6 +1,6 @@
 use crate::init_arguments::InitArguments;
 use crate::java_string::*;
-use crate::version::{self, JniVersion};
+use crate::version::JniVersion;
 use jni_sys;
 use std::marker::PhantomData;
 use std::os::raw::c_char;

@@ -3,6 +3,7 @@
 mod testing;
 
 pub mod class;
+pub mod error;
 pub mod method_calls;
 mod methods;
 pub mod native_method;
@@ -13,12 +14,13 @@ pub mod throwable;
 use crate::attach_arguments::{self, AttachArguments};
 use crate::init_arguments::{self, InitArguments};
 use crate::jni::class::Class;
+pub use crate::jni::error::JniError;
 use crate::jni::method_calls::call_method;
 use crate::jni::primitives::ToJniTuple;
 use crate::jni::string::String;
 use crate::jni::throwable::Throwable;
 use crate::raw::*;
-use crate::version::{self, JniVersion};
+use crate::version::JniVersion;
 use jni_sys;
 use std;
 use std::cell::RefCell;
@@ -29,17 +31,6 @@ use std::ptr;
 
 include!("call_jni_method.rs");
 include!("generate_class.rs");
-
-/// Errors returned by JNI function.
-///
-/// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#return-codes)
-// TODO(#17): add error codes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum JniError {
-    /// Unknown error.
-    /// Needed for forward compability.
-    Unknown(i32),
-}
 
 /// A token that represents that there is no pending Java exception in the current thread.
 ///
@@ -375,15 +366,15 @@ impl JavaVM {
         let mut raw_arguments =
             init_arguments::to_raw(&arguments, &mut strings_buffer, &mut options_buffer);
         // Safe because we pass pointers to correct data structures.
-        let status = unsafe {
+        let error = JniError::from_raw(unsafe {
             JNI_CreateJavaVM(
                 (&mut java_vm) as *mut *mut jni_sys::JavaVM,
                 (&mut jni_env) as *mut *mut jni_sys::JNIEnv as *mut *mut c_void,
                 &mut raw_arguments.raw_arguments as *mut jni_sys::JavaVMInitArgs as *mut c_void,
             )
-        };
-        match status {
-            jni_sys::JNI_OK => {
+        });
+        match error {
+            None => {
                 // We want to detach the current thread because we want to only allow attaching
                 // a thread once and the `attach` method will panic if the thread is already
                 // attached. Detaching here makes this logic easier to implement.
@@ -397,15 +388,15 @@ impl JavaVM {
                     owned: true,
                 })
             }
-            jni_sys::JNI_EVERSION => panic!(
+            Some(JniError::UnsupportedVersion) => panic!(
                 "Got upsupported version error when creating a Java VM. \
                  Should not happen as `InitArguments` are supposed to check \
                  for version support."
             ),
-            jni_sys::JNI_EDETACHED => {
+            Some(JniError::ThreadDetached) => {
                 panic!("Unexpected `EDETACHED` error when creating a Java VM.")
             }
-            status => Err(JniError::Unknown(status)),
+            Some(error) => Err(error),
         }
     }
 
@@ -415,20 +406,20 @@ impl JavaVM {
     pub fn list() -> Result<Vec<Self>, JniError> {
         let mut vms_created: jni_sys::jsize = 0;
         // Safe because arguments are correct.
-        let status = unsafe {
+        let error = JniError::from_raw(unsafe {
             JNI_GetCreatedJavaVMs(
                 ::std::ptr::null_mut(),
                 0,
                 (&mut vms_created) as *mut jni_sys::jsize,
             )
-        };
-        match status {
-            jni_sys::JNI_OK => {
+        });
+        match error {
+            None => {
                 let mut java_vms: Vec<*mut jni_sys::JavaVM> = vec![];
                 java_vms.resize(vms_created as usize, ::std::ptr::null_mut());
                 let mut tmp: jni_sys::jsize = 0;
                 // Safe because arguments are ensured to be correct.
-                let status = unsafe {
+                let error = JniError::from_raw(unsafe {
                     JNI_GetCreatedJavaVMs(
                         (java_vms.as_mut_ptr()) as *mut *mut jni_sys::JavaVM,
                         vms_created,
@@ -437,18 +428,18 @@ impl JavaVM {
                         // any new ones, because they weren't there wneh this function was called.
                         (&mut tmp) as *mut jni_sys::jsize,
                     )
-                };
-                match status {
-                    jni_sys::JNI_OK => Ok(java_vms
+                });
+                match error {
+                    None => Ok(java_vms
                         .iter()
                         .cloned()
                         // Safe because a correct pointer is passed.
                         .map(|java_vm| unsafe { Self::from_ptr(java_vm) })
                         .collect()),
-                    status => Err(JniError::Unknown(status)),
+                    Some(error) => Err(error),
                 }
             }
-            status => Err(JniError::Unknown(status)),
+            Some(error) => Err(error),
         }
     }
 
@@ -499,21 +490,21 @@ impl JavaVM {
         let mut jni_env: *mut jni_sys::JNIEnv = ::std::ptr::null_mut();
         let get_env_fn = (**self.raw_jvm()).GetEnv.unwrap();
         // Safe, because the arguments are correct.
-        let status = get_env_fn(
+        let error = JniError::from_raw(get_env_fn(
             self.raw_jvm(),
             (&mut jni_env) as *mut *mut jni_sys::JNIEnv as *mut *mut c_void,
             arguments.version().to_raw(),
-        );
-        match status {
-            jni_sys::JNI_EDETACHED => {
-                let status = attach_fn(
+        ));
+        match error {
+            Some(JniError::ThreadDetached) => {
+                let error = JniError::from_raw(attach_fn(
                     self.raw_jvm(),
                     (&mut jni_env) as *mut *mut jni_sys::JNIEnv as *mut *mut c_void,
                     (&mut raw_arguments.raw_arguments) as *mut jni_sys::JavaVMAttachArgs
                         as *mut c_void,
-                );
-                match status {
-                    jni_sys::JNI_OK => {
+                ));
+                match error {
+                    None => {
                         let mut env = JniEnv {
                             version: arguments.version(),
                             vm: self,
@@ -528,19 +519,19 @@ impl JavaVM {
                         env.native_method_call = false;
                         Ok(env)
                     }
-                    jni_sys::JNI_EVERSION => panic!(
+                    Some(JniError::UnsupportedVersion) => panic!(
                         "Got upsupported version error when creating a Java VM. \
                          Should not happen as `InitArguments` are supposed to check \
                          for version support."
                     ),
-                    jni_sys::JNI_EDETACHED => {
+                    Some(JniError::ThreadDetached) => {
                         panic!("Got `EDETACHED` when trying to attach a thread.")
                     }
                     // TODO: panic on more impossible errors.
-                    status => Err(JniError::Unknown(status)),
+                    Some(error) => Err(error),
                 }
             }
-            jni_sys::JNI_OK => panic!(
+            None => panic!(
                 "This thread is already attached to the JVM. \
                  Attaching a thread twice is not allowed."
             ),
@@ -549,9 +540,9 @@ impl JavaVM {
             // can only returd `OK`, `EDETACHED` and `EVERSION`.
             // Will not return `EVERSION` here, because the version was already checked when
             // creating the Java VM.
-            status => panic!(
-                "GetEnv JNI method returned an unexpected error code {}",
-                status
+            Some(error) => panic!(
+                "GetEnv JNI method returned an unexpected error code {:?}",
+                error
             ),
         }
     }
@@ -561,10 +552,13 @@ impl JavaVM {
     /// 2. The current thread might not be attached.
     unsafe fn detach(java_vm: *mut jni_sys::JavaVM) {
         let detach_fn = (**java_vm).DetachCurrentThread.unwrap();
-        let status = detach_fn(java_vm);
+        let error = JniError::from_raw(detach_fn(java_vm));
         // There is no way to recover from detach failure, except leak or fail.
-        if status != jni_sys::JNI_OK {
-            panic!("Could not detach the current thread. Status: {}", status)
+        if error.is_some() {
+            panic!(
+                "Could not detach the current thread. Status: {:?}",
+                error.unwrap()
+            )
         }
     }
 
@@ -587,13 +581,13 @@ impl Drop for JavaVM {
         }
 
         // Safe because the argument is ensured to be the correct by construction.
-        let status = unsafe {
+        let error = JniError::from_raw(unsafe {
             let destroy_fn = (**self.java_vm).DestroyJavaVM.unwrap();
             destroy_fn(self.java_vm)
-        };
+        });
 
-        if status != jni_sys::JNI_OK {
-            panic!("Failed destroying the JavaVm. Status: {}", status);
+        if error.is_some() {
+            panic!("Failed destroying the JavaVm. Status: {:?}", error.unwrap());
         }
     }
 }
@@ -648,7 +642,7 @@ mod java_vm_tests {
     }
 
     #[test]
-    #[should_panic(expected = "Could not detach the current thread. Status: -1")]
+    #[should_panic(expected = "Could not detach the current thread. Status: Unknown(-1)")]
     fn create_detach_error() {
         unsafe extern "system" fn detach(_: *mut jni_sys::JavaVM) -> jni_sys::jint {
             jni_sys::JNI_ERR
@@ -747,7 +741,7 @@ mod java_vm_tests {
     }
 
     #[test]
-    #[should_panic(expected = "Failed destroying the JavaVm. Status: -1")]
+    #[should_panic(expected = "Failed destroying the JavaVm. Status: Unknown(-1)")]
     fn drop_destroy_error() {
         unsafe extern "system" fn destroy_vm(_: *mut jni_sys::JavaVM) -> jni_sys::jint {
             jni_sys::JNI_ERR
@@ -917,7 +911,7 @@ mod java_vm_tests {
     }
 
     #[test]
-    #[should_panic(expected = "GetEnv JNI method returned an unexpected error code -1")]
+    #[should_panic(expected = "GetEnv JNI method returned an unexpected error code Unknown(-1)")]
     fn attach_get_env_error() {
         unsafe extern "system" fn get_env(
             _: *mut jni_sys::JavaVM,
@@ -1431,7 +1425,7 @@ mod jni_env_tests {
     }
 
     #[test]
-    #[should_panic(expected = "Could not detach the current thread. Status: -1")]
+    #[should_panic(expected = "Could not detach the current thread. Status: Unknown(-1)")]
     fn drop_detach_error() {
         let calls = test_raw_jni_env!(vec![JniCall::ExceptionCheck(ExceptionCheck {
             result: jni_sys::JNI_FALSE,

@@ -1,6 +1,5 @@
 use crate::java_string::*;
 use crate::jni::*;
-use crate::version;
 use jni_sys;
 use std::cell::RefCell;
 use std::panic;
@@ -19,9 +18,9 @@ unsafe fn throw_new_runtime_exception(raw_env: *mut jni_sys::JNIEnv, message: im
         );
     } else {
         let throw_new_fn = (**raw_env).ThrowNew.unwrap();
-        let status = throw_new_fn(raw_env, class, message.as_ptr() as *const i8);
-        if status != jni_sys::JNI_OK {
-            panic!("Could not throw a new runtime exception on panic, aborting the program.");
+        let error = JniError::from_raw(throw_new_fn(raw_env, class, message.as_ptr() as *const i8));
+        if error.is_some() {
+            panic!("Could not throw a new runtime exception on panic, status {:?}, aborting the program.", error.unwrap());
         }
     }
 }
@@ -45,9 +44,15 @@ where
 
         let mut java_vm: *mut jni_sys::JavaVM = ptr::null_mut();
         let get_java_vm_fn = ((**raw_env).GetJavaVM).unwrap();
-        let status = get_java_vm_fn(raw_env, (&mut java_vm) as *mut *mut jni_sys::JavaVM);
-        if status != jni_sys::JNI_OK {
-            panic!(format!("Could not get Java VM. Status: {:?}", status));
+        let error = JniError::from_raw(get_java_vm_fn(
+            raw_env,
+            (&mut java_vm) as *mut *mut jni_sys::JavaVM,
+        ));
+        if error.is_some() {
+            panic!(format!(
+                "Could not get Java VM. Status: {:?}",
+                error.unwrap()
+            ));
         }
 
         // Safe because we pass a correct `java_vm` pointer.
@@ -300,7 +305,7 @@ mod native_method_wrapper_tests {
             }),
             JniCall::ThrowNew(ThrowNew {
                 class: RAW_CLASS,
-                message: "Rust panic: Could not get Java VM. Status: -1".to_owned(),
+                message: "Rust panic: Could not get Java VM. Status: Unknown(-1)".to_owned(),
                 result: jni_sys::JNI_OK,
             }),
         ]);
@@ -337,7 +342,8 @@ mod native_method_wrapper_tests {
             }),
             JniCall::ThrowNew(ThrowNew {
                 class: RAW_CLASS,
-                message: "Rust panic: Throwing an exception has failed with status -1.".to_owned(),
+                message: "Rust panic: Throwing an exception has failed with status Unknown(-1)."
+                    .to_owned(),
                 result: jni_sys::JNI_OK,
             }),
         ]);
@@ -369,7 +375,7 @@ mod native_method_wrapper_tests {
 
     #[test]
     #[should_panic(
-        expected = "Could not throw a new runtime exception on panic, aborting the program"
+        expected = "Could not throw a new runtime exception on panic, status Unknown(-1), aborting the program"
     )]
     fn throw_new_error() {
         const RAW_CLASS: jni_sys::jobject = 0x209375 as jni_sys::jobject;

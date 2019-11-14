@@ -24,12 +24,15 @@ impl<'env> Throwable<'env> {
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#throw)
     pub fn throw(self, token: NoException) -> Exception<'env> {
         // Safe because the argument is ensured to be correct references by construction.
-        let status = unsafe {
+        let error = JniError::from_raw(unsafe {
             call_jni_method!(self.env(), Throw, self.raw_object() as jni_sys::jthrowable)
-        };
+        });
         // Can't really handle failing throwing an exception.
-        if status != jni_sys::JNI_OK {
-            panic!("Throwing an exception has failed with status {}.", status);
+        if error.is_some() {
+            panic!(
+                "Throwing an exception has failed with status {:?}.",
+                error.unwrap()
+            );
         }
         // Safe becuase we just threw the exception.
         unsafe { Exception::new(self.env(), token) }
@@ -91,7 +94,7 @@ mod throwable_tests {
     }
 
     #[test]
-    #[should_panic(expected = "Throwing an exception has failed with status -1.")]
+    #[should_panic(expected = "Throwing an exception has failed with status Unknown(-1).")]
     fn throw_failed() {
         const RAW_OBJECT: jni_sys::jobject = 0x91011 as jni_sys::jobject;
         let calls = test_raw_jni_env!(vec![JniCall::Throw(Throw {

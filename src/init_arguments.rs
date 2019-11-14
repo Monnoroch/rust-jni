@@ -1,6 +1,6 @@
 use crate::jni::ToJni;
 use crate::raw::*;
-use crate::version::{self, JniVersion};
+use crate::version::JniVersion;
 use jni_sys;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
