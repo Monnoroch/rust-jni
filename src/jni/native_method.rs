@@ -2,7 +2,6 @@ use crate::java_string::*;
 use crate::jni::*;
 use jni_sys;
 use std::cell::RefCell;
-use std::mem;
 use std::panic;
 use std::ptr;
 use std::string;
@@ -98,8 +97,8 @@ where
 #[cfg(test)]
 mod native_method_wrapper_tests {
     use super::*;
-    use crate::jni::testing::*;
     use crate::jni::throwable::test_throwable;
+    use crate::testing::*;
 
     #[test]
     fn success() {

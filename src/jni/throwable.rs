@@ -69,7 +69,7 @@ pub fn test_throwable<'env>(
 #[cfg(test)]
 mod throwable_tests {
     use super::*;
-    use crate::jni::testing::*;
+    use crate::testing::*;
     use std::mem;
     use std::ops::Deref;
     use std::ptr;

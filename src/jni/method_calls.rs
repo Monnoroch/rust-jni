@@ -99,7 +99,7 @@ pub unsafe fn call_method<
 #[cfg(test)]
 mod call_method_tests {
     use super::*;
-    use crate::jni::testing::*;
+    use crate::testing::*;
     use std::mem;
     use std::ptr;
 
@@ -307,7 +307,7 @@ pub unsafe fn call_static_method<
 #[cfg(test)]
 mod call_static_method_tests {
     use super::*;
-    use crate::jni::testing::*;
+    use crate::testing::*;
     use std::mem;
 
     #[test]
@@ -533,7 +533,7 @@ pub unsafe fn call_constructor<
 #[cfg(test)]
 mod call_constructor_tests {
     use super::*;
-    use crate::jni::testing::*;
+    use crate::testing::*;
     use std::mem;
 
     #[test]

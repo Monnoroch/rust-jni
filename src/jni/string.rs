@@ -138,7 +138,7 @@ java_class!(
 #[cfg(test)]
 mod string_tests {
     use super::*;
-    use crate::jni::testing::*;
+    use crate::testing::*;
     use std::mem;
     use std::ops::Deref;
 

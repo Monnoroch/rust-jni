@@ -12,6 +12,10 @@
 #[macro_use]
 extern crate lazy_static;
 
+#[cfg(test)]
+#[macro_use]
+pub mod testing;
+
 mod attach_arguments;
 mod generate;
 mod init_arguments;
@@ -20,12 +24,14 @@ mod jni;
 mod jni_bool;
 mod raw;
 mod result;
+mod token;
 mod version;
 
 pub use attach_arguments::AttachArguments;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
-pub use jni::{Cast, Exception, JavaType, JavaVM, JniEnv, JniError, NoException};
+pub use jni::{Cast, JavaType, JavaVM, JniEnv, JniError};
 pub use result::JavaResult;
+pub use token::{Exception, NoException};
 pub use version::JniVersion;
 
 pub mod java {
