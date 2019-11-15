@@ -6,42 +6,178 @@ use std::ptr;
 
 include!("call_jni_method.rs");
 
-/// A trait that represents a JNI type. It's implemented for all JNI primitive types
-/// and [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-/// Implements Java method calls and provides the default value for this JNI type.
-///
-/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
-pub trait JniType {
-    #[doc(hidden)]
-    fn default() -> Self;
+pub(crate) mod private {
+    use super::*;
 
-    #[doc(hidden)]
-    unsafe fn call_method<In: ToJniTuple>(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: In,
-    ) -> Self;
+    /// A trait that represents a JNI type. It's implemented for all JNI primitive types
+    /// and [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
+    /// Implements Java method calls and provides the default value for this JNI type.
+    ///
+    /// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+    pub trait JniType {
+        fn default() -> Self;
 
-    #[doc(hidden)]
-    unsafe fn call_static_method<In: ToJniTuple>(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: In,
-    ) -> Self;
+        unsafe fn call_method<In: ToJniTuple>(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: In,
+        ) -> Self;
+
+        unsafe fn call_static_method<In: ToJniTuple>(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: In,
+        ) -> Self;
+    }
+
+    /// A trait that represents primitive JNI types.
+    ///
+    /// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+    pub trait JniPrimitiveType: JniType {
+        fn signature() -> &'static str;
+    }
+
+    /// A trait that represents JNI types that can be passed as arguments to JNI functions.
+    ///
+    /// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+    pub trait JniArgumentType: JniType {}
+
+    /// A trait that implements calling JNI variadic functions using a macro to generate
+    /// it's instances for tuples of different sizes.
+    /// This is essentially the "[`JniType`](trait.JniType.html) for packed argument tuples".
+    ///
+    /// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+    // TODO: reimplement once Rust has variadic functions or variadic templates.
+    pub trait ToJniTuple {
+        unsafe fn call_constructor(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jobject;
+
+        unsafe fn call_object_method(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jobject;
+
+        unsafe fn call_static_object_method(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jobject;
+
+        unsafe fn call_void_method(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> ();
+
+        unsafe fn call_static_void_method(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> ();
+
+        unsafe fn call_boolean_method(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jboolean;
+
+        unsafe fn call_static_boolean_method(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jboolean;
+
+        unsafe fn call_char_method(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jchar;
+
+        unsafe fn call_static_char_method(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jchar;
+
+        unsafe fn call_byte_method(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jbyte;
+
+        unsafe fn call_static_byte_method(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jbyte;
+
+        unsafe fn call_short_method(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jshort;
+
+        unsafe fn call_static_short_method(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jshort;
+
+        unsafe fn call_int_method(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jint;
+
+        unsafe fn call_static_int_method(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jint;
+
+        unsafe fn call_long_method(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jlong;
+
+        unsafe fn call_static_long_method(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jlong;
+
+        unsafe fn call_float_method(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jfloat;
+
+        unsafe fn call_static_float_method(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jfloat;
+
+        unsafe fn call_double_method(
+            object: &Object,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jdouble;
+
+        unsafe fn call_static_double_method(
+            class: &Class,
+            method_id: jni_sys::jmethodID,
+            arguments: Self,
+        ) -> jni_sys::jdouble;
+    }
 }
 
-/// A trait that represents primitive JNI types.
-///
-/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
-#[doc(hidden)]
-pub(crate) trait JniPrimitiveType: JniType {
-    fn signature() -> &'static str;
-}
-
-/// A trait that represents JNI types that can be passed as arguments to JNI functions.
-///
-/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
-pub trait JniArgumentType: JniType {}
+use private::*;
 
 /// A macro for generating [`JniType`](trait.JniType.html) implementation for primitive types.
 macro_rules! jni_type_trait {
@@ -455,141 +591,6 @@ generate_jni_primitive_type_tests!(
     CallDoubleMethod,
     CallStaticDoubleMethod
 );
-
-/// A trait that implements calling JNI variadic functions using a macro to generate
-/// it's instances for tuples of different sizes.
-/// This is essentially the "[`JniType`](trait.JniType.html) for packed argument tuples".
-///
-/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
-// TODO: reimplement once Rust has variadic functions or variadic templates.
-#[doc(hidden)]
-pub trait ToJniTuple {
-    unsafe fn call_constructor(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jobject;
-
-    unsafe fn call_object_method(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jobject;
-
-    unsafe fn call_static_object_method(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jobject;
-
-    unsafe fn call_void_method(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> ();
-
-    unsafe fn call_static_void_method(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> ();
-
-    unsafe fn call_boolean_method(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jboolean;
-
-    unsafe fn call_static_boolean_method(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jboolean;
-
-    unsafe fn call_char_method(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jchar;
-
-    unsafe fn call_static_char_method(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jchar;
-
-    unsafe fn call_byte_method(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jbyte;
-
-    unsafe fn call_static_byte_method(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jbyte;
-
-    unsafe fn call_short_method(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jshort;
-
-    unsafe fn call_static_short_method(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jshort;
-
-    unsafe fn call_int_method(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jint;
-
-    unsafe fn call_static_int_method(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jint;
-
-    unsafe fn call_long_method(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jlong;
-
-    unsafe fn call_static_long_method(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jlong;
-
-    unsafe fn call_float_method(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jfloat;
-
-    unsafe fn call_static_float_method(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jfloat;
-
-    unsafe fn call_double_method(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jdouble;
-
-    unsafe fn call_static_double_method(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: Self,
-    ) -> jni_sys::jdouble;
-}
 
 macro_rules! jni_method_call {
     ($name:ident, $type:ty, $method:ident, $return_type:ty, $($argument:ident,)*) => {

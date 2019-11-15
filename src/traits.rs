@@ -1,9 +1,7 @@
 use crate::env::JniEnv;
-use crate::jni_types::JniArgumentType;
-use crate::jni_types::JniType;
+use crate::jni_types::private::{JniArgumentType, JniType};
 use crate::object::Object;
 use jni_sys;
-use std;
 
 pub trait JavaClassType<'env> {
     /// Compute the signature for this Java type.
@@ -102,20 +100,22 @@ where
     }
 }
 
-/// A trait that represents Rust function types that are mappable to Java function types.
-/// This trait is separate from `JavaType` because this one doesn't need to be exposed
-/// in the public crate API.
-///
-/// THIS TRAIT SHOULD NOT BE USED MANUALLY.
-// TODO: reimplement it in a way that it returns `&'static str`.
-// `concat!` doesn't acceps arbitrary expressions of type `&'static str`, so it can't be
-// implemented that way today.
-#[doc(hidden)]
-pub trait JavaMethodSignature<In, Out> {
-    /// Get the method's JNI signature.
+pub(crate) mod private {
+
+    /// A trait that represents Rust function types that are mappable to Java function types.
+    /// This trait is separate from `JavaType` because this one doesn't need to be exposed
+    /// in the public crate API.
     ///
-    /// THIS METHOD SHOULD NOT BE CALLED MANUALLY.
-    fn __signature() -> std::string::String;
+    /// THIS TRAIT SHOULD NOT BE USED MANUALLY.
+    // TODO: reimplement it in a way that it returns `&'static str`.
+    // `concat!` doesn't acceps arbitrary expressions of type `&'static str`, so it can't be
+    // implemented that way today.
+    pub trait JavaMethodSignature<In, Out> {
+        /// Get the method's JNI signature.
+        ///
+        /// THIS METHOD SHOULD NOT BE CALLED MANUALLY.
+        fn __signature() -> std::string::String;
+    }
 }
 
 /// A trait for casting Java object types to their superclasses.

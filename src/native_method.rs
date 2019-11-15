@@ -1,7 +1,7 @@
 use crate::env::JniEnv;
 use crate::error::JniError;
 use crate::java_string::*;
-use crate::jni_types::{JniArgumentType, JniType};
+use crate::jni_types::private::{JniArgumentType, JniType};
 use crate::result::JavaResult;
 use crate::token::NoException;
 use crate::traits::FromJni;

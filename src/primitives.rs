@@ -1,6 +1,6 @@
 use crate::env::JniEnv;
 use crate::jni_bool;
-use crate::jni_types::JniPrimitiveType;
+use crate::jni_types::private::JniPrimitiveType;
 use crate::traits::{FromJni, ToJni};
 use jni_sys;
 use std::char;
