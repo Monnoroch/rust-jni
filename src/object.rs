@@ -5,7 +5,7 @@ use crate::method_calls::call_method;
 use crate::result::JavaResult;
 use crate::string::String;
 use crate::token::{from_nullable, NoException};
-use crate::traits::{Cast, FromJni, FromObject, JavaType, ToJni};
+use crate::traits::{Cast, FromJni, JavaClassType, ToJni};
 use jni_sys;
 use std;
 use std::fmt;
@@ -53,7 +53,7 @@ impl<'env> Object<'env> {
             panic!("Object {:?} doesn't have a class.", self.raw_object);
         }
         // Safe because the argument is ensured to be correct references by construction.
-        unsafe { Class::__from_jni(self.env, raw_java_class) }
+        unsafe { Class::from_jni(self.env, raw_java_class) }
     }
 
     /// Compare with another Java object by reference.
@@ -131,10 +131,12 @@ object_java_class!(
     ),
 );
 
-/// Make [`Object`](struct.Object.html) convertible from
-/// [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-impl<'env> FromObject<'env> for Object<'env> {
-    fn __from_object(object: Self) -> Self {
+impl<'env> JavaClassType<'env> for Object<'env> {
+    fn signature() -> &'static str {
+        concat!("L", "java/lang", "/", stringify!(Object), ";")
+    }
+
+    fn from_object(object: Self) -> Self {
         object
     }
 }

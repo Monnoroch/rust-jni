@@ -4,7 +4,7 @@ use crate::jni_bool;
 #[cfg(test)]
 use crate::object::test_object;
 use crate::object::Object;
-use crate::traits::{FromJni, JavaType, JniArgumentType, JniType, ToJni};
+use crate::traits::{FromJni, JniArgumentType, JniPrimitiveType, JniType, ToJni};
 use jni_sys;
 use std::char;
 use std::iter;
@@ -12,34 +12,12 @@ use std::ptr;
 
 include!("call_jni_method.rs");
 
-#[doc(hidden)]
-pub(crate) trait JniPrimitiveType {
-    fn default() -> Self;
-    fn signature() -> &'static str;
-
-    unsafe fn call_method<In: ToJniTuple>(
-        object: &Object,
-        method_id: jni_sys::jmethodID,
-        arguments: In,
-    ) -> Self;
-
-    unsafe fn call_static_method<In: ToJniTuple>(
-        class: &Class,
-        method_id: jni_sys::jmethodID,
-        arguments: In,
-    ) -> Self;
-}
-
-/// A macro for generating [`JniPrimitiveType`](trait.JniPrimitiveType.html) implementation for primitive types.
-macro_rules! jni_primitive_type_trait {
-    ($type:ty, $default:expr, $signature:expr, $method:ident, $static_method:ident) => {
-        impl JniPrimitiveType for $type {
+/// A macro for generating [`JniType`](trait.JniType.html) implementation for primitive types.
+macro_rules! jni_type_trait {
+    ($type:ty, $default:expr, $method:ident, $static_method:ident) => {
+        impl JniType for $type {
             fn default() -> Self {
                 $default
-            }
-
-            fn signature() -> &'static str {
-                $signature
             }
 
             unsafe fn call_method<In: ToJniTuple>(
@@ -56,6 +34,26 @@ macro_rules! jni_primitive_type_trait {
                 arguments: In,
             ) -> Self {
                 In::$static_method(class, method_id, arguments)
+            }
+        }
+    };
+}
+
+jni_type_trait!(
+    jni_sys::jobject,
+    ptr::null_mut(),
+    call_object_method,
+    call_static_object_method
+);
+
+/// A macro for generating [`JniPrimitiveType`](trait.JniPrimitiveType.html) implementation for primitive types.
+macro_rules! jni_primitive_type_trait {
+    ($type:ty, $default:expr, $signature:expr, $method:ident, $static_method:ident) => {
+        jni_type_trait!($type, $default, $method, $static_method);
+
+        impl JniPrimitiveType for $type {
+            fn signature() -> &'static str {
+                $signature
             }
         }
     };
@@ -119,68 +117,148 @@ jni_primitive_type_trait!(
     call_static_double_method
 );
 
-/// A macro for generating [`JniType`](trait.JniType.html) implementation for primitive types.
-macro_rules! jni_type_trait {
-    ($type:ty, $default:expr, $method:ident, $static_method:ident) => {
-        impl JniType for $type {
-            fn default() -> Self {
-                $default
-            }
+macro_rules! generate_jni_type_test_cases {
+    (
+        $jni_type:ty,
+        $default:expr,
+        $result:expr,
+        $jni_method:ident,
+        $jni_static_method:ident
+    ) => {
+        #[test]
+        fn default() {
+            assert_eq!(<$jni_type as JniType>::default(), $default);
+        }
 
-            unsafe fn call_method<In: ToJniTuple>(
-                object: &Object,
+        #[test]
+        fn call_method() {
+            static mut METHOD_CALLS: i32 = 0;
+            static mut METHOD_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+            static mut METHOD_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+            static mut METHOD_METHOD_ARGUMENT: jni_sys::jmethodID = ptr::null_mut();
+            static mut METHOD_ARGUMENT0: jni_sys::jint = 0;
+            static mut METHOD_ARGUMENT1: jni_sys::jdouble = 0.;
+            static mut METHOD_RESULT: $jni_type = $default;
+            type VariadicFn = unsafe extern "C" fn(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
                 method_id: jni_sys::jmethodID,
-                arguments: In,
-            ) -> Self {
-                In::$method(object, method_id, arguments)
+                ...
+            ) -> $jni_type;
+            type TestFn = unsafe extern "C" fn(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+                argument0: jni_sys::jint,
+                argument1: jni_sys::jdouble,
+            ) -> $jni_type;
+            unsafe extern "C" fn method(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+                argument0: jni_sys::jint,
+                argument1: jni_sys::jdouble,
+            ) -> $jni_type {
+                METHOD_CALLS += 1;
+                METHOD_ENV_ARGUMENT = env;
+                METHOD_OBJECT_ARGUMENT = object;
+                METHOD_METHOD_ARGUMENT = method_id;
+                METHOD_ARGUMENT0 = argument0;
+                METHOD_ARGUMENT1 = argument1;
+                METHOD_RESULT
             }
+            let vm = test_vm(ptr::null_mut());
+            let raw_jni_env = jni_sys::JNINativeInterface_ {
+                $jni_method: Some(unsafe { mem::transmute::<TestFn, VariadicFn>(method) }),
+                ..empty_raw_jni_env()
+            };
+            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+            let env = test_env(&vm, raw_jni_env);
+            let raw_object = 0x91011 as jni_sys::jobject;
+            let object = test_object(&env, raw_object);
+            let method_id = 0x7654 as jni_sys::jmethodID;
+            let arguments = (17 as i32, 19. as f64);
+            let result = $result;
+            unsafe {
+                METHOD_RESULT = result;
+                assert_eq!(
+                    <$jni_type as JniType>::call_method(&object, method_id, arguments),
+                    result
+                );
+                assert_eq!(METHOD_CALLS, 1);
+                assert_eq!(METHOD_ENV_ARGUMENT, raw_jni_env);
+                assert_eq!(METHOD_OBJECT_ARGUMENT, raw_object);
+                assert_eq!(METHOD_METHOD_ARGUMENT, method_id);
+                assert_eq!(METHOD_ARGUMENT0, arguments.0);
+                assert_eq!(METHOD_ARGUMENT1, arguments.1);
+            }
+        }
 
-            unsafe fn call_static_method<In: ToJniTuple>(
-                class: &Class,
+        #[test]
+        fn call_static_method() {
+            static mut METHOD_CALLS: i32 = 0;
+            static mut METHOD_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
+            static mut METHOD_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
+            static mut METHOD_METHOD_ARGUMENT: jni_sys::jmethodID = ptr::null_mut();
+            static mut METHOD_ARGUMENT0: jni_sys::jint = 0;
+            static mut METHOD_ARGUMENT1: jni_sys::jdouble = 0.;
+            static mut METHOD_RESULT: $jni_type = $default;
+            type VariadicFn = unsafe extern "C" fn(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
                 method_id: jni_sys::jmethodID,
-                arguments: In,
-            ) -> Self {
-                In::$static_method(class, method_id, arguments)
+                ...
+            ) -> $jni_type;
+            type TestFn = unsafe extern "C" fn(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+                argument0: jni_sys::jint,
+                argument1: jni_sys::jdouble,
+            ) -> $jni_type;
+            unsafe extern "C" fn method(
+                env: *mut jni_sys::JNIEnv,
+                object: jni_sys::jobject,
+                method_id: jni_sys::jmethodID,
+                argument0: jni_sys::jint,
+                argument1: jni_sys::jdouble,
+            ) -> $jni_type {
+                METHOD_CALLS += 1;
+                METHOD_ENV_ARGUMENT = env;
+                METHOD_OBJECT_ARGUMENT = object;
+                METHOD_METHOD_ARGUMENT = method_id;
+                METHOD_ARGUMENT0 = argument0;
+                METHOD_ARGUMENT1 = argument1;
+                METHOD_RESULT
+            }
+            let vm = test_vm(ptr::null_mut());
+            let raw_jni_env = jni_sys::JNINativeInterface_ {
+                $jni_static_method: Some(unsafe { mem::transmute::<TestFn, VariadicFn>(method) }),
+                ..empty_raw_jni_env()
+            };
+            let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
+            let env = test_env(&vm, raw_jni_env);
+            let raw_object = 0x91011 as jni_sys::jobject;
+            let class = test_class(&env, raw_object);
+            let method_id = 0x7654 as jni_sys::jmethodID;
+            let arguments = (17 as i32, 19. as f64);
+            let result = $result;
+            unsafe {
+                METHOD_RESULT = result;
+                assert_eq!(
+                    <$jni_type as JniType>::call_static_method(&class, method_id, arguments),
+                    result
+                );
+                assert_eq!(METHOD_CALLS, 1);
+                assert_eq!(METHOD_ENV_ARGUMENT, raw_jni_env);
+                assert_eq!(METHOD_OBJECT_ARGUMENT, raw_object);
+                assert_eq!(METHOD_METHOD_ARGUMENT, method_id);
+                assert_eq!(METHOD_ARGUMENT0, arguments.0);
+                assert_eq!(METHOD_ARGUMENT1, arguments.1);
             }
         }
     };
 }
-
-jni_type_trait!(
-    jni_sys::jobject,
-    ptr::null_mut(),
-    call_object_method,
-    call_static_object_method
-);
-jni_type_trait!((), (), call_void_method, call_static_void_method);
-jni_type_trait!(
-    jni_sys::jboolean,
-    jni_sys::JNI_FALSE,
-    call_boolean_method,
-    call_static_boolean_method
-);
-jni_type_trait!(jni_sys::jchar, 0, call_char_method, call_static_char_method);
-jni_type_trait!(jni_sys::jbyte, 0, call_byte_method, call_static_byte_method);
-jni_type_trait!(
-    jni_sys::jshort,
-    0,
-    call_short_method,
-    call_static_short_method
-);
-jni_type_trait!(jni_sys::jint, 0, call_int_method, call_static_int_method);
-jni_type_trait!(jni_sys::jlong, 0, call_long_method, call_static_long_method);
-jni_type_trait!(
-    jni_sys::jfloat,
-    0.,
-    call_float_method,
-    call_static_float_method
-);
-jni_type_trait!(
-    jni_sys::jdouble,
-    0.,
-    call_double_method,
-    call_static_double_method
-);
 
 macro_rules! generate_jni_type_tests {
     (
@@ -200,221 +278,147 @@ macro_rules! generate_jni_type_tests {
             use crate::vm::test_vm;
             use std::mem;
 
-            #[test]
-            fn default() {
-                assert_eq!(<$jni_type as JniType>::default(), $default);
-            }
-
-            #[test]
-            fn call_method() {
-                static mut METHOD_CALLS: i32 = 0;
-                static mut METHOD_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-                static mut METHOD_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-                static mut METHOD_METHOD_ARGUMENT: jni_sys::jmethodID = ptr::null_mut();
-                static mut METHOD_ARGUMENT0: jni_sys::jint = 0;
-                static mut METHOD_ARGUMENT1: jni_sys::jdouble = 0.;
-                static mut METHOD_RESULT: $jni_type = $default;
-                type VariadicFn = unsafe extern "C" fn(
-                    env: *mut jni_sys::JNIEnv,
-                    object: jni_sys::jobject,
-                    method_id: jni_sys::jmethodID,
-                    ...
-                ) -> $jni_type;
-                type TestFn = unsafe extern "C" fn(
-                    env: *mut jni_sys::JNIEnv,
-                    object: jni_sys::jobject,
-                    method_id: jni_sys::jmethodID,
-                    argument0: jni_sys::jint,
-                    argument1: jni_sys::jdouble,
-                ) -> $jni_type;
-                unsafe extern "C" fn method(
-                    env: *mut jni_sys::JNIEnv,
-                    object: jni_sys::jobject,
-                    method_id: jni_sys::jmethodID,
-                    argument0: jni_sys::jint,
-                    argument1: jni_sys::jdouble,
-                ) -> $jni_type {
-                    METHOD_CALLS += 1;
-                    METHOD_ENV_ARGUMENT = env;
-                    METHOD_OBJECT_ARGUMENT = object;
-                    METHOD_METHOD_ARGUMENT = method_id;
-                    METHOD_ARGUMENT0 = argument0;
-                    METHOD_ARGUMENT1 = argument1;
-                    METHOD_RESULT
-                }
-                let vm = test_vm(ptr::null_mut());
-                let raw_jni_env = jni_sys::JNINativeInterface_ {
-                    $jni_method: Some(unsafe { mem::transmute::<TestFn, VariadicFn>(method) }),
-                    ..empty_raw_jni_env()
-                };
-                let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-                let env = test_env(&vm, raw_jni_env);
-                let raw_object = 0x91011 as jni_sys::jobject;
-                let object = test_object(&env, raw_object);
-                let method_id = 0x7654 as jni_sys::jmethodID;
-                let arguments = (17 as i32, 19. as f64);
-                let result = $result;
-                unsafe {
-                    METHOD_RESULT = result;
-                    assert_eq!(
-                        <$jni_type as JniType>::call_method(&object, method_id, arguments),
-                        result
-                    );
-                    assert_eq!(METHOD_CALLS, 1);
-                    assert_eq!(METHOD_ENV_ARGUMENT, raw_jni_env);
-                    assert_eq!(METHOD_OBJECT_ARGUMENT, raw_object);
-                    assert_eq!(METHOD_METHOD_ARGUMENT, method_id);
-                    assert_eq!(METHOD_ARGUMENT0, arguments.0);
-                    assert_eq!(METHOD_ARGUMENT1, arguments.1);
-                }
-            }
-
-            #[test]
-            fn call_static_method() {
-                static mut METHOD_CALLS: i32 = 0;
-                static mut METHOD_ENV_ARGUMENT: *mut jni_sys::JNIEnv = ptr::null_mut();
-                static mut METHOD_OBJECT_ARGUMENT: jni_sys::jobject = ptr::null_mut();
-                static mut METHOD_METHOD_ARGUMENT: jni_sys::jmethodID = ptr::null_mut();
-                static mut METHOD_ARGUMENT0: jni_sys::jint = 0;
-                static mut METHOD_ARGUMENT1: jni_sys::jdouble = 0.;
-                static mut METHOD_RESULT: $jni_type = $default;
-                type VariadicFn = unsafe extern "C" fn(
-                    env: *mut jni_sys::JNIEnv,
-                    object: jni_sys::jobject,
-                    method_id: jni_sys::jmethodID,
-                    ...
-                ) -> $jni_type;
-                type TestFn = unsafe extern "C" fn(
-                    env: *mut jni_sys::JNIEnv,
-                    object: jni_sys::jobject,
-                    method_id: jni_sys::jmethodID,
-                    argument0: jni_sys::jint,
-                    argument1: jni_sys::jdouble,
-                ) -> $jni_type;
-                unsafe extern "C" fn method(
-                    env: *mut jni_sys::JNIEnv,
-                    object: jni_sys::jobject,
-                    method_id: jni_sys::jmethodID,
-                    argument0: jni_sys::jint,
-                    argument1: jni_sys::jdouble,
-                ) -> $jni_type {
-                    METHOD_CALLS += 1;
-                    METHOD_ENV_ARGUMENT = env;
-                    METHOD_OBJECT_ARGUMENT = object;
-                    METHOD_METHOD_ARGUMENT = method_id;
-                    METHOD_ARGUMENT0 = argument0;
-                    METHOD_ARGUMENT1 = argument1;
-                    METHOD_RESULT
-                }
-                let vm = test_vm(ptr::null_mut());
-                let raw_jni_env = jni_sys::JNINativeInterface_ {
-                    $jni_static_method: Some(unsafe {
-                        mem::transmute::<TestFn, VariadicFn>(method)
-                    }),
-                    ..empty_raw_jni_env()
-                };
-                let raw_jni_env = &mut (&raw_jni_env as jni_sys::JNIEnv) as *mut jni_sys::JNIEnv;
-                let env = test_env(&vm, raw_jni_env);
-                let raw_object = 0x91011 as jni_sys::jobject;
-                let class = test_class(&env, raw_object);
-                let method_id = 0x7654 as jni_sys::jmethodID;
-                let arguments = (17 as i32, 19. as f64);
-                let result = $result;
-                unsafe {
-                    METHOD_RESULT = result;
-                    assert_eq!(
-                        <$jni_type as JniType>::call_static_method(&class, method_id, arguments),
-                        result
-                    );
-                    assert_eq!(METHOD_CALLS, 1);
-                    assert_eq!(METHOD_ENV_ARGUMENT, raw_jni_env);
-                    assert_eq!(METHOD_OBJECT_ARGUMENT, raw_object);
-                    assert_eq!(METHOD_METHOD_ARGUMENT, method_id);
-                    assert_eq!(METHOD_ARGUMENT0, arguments.0);
-                    assert_eq!(METHOD_ARGUMENT1, arguments.1);
-                }
-            }
+            generate_jni_type_test_cases!(
+                $jni_type,
+                $default,
+                $result,
+                $jni_method,
+                $jni_static_method
+            );
         }
     };
 }
 
 generate_jni_type_tests!(
+    jni_type_object_tests,
+    jni_sys::jobject,
+    ptr::null_mut(),
+    0x1234 as jni_sys::jobject,
+    CallObjectMethod,
+    CallStaticObjectMethod
+);
+
+macro_rules! generate_jni_primitive_type_tests {
+    (
+        $module:ident,
+        $jni_type:ty,
+        $default:expr,
+        $result:expr,
+        $signature:expr,
+        $jni_method:ident,
+        $jni_static_method:ident
+    ) => {
+        #[cfg(test)]
+        mod $module {
+            use super::*;
+            use crate::class::test_class;
+            use crate::env::test_env;
+            use crate::testing::*;
+            use crate::vm::test_vm;
+            use std::mem;
+
+            generate_jni_type_test_cases!(
+                $jni_type,
+                $default,
+                $result,
+                $jni_method,
+                $jni_static_method
+            );
+
+            #[test]
+            fn signature() {
+                assert_eq!(<$jni_type as JniPrimitiveType>::signature(), $signature);
+            }
+        }
+    };
+}
+
+generate_jni_primitive_type_tests!(
     jni_type_void_tests,
     (),
     (),
     (),
+    "V",
     CallVoidMethod,
     CallStaticVoidMethod
 );
 
-generate_jni_type_tests!(
+generate_jni_primitive_type_tests!(
     jni_type_boolean_tests,
     jni_sys::jboolean,
     jni_sys::JNI_FALSE,
     jni_sys::JNI_TRUE,
+    "Z",
     CallBooleanMethod,
     CallStaticBooleanMethod
 );
 
-generate_jni_type_tests!(
+generate_jni_primitive_type_tests!(
     jni_type_char_tests,
     jni_sys::jchar,
     0,
     42,
+    "C",
     CallCharMethod,
     CallStaticCharMethod
 );
 
-generate_jni_type_tests!(
+generate_jni_primitive_type_tests!(
     jni_type_byte_tests,
     jni_sys::jbyte,
     0,
     42,
+    "B",
     CallByteMethod,
     CallStaticByteMethod
 );
 
-generate_jni_type_tests!(
+generate_jni_primitive_type_tests!(
     jni_type_short_tests,
     jni_sys::jshort,
     0,
     42,
+    "S",
     CallShortMethod,
     CallStaticShortMethod
 );
 
-generate_jni_type_tests!(
+generate_jni_primitive_type_tests!(
     jni_type_int_tests,
     jni_sys::jint,
     0,
     42,
+    "I",
     CallIntMethod,
     CallStaticIntMethod
 );
 
-generate_jni_type_tests!(
+generate_jni_primitive_type_tests!(
     jni_type_long_tests,
     jni_sys::jlong,
     0,
     42,
+    "J",
     CallLongMethod,
     CallStaticLongMethod
 );
 
-generate_jni_type_tests!(
+generate_jni_primitive_type_tests!(
     jni_type_float_tests,
     jni_sys::jfloat,
     0.,
     42.,
+    "F",
     CallFloatMethod,
     CallStaticFloatMethod
 );
 
-generate_jni_type_tests!(
+generate_jni_primitive_type_tests!(
     jni_type_double_tests,
     jni_sys::jdouble,
     0.,
     42.,
+    "D",
     CallDoubleMethod,
     CallStaticDoubleMethod
 );
@@ -568,7 +572,7 @@ macro_rules! jni_method_call {
                 $method,
                 object.raw_object(),
                 method_id
-                $(,ToJni::__to_jni(&$argument))*
+                $(,ToJni::to_jni(&$argument))*
             )
         }
     }
@@ -583,7 +587,7 @@ macro_rules! input_tuple_impls {
     ( $($type:ident, $jni_type:ident,)*) => (
         impl<'a, $($type, $jni_type),*> ToJniTuple for ($($type,)*)
         where
-            $($type: ToJni<__JniType = $jni_type>,)*
+            $($type: ToJni<JniType = $jni_type>,)*
             $($jni_type: JniArgumentType),*
         {
             jni_method_call!(call_constructor, Class, NewObject, jni_sys::jobject, $($type,)*);
@@ -978,18 +982,18 @@ mod to_jni_tuple_tests {
             assert_eq!(METHOD_ENV_ARGUMENT, raw_jni_env);
             assert_eq!(METHOD_OBJECT_ARGUMENT, raw_object);
             assert_eq!(METHOD_METHOD_ARGUMENT, method_id);
-            assert_eq!(METHOD_ARGUMENT0, arguments.0.__to_jni());
-            assert_eq!(METHOD_ARGUMENT1, arguments.1.__to_jni());
-            assert_eq!(METHOD_ARGUMENT2, arguments.2.__to_jni());
-            assert_eq!(METHOD_ARGUMENT3, arguments.3.__to_jni());
-            assert_eq!(METHOD_ARGUMENT4, arguments.4.__to_jni());
-            assert_eq!(METHOD_ARGUMENT5, arguments.5.__to_jni());
-            assert_eq!(METHOD_ARGUMENT7, arguments.6.__to_jni());
-            assert_eq!(METHOD_ARGUMENT8, arguments.7.__to_jni());
-            assert_eq!(METHOD_ARGUMENT9, arguments.8.__to_jni());
-            assert_eq!(METHOD_ARGUMENT10, arguments.9.__to_jni());
-            assert_eq!(METHOD_ARGUMENT11, arguments.10.__to_jni());
-            assert_eq!(METHOD_ARGUMENT12, arguments.11.__to_jni());
+            assert_eq!(METHOD_ARGUMENT0, arguments.0.to_jni());
+            assert_eq!(METHOD_ARGUMENT1, arguments.1.to_jni());
+            assert_eq!(METHOD_ARGUMENT2, arguments.2.to_jni());
+            assert_eq!(METHOD_ARGUMENT3, arguments.3.to_jni());
+            assert_eq!(METHOD_ARGUMENT4, arguments.4.to_jni());
+            assert_eq!(METHOD_ARGUMENT5, arguments.5.to_jni());
+            assert_eq!(METHOD_ARGUMENT7, arguments.6.to_jni());
+            assert_eq!(METHOD_ARGUMENT8, arguments.7.to_jni());
+            assert_eq!(METHOD_ARGUMENT9, arguments.8.to_jni());
+            assert_eq!(METHOD_ARGUMENT10, arguments.9.to_jni());
+            assert_eq!(METHOD_ARGUMENT11, arguments.10.to_jni());
+            assert_eq!(METHOD_ARGUMENT12, arguments.11.to_jni());
         }
     }
 }
@@ -1004,33 +1008,32 @@ impl JniArgumentType for jni_sys::jfloat {}
 impl JniArgumentType for jni_sys::jdouble {}
 impl JniArgumentType for jni_sys::jobject {}
 
-/// Make [`bool`](https://doc.rust-lang.org/std/primitive.bool.html) mappable to
-/// [`jboolean`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jboolean.html).
-impl JavaType for bool {
-    #[doc(hidden)]
-    type __JniType = jni_sys::jboolean;
-
-    #[doc(hidden)]
-    fn __signature() -> &'static str {
-        "Z"
-    }
-}
-
 /// Make [`bool`](https://doc.rust-lang.org/std/primitive.bool.html) convertible to
 /// [`jboolean`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jboolean.html).
 impl ToJni for bool {
-    unsafe fn __to_jni(&self) -> Self::__JniType {
-        match self {
-            true => jni_sys::JNI_TRUE,
-            false => jni_sys::JNI_FALSE,
-        }
+    #[doc(hidden)]
+    type JniType = jni_sys::jboolean;
+
+    #[doc(hidden)]
+    fn signature() -> &'static str {
+        <jni_sys::jboolean as JniPrimitiveType>::signature()
+    }
+    unsafe fn to_jni(&self) -> Self::JniType {
+        jni_bool::to_jni(*self)
     }
 }
 
 /// Make [`bool`](https://doc.rust-lang.org/std/primitive.bool.html) convertible from
 /// [`jboolean`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jboolean.html).
 impl<'env> FromJni<'env> for bool {
-    unsafe fn __from_jni(_: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
+    #[doc(hidden)]
+    type JniType = jni_sys::jboolean;
+
+    #[doc(hidden)]
+    fn signature() -> &'static str {
+        <jni_sys::jboolean as JniPrimitiveType>::signature()
+    }
+    unsafe fn from_jni(_: &'env JniEnv<'env>, value: Self::JniType) -> Self {
         jni_bool::to_rust(value)
     }
 }
@@ -1043,14 +1046,14 @@ mod bool_tests {
 
     #[test]
     fn signature() {
-        assert_eq!(bool::__signature(), "Z");
+        assert_eq!(<bool as ToJni>::signature(), "Z");
     }
 
     #[test]
     fn to_jni() {
         unsafe {
-            assert_eq!(true.__to_jni(), jni_sys::JNI_TRUE);
-            assert_eq!(false.__to_jni(), jni_sys::JNI_FALSE);
+            assert_eq!(true.to_jni(), jni_sys::JNI_TRUE);
+            assert_eq!(false.to_jni(), jni_sys::JNI_FALSE);
         }
     }
 
@@ -1059,8 +1062,8 @@ mod bool_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(bool::__from_jni(&env, jni_sys::JNI_TRUE), true);
-            assert_eq!(bool::__from_jni(&env, jni_sys::JNI_FALSE), false);
+            assert_eq!(bool::from_jni(&env, jni_sys::JNI_TRUE), true);
+            assert_eq!(bool::from_jni(&env, jni_sys::JNI_FALSE), false);
         }
     }
 
@@ -1069,8 +1072,8 @@ mod bool_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(bool::__from_jni(&env, true.__to_jni()), true);
-            assert_eq!(bool::__from_jni(&env, false.__to_jni()), false);
+            assert_eq!(bool::from_jni(&env, true.to_jni()), true);
+            assert_eq!(bool::from_jni(&env, false.to_jni()), false);
         }
     }
 
@@ -1080,26 +1083,14 @@ mod bool_tests {
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
             assert_eq!(
-                bool::__from_jni(&env, jni_sys::JNI_TRUE).__to_jni(),
+                bool::from_jni(&env, jni_sys::JNI_TRUE).to_jni(),
                 jni_sys::JNI_TRUE
             );
             assert_eq!(
-                bool::__from_jni(&env, jni_sys::JNI_FALSE).__to_jni(),
+                bool::from_jni(&env, jni_sys::JNI_FALSE).to_jni(),
                 jni_sys::JNI_FALSE
             );
         }
-    }
-}
-
-/// Make [`char`](https://doc.rust-lang.org/std/primitive.char.html) mappable to
-/// [`jchar`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jchar.html).
-impl JavaType for char {
-    #[doc(hidden)]
-    type __JniType = jni_sys::jchar;
-
-    #[doc(hidden)]
-    fn __signature() -> &'static str {
-        "C"
     }
 }
 
@@ -1107,8 +1098,15 @@ impl JavaType for char {
 /// [`jchar`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jchar.html).
 #[doc(hidden)]
 impl ToJni for char {
-    unsafe fn __to_jni(&self) -> Self::__JniType {
-        *self as Self::__JniType
+    #[doc(hidden)]
+    type JniType = jni_sys::jchar;
+
+    #[doc(hidden)]
+    fn signature() -> &'static str {
+        jni_sys::jchar::signature()
+    }
+    unsafe fn to_jni(&self) -> Self::JniType {
+        *self as Self::JniType
     }
 }
 
@@ -1116,7 +1114,14 @@ impl ToJni for char {
 /// [`jchar`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jchar.html).
 #[doc(hidden)]
 impl<'env> FromJni<'env> for char {
-    unsafe fn __from_jni(_: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
+    #[doc(hidden)]
+    type JniType = jni_sys::jchar;
+
+    #[doc(hidden)]
+    fn signature() -> &'static str {
+        jni_sys::jchar::signature()
+    }
+    unsafe fn from_jni(_: &'env JniEnv<'env>, value: Self::JniType) -> Self {
         let mut decoder = char::decode_utf16(iter::once(value));
         // A character returned from Java is guaranteed to be a valid UTF-16 code point.
         let character = decoder.next().unwrap().unwrap();
@@ -1142,13 +1147,13 @@ mod char_tests {
 
     #[test]
     fn signature() {
-        assert_eq!(char::__signature(), "C");
+        assert_eq!(<char as ToJni>::signature(), "C");
     }
 
     #[test]
     fn to_jni() {
         unsafe {
-            assert_eq!('h'.__to_jni(), 'h' as jni_sys::jchar);
+            assert_eq!('h'.to_jni(), 'h' as jni_sys::jchar);
         }
     }
 
@@ -1157,7 +1162,7 @@ mod char_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(char::__from_jni(&env, 'h' as jni_sys::jchar), 'h');
+            assert_eq!(char::from_jni(&env, 'h' as jni_sys::jchar), 'h');
         }
     }
 
@@ -1166,7 +1171,7 @@ mod char_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(char::__from_jni(&env, 'h'.__to_jni()), 'h');
+            assert_eq!(char::from_jni(&env, 'h'.to_jni()), 'h');
         }
     }
 
@@ -1176,7 +1181,7 @@ mod char_tests {
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
             assert_eq!(
-                char::__from_jni(&env, 'h' as jni_sys::jchar).__to_jni(),
+                char::from_jni(&env, 'h' as jni_sys::jchar).to_jni(),
                 'h' as jni_sys::jchar
             );
         }
@@ -1185,22 +1190,39 @@ mod char_tests {
 
 /// A macro for generating [`JavaType`](trait.JavaType.html) implementations for most primitive
 /// Rust types.
-macro_rules! jni_io_traits {
+macro_rules! jni_input_traits {
     ($type:ty, $jni_type:ty, $link:expr, $jni_sys_link:expr) => {
         /// Make
         #[doc = $link]
-        /// mappable to
+        /// convertible from
         #[doc = $jni_sys_link]
         ///.
-        impl JavaType for $type {
+        #[doc(hidden)]
+        impl<'env> FromJni<'env> for $type {
             #[doc(hidden)]
-            type __JniType = $jni_type;
+            type JniType = $jni_type;
 
             #[doc(hidden)]
-            fn __signature() -> &'static str {
+            fn signature() -> &'static str {
                 <$jni_type as JniPrimitiveType>::signature()
             }
+            unsafe fn from_jni(_: &'env JniEnv<'env>, value: Self::JniType) -> Self {
+                value as Self
+            }
         }
+    };
+}
+
+/// A macro for generating [`JavaType`](trait.JavaType.html) implementations for most primitive
+/// Rust types.
+macro_rules! jni_io_traits {
+    ($type:ty, $jni_type:ty, $link:expr, $jni_sys_link:expr) => {
+        jni_input_traits!(
+            $type,
+            $jni_type,
+            $link,
+            $jni_sys_link
+        );
 
         /// Make
         #[doc = $link]
@@ -1209,26 +1231,21 @@ macro_rules! jni_io_traits {
         ///.
         #[doc(hidden)]
         impl ToJni for $type {
-            unsafe fn __to_jni(&self) -> Self::__JniType {
-                *self as Self::__JniType
-            }
-        }
+            #[doc(hidden)]
+            type JniType = $jni_type;
 
-        /// Make
-        #[doc = $link]
-        /// convertible from
-        #[doc = $jni_sys_link]
-        ///.
-        #[doc(hidden)]
-        impl<'env> FromJni<'env> for $type {
-            unsafe fn __from_jni(_: &'env JniEnv<'env>, value: Self::__JniType) -> Self {
-                value as Self
+            #[doc(hidden)]
+            fn signature() -> &'static str {
+                <$jni_type as JniPrimitiveType>::signature()
+            }
+            unsafe fn to_jni(&self) -> Self::JniType {
+                *self as Self::JniType
             }
         }
     };
 }
 
-jni_io_traits!(
+jni_input_traits!(
     (),
     (),
     "[`()`](https://doc.rust-lang.org/std/primitive.unit.html)",
@@ -1260,7 +1277,7 @@ jni_io_traits!(
 );
 // For some reason, floats need to be passed as 64-bit floats to JNI.
 // When passed as 32-bit numbers, Java recieves `0.0` instead of the passed number.
-// This also causes `__JniType` to not reside in `JavaType`, as this is the
+// This also causes `JniType` to not reside in `JavaType`, as this is the
 // only exceptional case.
 // TODO(#25): figure out the underlying cause of this.
 // native call -> java: f64
@@ -1288,14 +1305,7 @@ mod void_tests {
 
     #[test]
     fn signature() {
-        assert_eq!(<()>::__signature(), "V");
-    }
-
-    #[test]
-    fn to_jni() {
-        unsafe {
-            assert_eq!(().__to_jni(), ());
-        }
+        assert_eq!(<() as FromJni>::signature(), "V");
     }
 
     #[test]
@@ -1303,25 +1313,7 @@ mod void_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(<()>::__from_jni(&env, ()), ());
-        }
-    }
-
-    #[test]
-    fn to_and_from() {
-        let vm = test_vm(ptr::null_mut());
-        let env = test_env(&vm, ptr::null_mut());
-        unsafe {
-            assert_eq!(<()>::__from_jni(&env, ().__to_jni()), ());
-        }
-    }
-
-    #[test]
-    fn from_and_to() {
-        let vm = test_vm(ptr::null_mut());
-        let env = test_env(&vm, ptr::null_mut());
-        unsafe {
-            assert_eq!(<()>::__from_jni(&env, ()).__to_jni(), ());
+            assert_eq!(<()>::from_jni(&env, ()), ());
         }
     }
 }
@@ -1334,13 +1326,13 @@ mod byte_tests {
 
     #[test]
     fn signature() {
-        assert_eq!(u8::__signature(), "B");
+        assert_eq!(<u8 as ToJni>::signature(), "B");
     }
 
     #[test]
     fn to_jni() {
         unsafe {
-            assert_eq!(217.__to_jni(), 217);
+            assert_eq!(217.to_jni(), 217);
         }
     }
 
@@ -1349,7 +1341,7 @@ mod byte_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(u8::__from_jni(&env, 217 as u8 as i8), 217);
+            assert_eq!(u8::from_jni(&env, 217 as u8 as i8), 217);
         }
     }
 
@@ -1358,7 +1350,7 @@ mod byte_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(u8::__from_jni(&env, (217 as u8).__to_jni()), 217);
+            assert_eq!(u8::from_jni(&env, (217 as u8).to_jni()), 217);
         }
     }
 
@@ -1368,7 +1360,7 @@ mod byte_tests {
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
             assert_eq!(
-                u8::__from_jni(&env, 217 as u8 as i8).__to_jni(),
+                u8::from_jni(&env, 217 as u8 as i8).to_jni(),
                 217 as u8 as i8
             );
         }
@@ -1383,13 +1375,13 @@ mod short_tests {
 
     #[test]
     fn signature() {
-        assert_eq!(i16::__signature(), "S");
+        assert_eq!(<i16 as ToJni>::signature(), "S");
     }
 
     #[test]
     fn to_jni() {
         unsafe {
-            assert_eq!(217.__to_jni(), 217);
+            assert_eq!(217.to_jni(), 217);
         }
     }
 
@@ -1398,7 +1390,7 @@ mod short_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(i16::__from_jni(&env, 217), 217);
+            assert_eq!(i16::from_jni(&env, 217), 217);
         }
     }
 
@@ -1407,7 +1399,7 @@ mod short_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(i16::__from_jni(&env, (217 as i16).__to_jni()), 217);
+            assert_eq!(i16::from_jni(&env, (217 as i16).to_jni()), 217);
         }
     }
 
@@ -1416,7 +1408,7 @@ mod short_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(i16::__from_jni(&env, 217).__to_jni(), 217);
+            assert_eq!(i16::from_jni(&env, 217).to_jni(), 217);
         }
     }
 }
@@ -1429,13 +1421,13 @@ mod int_tests {
 
     #[test]
     fn signature() {
-        assert_eq!(i32::__signature(), "I");
+        assert_eq!(<i32 as ToJni>::signature(), "I");
     }
 
     #[test]
     fn to_jni() {
         unsafe {
-            assert_eq!(217.__to_jni(), 217);
+            assert_eq!(217.to_jni(), 217);
         }
     }
 
@@ -1444,7 +1436,7 @@ mod int_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(i32::__from_jni(&env, 217), 217);
+            assert_eq!(i32::from_jni(&env, 217), 217);
         }
     }
 
@@ -1453,7 +1445,7 @@ mod int_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(i32::__from_jni(&env, (217 as i32).__to_jni()), 217);
+            assert_eq!(i32::from_jni(&env, (217 as i32).to_jni()), 217);
         }
     }
 
@@ -1462,7 +1454,7 @@ mod int_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(i32::__from_jni(&env, 217).__to_jni(), 217);
+            assert_eq!(i32::from_jni(&env, 217).to_jni(), 217);
         }
     }
 }
@@ -1475,13 +1467,13 @@ mod long_tests {
 
     #[test]
     fn signature() {
-        assert_eq!(i64::__signature(), "J");
+        assert_eq!(<i64 as ToJni>::signature(), "J");
     }
 
     #[test]
     fn to_jni() {
         unsafe {
-            assert_eq!(217.__to_jni(), 217);
+            assert_eq!(217.to_jni(), 217);
         }
     }
 
@@ -1490,7 +1482,7 @@ mod long_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(i64::__from_jni(&env, 217), 217);
+            assert_eq!(i64::from_jni(&env, 217), 217);
         }
     }
 
@@ -1499,7 +1491,7 @@ mod long_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(i64::__from_jni(&env, (217 as i64).__to_jni()), 217);
+            assert_eq!(i64::from_jni(&env, (217 as i64).to_jni()), 217);
         }
     }
 
@@ -1508,7 +1500,7 @@ mod long_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(i64::__from_jni(&env, 217).__to_jni(), 217);
+            assert_eq!(i64::from_jni(&env, 217).to_jni(), 217);
         }
     }
 }
@@ -1521,13 +1513,13 @@ mod double_tests {
 
     #[test]
     fn signature() {
-        assert_eq!(f64::__signature(), "D");
+        assert_eq!(<f64 as ToJni>::signature(), "D");
     }
 
     #[test]
     fn to_jni() {
         unsafe {
-            assert_eq!((217.).__to_jni(), 217.);
+            assert_eq!((217.).to_jni(), 217.);
         }
     }
 
@@ -1536,7 +1528,7 @@ mod double_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(f64::__from_jni(&env, 217.), 217.);
+            assert_eq!(f64::from_jni(&env, 217.), 217.);
         }
     }
 
@@ -1545,7 +1537,7 @@ mod double_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(f64::__from_jni(&env, (217. as f64).__to_jni()), 217.);
+            assert_eq!(f64::from_jni(&env, (217. as f64).to_jni()), 217.);
         }
     }
 
@@ -1554,7 +1546,7 @@ mod double_tests {
         let vm = test_vm(ptr::null_mut());
         let env = test_env(&vm, ptr::null_mut());
         unsafe {
-            assert_eq!(f64::__from_jni(&env, 217.).__to_jni(), 217.);
+            assert_eq!(f64::from_jni(&env, 217.).to_jni(), 217.);
         }
     }
 }

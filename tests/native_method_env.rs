@@ -14,7 +14,7 @@ mod native_method_env {
         let exception_clear_fn = (**raw_env).ExceptionClear.unwrap();
         exception_clear_fn(raw_env);
 
-        let throwable = java::lang::Throwable::__from_jni(&env, throwable);
+        let throwable = java::lang::Throwable::from_jni(&env, throwable);
         let actual_message = throwable.get_message(&token).unwrap();
         assert_eq!(actual_message.as_string(&token), message);
         mem::forget(throwable);

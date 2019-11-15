@@ -36,6 +36,7 @@ mod token;
 mod traits;
 mod version;
 mod vm;
+mod jni_types;
 
 pub use attach_arguments::AttachArguments;
 pub use env::JniEnv;
@@ -43,7 +44,7 @@ pub use error::JniError;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
 pub use result::JavaResult;
 pub use token::{Exception, NoException};
-pub use traits::{Cast, JavaType};
+pub use traits::Cast;
 pub use version::JniVersion;
 pub use vm::{JavaVM, JavaVMRef};
 

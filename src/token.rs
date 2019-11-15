@@ -200,7 +200,7 @@ impl<'this> Exception<'this> {
             // Safe because [`Exception`](struct.Exception.html) guarantees that there must be an exception in flight.
             let raw_java_throwable = unsafe { NonNull::new_unchecked(raw_java_throwable) };
             // Safe because we construct Throwable from a valid pointer.
-            unsafe { Throwable::__from_jni(self.env, raw_java_throwable.as_ptr()) }
+            unsafe { Throwable::from_jni(self.env, raw_java_throwable.as_ptr()) }
         };
         let token = {
             // Safe because the argument is ensured to be correct references by construction.
@@ -306,7 +306,7 @@ pub(crate) fn get_and_clear_exception_if_thrown<'a>(env: &'a JniEnv<'a>) -> Opti
             call_jni_method!(env, ExceptionClear);
         }
         // Safe because the arguments are correct.
-        unsafe { Throwable::__from_jni(env, raw_java_throwable.as_ptr()) }
+        unsafe { Throwable::from_jni(env, raw_java_throwable.as_ptr()) }
     })
 }
 

@@ -21,23 +21,18 @@ macro_rules! object_java_class {
     ) => {
         /// Make
         #[doc = $link]
-        /// mappable to [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
-        impl<'a> JavaType for $class<'a> {
-            #[doc(hidden)]
-            type __JniType = jni_sys::jobject;
-
-            #[doc(hidden)]
-            fn __signature() -> &'static str {
-                concat!("L", "java/lang", "/", stringify!($class), ";")
-            }
-        }
-
-        /// Make
-        #[doc = $link]
         /// convertible to [`jobject`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jobject.html).
         impl<'a> ToJni for $class<'a> {
-            unsafe fn __to_jni(&self) -> Self::__JniType {
-                self.raw_object()
+            #[doc(hidden)]
+            type JniType = jni_sys::jobject;
+
+            #[doc(hidden)]
+            fn signature() -> &'static str {
+                <Self as JavaClassType>::signature()
+            }
+
+            unsafe fn to_jni(&self) -> Self::JniType {
+                Object::cast(self).raw_object()
             }
         }
 
@@ -106,7 +101,7 @@ macro_rules! object_java_class {
                 ) -> JavaResult<'env, $method_result> {
                     // Safe because the method name and arguments are correct.
                     unsafe {
-                        call_method::<_, _, _,
+                        call_method::<Self, _, _,
                             fn($($method_argument_type,)*) -> $method_result
                         >
                         (
@@ -172,8 +167,14 @@ macro_rules! java_class {
         /// Make
         #[doc = $link]
         /// convertible from [`Object`](struct.Object.html).
-        impl<'env> FromObject<'env> for $class<'env> {
-            fn __from_object(object: Object<'env>) -> Self {
+        impl<'env> JavaClassType<'env> for $class<'env> {
+            #[doc(hidden)]
+            fn signature() -> &'static str {
+                concat!("L", "java/lang", "/", stringify!($class), ";")
+            }
+
+            #[doc(hidden)]
+            fn from_object(object: Object<'env>) -> Self {
                 Self {
                     object,
                 }
@@ -303,7 +304,8 @@ macro_rules! generate_object_tests {
     ($class:ident, $signature:expr) => {
         #[test]
         fn signature() {
-            assert_eq!($class::__signature(), $signature);
+            assert_eq!(<$class as ToJni>::signature(), $signature);
+            assert_eq!(<$class as JavaClassType>::signature(), $signature);
         }
 
         #[test]
@@ -313,7 +315,7 @@ macro_rules! generate_object_tests {
             let raw_object = 0x91011 as jni_sys::jobject;
             let object = test_value(&env, raw_object);
             unsafe {
-                assert_eq!(object.__to_jni(), raw_object);
+                assert_eq!(object.to_jni(), raw_object);
             }
             mem::forget(object);
         }
@@ -325,7 +327,7 @@ macro_rules! generate_object_tests {
             let env = test_env(&vm, jni_env);
             let raw_object = 0x91011 as jni_sys::jobject;
             unsafe {
-                let object = $class::__from_jni(&env, raw_object);
+                let object = $class::from_jni(&env, raw_object);
                 assert_eq!(object.raw_object(), raw_object);
                 assert_eq!(object.env().raw_env(), jni_env);
                 mem::forget(object);
@@ -340,7 +342,7 @@ macro_rules! generate_object_tests {
             let raw_object = 0x91011 as jni_sys::jobject;
             let object = test_value(&env, raw_object);
             unsafe {
-                let object = $class::__from_jni(&env, object.__to_jni());
+                let object = $class::from_jni(&env, object.to_jni());
                 assert_eq!(object.raw_object(), raw_object);
                 assert_eq!(object.env().raw_env(), jni_env);
                 mem::forget(object);
@@ -354,8 +356,8 @@ macro_rules! generate_object_tests {
             let env = test_env(&vm, ptr::null_mut());
             let raw_object = 0x91011 as jni_sys::jobject;
             unsafe {
-                let object = $class::__from_jni(&env, raw_object);
-                assert_eq!(object.__to_jni(), raw_object);
+                let object = $class::from_jni(&env, raw_object);
+                assert_eq!(object.to_jni(), raw_object);
                 mem::forget(object);
             }
         }
@@ -367,7 +369,7 @@ macro_rules! generate_object_tests {
             let env = test_env(&vm, jni_env);
             let raw_object = 0x91011 as jni_sys::jobject;
             unsafe {
-                let object = $class::__from_object(test_object(&env, raw_object));
+                let object = $class::from_object(test_object(&env, raw_object));
                 assert_eq!(object.raw_object(), raw_object);
                 assert_eq!(object.env().raw_env(), jni_env);
                 mem::forget(object);

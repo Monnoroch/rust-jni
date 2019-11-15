@@ -1,4 +1,4 @@
-use crate::traits::{FromJni, JavaMethodSignature, JniArgumentType, ToJni};
+use crate::traits::{FromJni, JavaMethodSignature, ToJni};
 use std::string;
 
 macro_rules! braces {
@@ -9,49 +9,49 @@ macro_rules! braces {
 
 macro_rules! peel_fn_impls {
     () => ();
-    ($type:ident, $jni_type:ident, $($other:ident,)*) => (fn_impls! { $($other,)* });
+    ($type:ident, $($other:ident,)*) => (fn_impls! { $($other,)* });
 }
 
 /// A macro for generating method signatures.
 ///
-/// Function arguments must be `ToJni` with `ToJni::__JniType: JniArgumentType`
-/// and the result must be `FromJni`.
+/// Function arguments must be `ToJni` and the result must be `FromJni`.
 macro_rules! fn_impls {
-    ( $($type:ident, $jni_type:ident,)*) => (
-        impl<'a, $($type, $jni_type,)* Out, T> JavaMethodSignature<($($type,)*), Out> for T
+    ( $($type:ident,)*) => (
+        impl<'a, $($type,)* Out, T> JavaMethodSignature<($($type,)*), Out> for T
             where
-                $($type: ToJni<__JniType = $jni_type>,)*
-                $($jni_type: JniArgumentType,)*
+                $($type: ToJni,)*
                 Out: FromJni<'a>,
                 T: FnOnce($($type,)*) -> Out + ?Sized,
         {
             fn __signature() -> string::String {
-                format!(concat!("(", $(braces!($type), )* "){}"), $(<$type>::__signature(),)* Out::__signature())
+                format!(concat!("(", $(braces!($type), )* "){}"), $(<$type as ToJni>::signature(),)* Out::signature())
             }
         }
 
-        peel_fn_impls! { $($type, $jni_type,)* }
+        peel_fn_impls! { $($type,)* }
     );
 }
 
 fn_impls! {
-    T0, T0Jni,
-    T1, T1Jni,
-    T2, T2Jni,
-    T3, T3Jni,
-    T4, T4Jni,
-    T5, T5Jni,
-    T6, T6Jni,
-    T7, T7Jni,
-    T8, T8Jni,
-    T9, T9Jni,
-    T10, T10Jni,
-    T11, T11Jni,
+    T0,
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6,
+    T7,
+    T8,
+    T9,
+    T10,
+    T11,
 }
 
 #[cfg(test)]
 mod method_signature_tests {
     use super::*;
+    use crate::class::Class;
+    use crate::object::Object;
 
     #[test]
     fn no_arguments() {
@@ -61,6 +61,14 @@ mod method_signature_tests {
     #[test]
     fn one_argument() {
         assert_eq!(<fn(i32) -> i64>::__signature(), "(I)J");
+    }
+
+    #[test]
+    fn non_primitives() {
+        assert_eq!(
+            <fn(Object) -> Class>::__signature(),
+            "(Ljava/lang/Object;)Ljava/lang/Class;"
+        );
     }
 
     #[test]

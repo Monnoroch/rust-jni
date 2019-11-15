@@ -5,7 +5,7 @@ use crate::object::Object;
 use crate::primitives::ToJniTuple;
 use crate::result::JavaResult;
 use crate::token::{from_nullable, get_and_clear_exception_if_thrown, NoException};
-use crate::traits::{Cast, FromJni, FromObject, JavaMethodSignature, JniType};
+use crate::traits::{Cast, FromJni, JavaClassType, JavaMethodSignature, JniType};
 use jni_sys;
 use std::os::raw::c_char;
 
@@ -67,24 +67,24 @@ unsafe fn get_static_method_id<
 /// Unsafe, because it's possible to pass an incorrect result.
 unsafe fn from_method_call_result<'env, Out: FromJni<'env>>(
     env: &'env JniEnv<'env>,
-    result: Out::__JniType,
+    result: Out::JniType,
 ) -> JavaResult<'env, Out> {
     match get_and_clear_exception_if_thrown(env) {
         // Safe because arguments are ensured to be the correct by construction.
-        None => Ok(Out::__from_jni(env, result)),
+        None => Ok(Out::from_jni(env, result)),
         Some(exception) => Err(exception),
     }
 }
 
 /// Get the id of a static method by it's name and type.
 /// Unsafe, because it's possible to pass an incorrect result.
-unsafe fn from_object_method_call_result<'env, Out: FromObject<'env>>(
+unsafe fn from_object_method_call_result<'env, Out: JavaClassType<'env>>(
     env: &'env JniEnv<'env>,
     result: jni_sys::jobject,
 ) -> JavaResult<'env, Out> {
     match get_and_clear_exception_if_thrown(env) {
         // Safe because arguments are ensured to be the correct by construction.
-        None => Ok(Out::__from_object(Object::__from_jni(env, result))),
+        None => Ok(Out::from_object(Object::from_jni(env, result))),
         Some(exception) => Err(exception),
     }
 }
@@ -110,7 +110,7 @@ pub unsafe fn call_method<
     let class = object.cast().class(&token);
     let method_id = get_method_id::<_, _, T>(&class, name, token)?;
     // Safe because arguments are ensured to be the correct by construction.
-    let result = Out::__JniType::call_method(object.cast(), method_id, arguments);
+    let result = Out::JniType::call_method(object.cast(), method_id, arguments);
     from_method_call_result(object.cast().env(), result)
 }
 
@@ -317,11 +317,11 @@ pub unsafe fn call_static_method<
     arguments: In,
     token: &NoException<'env>,
 ) -> JavaResult<'env, Out> {
-    let signature = Class::__signature();
+    let signature = Class::signature();
     let class = self::Class::find(env, &signature[1..signature.len() - 1], token)?;
     let method_id = get_static_method_id::<_, _, T>(&class, name, token)?;
     // Safe because arguments are ensured to be the correct by construction.
-    let result = Out::__JniType::call_static_method(&class, method_id, arguments);
+    let result = Out::JniType::call_static_method(&class, method_id, arguments);
     from_method_call_result(env, result)
 }
 
@@ -546,7 +546,7 @@ pub unsafe fn call_constructor<
     arguments: In,
     token: &NoException<'env>,
 ) -> JavaResult<'env, Class> {
-    let signature = Class::__signature();
+    let signature = Class::signature();
     let class = self::Class::find(env, &signature[1..signature.len() - 1], token)?;
     let method_id = get_method_id::<_, _, T>(&class, "<init>", token)?;
     // Safe because arguments are ensured to be the correct by construction.

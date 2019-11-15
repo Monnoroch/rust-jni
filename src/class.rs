@@ -7,7 +7,7 @@ use crate::object::Object;
 use crate::result::JavaResult;
 use crate::string::String;
 use crate::token::{from_nullable, NoException};
-use crate::traits::{Cast, FromJni, FromObject, JavaType, ToJni};
+use crate::traits::{Cast, FromJni, JavaClassType, ToJni};
 use jni_sys;
 use std::fmt;
 use std::os::raw::c_char;
@@ -83,7 +83,7 @@ impl<'env> Class<'env> {
             None
         } else {
             // Safe because the argument is ensured to be a correct reference.
-            Some(unsafe { Self::__from_jni(self.env(), raw_java_class) })
+            Some(unsafe { Self::from_jni(self.env(), raw_java_class) })
         }
     }
 
@@ -110,7 +110,7 @@ impl<'env> Class<'env> {
     /// Unsafe because the argument mught not be a valid class reference.
     unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, raw_class: jni_sys::jclass) -> Class<'a> {
         Class {
-            object: Object::__from_jni(env, raw_class as jni_sys::jobject),
+            object: Object::from_jni(env, raw_class as jni_sys::jobject),
         }
     }
 }

@@ -7,7 +7,7 @@ use crate::object::test_object;
 use crate::object::Object;
 use crate::result::JavaResult;
 use crate::token::{from_nullable, NoException};
-use crate::traits::{Cast, FromJni, FromObject, JavaType, ToJni};
+use crate::traits::{Cast, FromJni, JavaClassType, ToJni};
 use jni_sys;
 use std;
 use std::fmt;
@@ -124,7 +124,7 @@ impl<'env> String<'env> {
     /// Unsafe because an incorrect object reference can be passed.
     unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, raw_string: jni_sys::jstring) -> String<'a> {
         String {
-            object: Object::__from_jni(env, raw_string as jni_sys::jobject),
+            object: Object::from_jni(env, raw_string as jni_sys::jobject),
         }
     }
 }
