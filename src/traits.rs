@@ -1,9 +1,7 @@
-use crate::jni_types::JniType;
-use crate::jni_types::JniArgumentType;
-
 use crate::env::JniEnv;
+use crate::jni_types::JniArgumentType;
+use crate::jni_types::JniType;
 use crate::object::Object;
-
 use jni_sys;
 use std;
 

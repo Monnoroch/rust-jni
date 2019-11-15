@@ -1,11 +1,12 @@
 use crate::class::Class;
 use crate::env::JniEnv;
 use crate::java_string::*;
+use crate::jni_types::JniType;
+use crate::jni_types::ToJniTuple;
 use crate::object::Object;
-use crate::primitives::ToJniTuple;
 use crate::result::JavaResult;
 use crate::token::{from_nullable, get_and_clear_exception_if_thrown, NoException};
-use crate::traits::{Cast, FromJni, JavaClassType, JavaMethodSignature, JniType};
+use crate::traits::{Cast, FromJni, JavaClassType, JavaMethodSignature};
 use jni_sys;
 use std::os::raw::c_char;
 

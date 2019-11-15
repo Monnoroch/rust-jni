@@ -72,6 +72,14 @@ mod method_signature_tests {
     }
 
     #[test]
+    fn non_primitives_borrowed() {
+        assert_eq!(
+            <for<'a> fn(&Object<'a>) -> Class<'a>>::__signature(),
+            "(Ljava/lang/Object;)Ljava/lang/Class;"
+        );
+    }
+
+    #[test]
     fn many_arguments() {
         assert_eq!(
             <fn(i32, f64, u8, f64, bool, i16, i64, i32, i32, i32, i32, char) -> bool>::__signature(

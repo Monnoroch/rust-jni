@@ -1,9 +1,10 @@
 use crate::env::JniEnv;
 use crate::error::JniError;
 use crate::java_string::*;
+use crate::jni_types::{JniArgumentType, JniType};
 use crate::result::JavaResult;
 use crate::token::NoException;
-use crate::traits::{FromJni, JniArgumentType, JniType};
+use crate::traits::FromJni;
 use crate::vm::JavaVMRef;
 use jni_sys;
 use std::panic;

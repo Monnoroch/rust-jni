@@ -24,6 +24,7 @@ mod generate;
 mod init_arguments;
 mod java_string;
 mod jni_bool;
+mod jni_types;
 mod method_calls;
 mod methods;
 mod native_method;
@@ -36,7 +37,6 @@ mod token;
 mod traits;
 mod version;
 mod vm;
-mod jni_types;
 
 pub use attach_arguments::AttachArguments;
 pub use env::JniEnv;
