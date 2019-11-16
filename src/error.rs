@@ -14,7 +14,7 @@ pub enum JniError {
     NotEnoughMemory,
     /// Returned when trying to create a new Java VM when
     /// one already exists in the current process.
-    /// Creating multiple Java VMs in a single process is not supported.Unknown
+    /// Creating multiple Java VMs in a single process is not supported.
     /// See [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
     /// for more details.
     VmExists,

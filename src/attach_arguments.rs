@@ -45,14 +45,14 @@ impl AttachArguments {
         }
     }
 
-    /// Return the JNI version these arguments will request when attaching a thread to a Java VM.
+    /// Return the JNI version to request when attaching a thread to a Java VM.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
     pub fn version(&self) -> JniVersion {
         self.version
     }
 
-    /// Return the JNI version these arguments will request when attaching a thread to a Java VM.
+    /// Return the JNI thread name to request when attaching a thread to a Java VM.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#attachcurrentthread)
     pub fn thread_name(&self) -> &Option<String> {

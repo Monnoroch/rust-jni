@@ -16,78 +16,122 @@ include!("call_jni_method.rs");
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#interface-function-table)
 ///
 /// # Examples
+/// The best way to obtain a [`&JniEnv`](struct.JniEnv.html) is to attach the current thread with the
+/// [`with_attached`](struct.JavaVM.html#method.with_attached) method:
 /// ```
-/// use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
+/// use rust_jni::*;
 /// use std::ptr;
 ///
-/// let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
+/// let init_arguments = InitArguments::default();
 /// let vm = JavaVM::create(&init_arguments).unwrap();
-/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
-/// unsafe {
-///     assert_ne!(env.raw_env(), ptr::null_mut());
-/// }
+/// let _ = vm.with_attached(
+///     &AttachArguments::new(init_arguments.version()),
+///     |env: &JniEnv, token: NoException| {
+///         assert_ne!(unsafe { env.raw_env() }, ptr::null_mut());
+///         ((), token)
+///     },
+/// );
 /// ```
-/// [`JniEnv`](struct.JniEnv.html) is
-/// [`!Send`](https://doc.rust-lang.org/std/marker/trait.Send.html). It means it can't be passed
-/// between threads:
+/// The method also provides a [`NoException`](struct.NoException.html) token. See more about exception
+/// handling in [`NoException`](struct.NoException.html) documentation.
+///
+/// If ownership of the [`JniEnv`](struct.JniEnv.html) is required it can be obtained by
+/// [`attach`](struct.JavaVM.html#method.attach)-ing the current thread manually:
+/// ```
+/// # use rust_jni::*;
+/// # use std::ptr;
+/// #
+/// # let init_arguments = InitArguments::default();
+/// # let vm = JavaVM::create(&init_arguments).unwrap();
+/// let env = vm
+///     .attach(&AttachArguments::new(init_arguments.version()))
+///     .unwrap();
+/// assert_ne!(unsafe { env.raw_env() }, ptr::null_mut());
+/// ```
+/// [`JniEnv`](struct.JniEnv.html) can't outlive the parent [`JavaVM`](struct.JavaVM.html):
 /// ```compile_fail
-/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
+/// # use rust_jni::*;
+/// #
+/// # let init_arguments = InitArguments::default();
+/// let env = {
+///     let vm = JavaVM::create(&init_arguments).unwrap();
+///     vm
+///         .attach(&AttachArguments::new(init_arguments.version()))
+///         .unwrap()
+/// }; // doesn't compile!
+/// ```
+/// [`JniEnv`](struct.JniEnv.html) represents a thread attached to the Java VM and thus there
+/// can't be two [`JniEnv`](struct.JniEnv.html)-s per thread.
+/// [`attach`](struct.JavaVM.html#methods.attach) will panic if you attempt to do so:
+/// ```should_panic
+/// # use rust_jni::*;
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
-/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
-/// {
-///     ::std::thread::spawn(move || {
-///         unsafe { env.raw_env() }; // doesn't compile!
-///     });
-/// }
+/// let env = vm
+///     .attach(&AttachArguments::new(init_arguments.version()))
+///     .unwrap();
+/// let env = vm
+///     .attach(&AttachArguments::new(init_arguments.version()))
+///     .unwrap(); // panics!
 /// ```
-/// Instead, you need to attach each new thread to the VM:
+/// Note how this error is impossible when using [`with_attached`](struct.JavaVM.html#method.with_attached)
+/// to get a [`&JniEnv`](struct.JniEnv.html) since it manages the [`JniEnv`](struct.JniEnv.html) automatically.
+///
+/// Since [`JniEnv`](struct.JniEnv.html) represents a thread attached to the Java VM, it is
+/// [`!Send`](https://doc.rust-lang.org/std/marker/trait.Send.html) which means it can't be passed between threads:
+/// ```compile_fail
+/// # use rust_jni::*;
+/// use std::thread;
+///
+/// # let init_arguments = InitArguments::default();
+/// # let vm = JavaVM::create(&init_arguments).unwrap();
+/// let env = vm
+///     .attach(&AttachArguments::new(init_arguments.version()))
+///     .unwrap();
+/// thread::spawn(move || {
+///     unsafe { env.raw_env() }; // doesn't compile!
+/// });
 /// ```
-/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
+/// It is also [`!Sync`](https://doc.rust-lang.org/std/marker/trait.Sync.html) which means it can't be
+/// shared between threads:
+/// ```compile_fail
+/// # use rust_jni::*;
+/// use std::thread;
+///
+/// # let init_arguments = InitArguments::default();
+/// # let vm = JavaVM::create(&init_arguments).unwrap();
+/// let env = vm
+///     .attach(&AttachArguments::new(init_arguments.version()))
+///     .unwrap();
+/// thread::spawn(|| {
+///     unsafe { env.raw_env() }; // doesn't compile!
+/// });
+/// ```
+/// Instead, you need to [`attach`](struct.JavaVM.html#method.attach) each new thread to the VM:
+/// ```
+/// # use rust_jni::*;
 /// # use std::ptr;
+/// # use std::thread;
 /// use std::sync::Arc;
 ///
-/// let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
+/// # let init_arguments = InitArguments::default();
 /// let vm = Arc::new(JavaVM::create(&init_arguments).unwrap());
-/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
+/// let env = vm
+///     .attach(&AttachArguments::new(init_arguments.version()))
+///     .unwrap();
 /// {
 ///     let vm = vm.clone();
-///     ::std::thread::spawn(move || {
-///         let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
-///         unsafe {
-///             assert_ne!(env.raw_env(), ptr::null_mut());
-///         }
+///     thread::spawn(move || {
+///         let env = vm
+///             .attach(&AttachArguments::new(init_arguments.version()))
+///             .unwrap();
+///         assert_ne!(unsafe { env.raw_env() }, ptr::null_mut());
 ///     });
 /// }
-/// unsafe {
-///     assert_ne!(env.raw_env(), ptr::null_mut());
-/// }
+/// assert_ne!(unsafe { env.raw_env() }, ptr::null_mut());
 /// ```
 /// The thread is automatically detached once the [`JniEnv`](struct.JniEnv.html) is dropped.
-///
-/// [`JniEnv`](struct.JniEnv.html) can't outlive the parent [`JavaVM`](struct.JavaVM.html).
-/// This code is not allowed:
-/// ```compile_fail
-/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
-/// #
-/// let env = {
-///     let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
-///     let vm = JavaVM::create(&init_arguments).unwrap();
-///     vm.attach(&AttachArguments::new(init_arguments.version())).unwrap() // doesn't compile!
-/// };
-/// ```
-/// [`JniEnv`](struct.JniEnv.html) represents a thread, attached to the Java VM. Thus there
-/// can't be two [`JniEnv`](struct.JniEnv.html)-s per thread.
-/// [`JavaVM::attach`](struct.JavaVM.html#methods.attach) will panic if you attempt to do so:
-/// ```should_panic
-/// # use rust_jni::{AttachArguments, InitArguments, JavaVM, JniEnv, JniVersion};
-/// #
-/// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
-/// # let vm = JavaVM::create(&init_arguments).unwrap();
-/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap();
-/// let env = vm.attach(&AttachArguments::new(init_arguments.version())).unwrap(); // panics!
-/// ```
 // TODO: docs about panicing on detach when there's a pending exception.
 #[derive(Debug)]
 pub struct JniEnv<'this> {
@@ -123,7 +167,7 @@ impl<'this> JniEnv<'this> {
     /// Read more about tokens in [`NoException`](struct.NoException.html) documentation.
     // TODO(#22): Return a token with the env if possible:
     // https://stackoverflow.com/questions/50891977/can-i-return-a-value-and-a-reference-to-it-from-a-function.
-    pub fn token(&self) -> NoException {
+    pub fn token<'a>(&'a self) -> NoException<'a> {
         if !*self.has_token.borrow() {
             panic!("Trying to obtain a second `NoException` token from the `JniEnv` value.");
         } else if self.has_exception() {

@@ -9,7 +9,9 @@ use std;
 use std::os::raw::c_void;
 use std::ptr;
 
-/// A struct for interacting with the Java VM.
+/// A struct for interacting with the Java VM without owning it.
+///
+/// See more documentation in [`JavaVM`](struct.JavaVM.html).
 ///
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
@@ -75,13 +77,13 @@ mod java_vm_ref_tests {
     }
 }
 
-/// A struct for interacting with the Java VM.
+/// A struct for interacting with the Java VM. This struct owns the VM and will destroy it upon being dropped.
 ///
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
 ///
 /// # Examples
 /// ```
-/// use rust_jni::{InitArguments, JavaVM, JniVersion, JvmOption, JvmVerboseOption};
+/// use rust_jni::*;
 /// use std::ptr;
 ///
 /// let options = InitArguments::get_default(JniVersion::V8).unwrap()
@@ -89,34 +91,27 @@ mod java_vm_ref_tests {
 ///     .with_option(JvmOption::Verbose(JvmVerboseOption::Jni));
 ///
 /// let vm = JavaVM::create(&options).unwrap();
-/// unsafe {
-///     assert_ne!(vm.raw_jvm(), ptr::null_mut());
-/// }
+/// assert_ne!(unsafe { vm.raw_jvm() }, ptr::null_mut());
 ///
 /// let vms = JavaVM::list().unwrap();
 /// unsafe {
 ///     assert_eq!(vms[0].raw_jvm(), vm.raw_jvm());
 /// }
 /// ```
-/// `JavaVM` is `Send + Sync`. It means it can be shared between threads.
+/// [`JavaVM`](struct.JavaVM.html) is `Send + Sync`. It means it can be shared between threads.
 /// ```
-/// use rust_jni::{InitArguments, JavaVM, JniVersion};
+/// use rust_jni::*;
 /// use std::ptr;
 /// use std::sync::Arc;
 ///
-/// let vm =
-///     Arc::new(JavaVM::create(&InitArguments::get_default(JniVersion::V8).unwrap()).unwrap());
+/// let vm = Arc::new(JavaVM::create(&InitArguments::default()).unwrap());
 /// {
 ///     let vm = vm.clone();
 ///     ::std::thread::spawn(move || {
-///         unsafe {
-///             assert_ne!(vm.raw_jvm(), ptr::null_mut());
-///         }
+///         assert_ne!(unsafe { vm.raw_jvm() }, ptr::null_mut());
 ///     });
 /// }
-/// unsafe {
-///     assert_ne!(vm.raw_jvm(), ptr::null_mut());
-/// }
+/// assert_ne!(unsafe { vm.raw_jvm() }, ptr::null_mut());
 /// ```
 ///
 /// The main purpose of [`JavaVM`](struct.JavaVM.html) is to attach threads by provisioning
@@ -131,7 +126,9 @@ impl JavaVM {
     ///
     /// [Only one](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
     /// Java VM per process is supported. When called for the second time will return an error.
-    /// This is the case even if the object is dropped.
+    ///
+    /// Currently this is the case even if the object is dropped.
+    /// TODO(monnoroch): figure out why and document it.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_createjavavm)
     pub fn create(arguments: &InitArguments) -> Result<Self, JniError> {
@@ -177,6 +174,8 @@ impl JavaVM {
     }
 
     /// Get a list of created Java VMs.
+    ///
+    /// Returns a list of non-owning [`JavaVMRef`](struct.JavaVMRef.html)-s.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#jni_getcreatedjavavms)
     pub fn list() -> Result<Vec<JavaVMRef>, JniError> {
@@ -239,7 +238,10 @@ impl JavaVM {
     pub fn with_attached<'vm, T>(
         &'vm self,
         arguments: &AttachArguments,
-        closure: impl for<'token> FnOnce(&JniEnv, NoException<'token>) -> (T, NoException<'token>),
+        closure: impl for<'token> FnOnce(
+            &'token JniEnv<'token>,
+            NoException<'token>,
+        ) -> (T, NoException<'token>),
     ) -> Result<T, JniError> {
         let env = self.attach(arguments)?;
         // Safe because we work with a freshly created JniEnv that doens't have an exception in flight.
@@ -272,7 +274,7 @@ impl JavaVM {
     /// Returns a [`JniEnv`](struct.JniEnv.html) instance for this thread.
     ///
     /// Exception-safety is based on the [`NoException`](struct.NoException.html) token and guaranteed in run time.
-    /// To have compile-time guarantees use `with_attached` instead.
+    /// To have compile-time guarantees use [`with_attached`](struct.JavaVM.html#method.with_attached) instead.
     ///
     /// Use this method only when ownership of the [`JniEnv`](struct.JniEnv.html) is required.
     ///
@@ -289,7 +291,7 @@ impl JavaVM {
     /// Returns a [`JniEnv`](struct.JniEnv.html) instance for this thread.
     ///
     /// Exception-safety is based on the [`NoException`](struct.NoException.html) token and guaranteed in run time.
-    /// To have compile-time guarantees use `with_attached_daemon` instead.
+    /// To have compile-time guarantees use [`with_attached_daemon`](struct.JavaVM.html#method.with_attached_daemon) instead.
     ///
     /// Use this method only when ownership of the [`JniEnv`](struct.JniEnv.html) is required.
     ///
@@ -369,10 +371,10 @@ impl JavaVM {
 }
 
 /// Implement [`AsRef`](https://doc.rust-lang.org/std/convert/trait.AsRef.html)
-/// for [`JavaVM`](struct.JavaVm.html) to cast it to a reference to
+/// for [`JavaVM`](struct.JavaVM.html) to cast it to a reference to
 /// [`JavaVMRef`](struct.JavaVMRef.html).
 ///
-/// As [`JavaVM`](struct.JavaVm.html) will be destroyed when dropped, references to it's
+/// As [`JavaVM`](struct.JavaVM.html) will be destroyed when dropped, references to it's
 /// [`JavaVMRef`-s](struct.JavaVMRef.html) should not outlive it.
 /// This impl is not very useful and mostly serves as the documentation of this fact.
 impl AsRef<JavaVMRef> for JavaVM {

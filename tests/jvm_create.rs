@@ -5,7 +5,7 @@ mod create_jvm {
 
     #[test]
     fn create_default() {
-        let vm = JavaVM::create(&InitArguments::get_default(JniVersion::V8).unwrap()).unwrap();
+        let vm = JavaVM::create(&InitArguments::default()).unwrap();
         unsafe { assert_ne!(vm.raw_jvm(), ptr::null_mut()) };
 
         let vms = JavaVM::list().unwrap();
