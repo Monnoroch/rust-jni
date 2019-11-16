@@ -26,6 +26,7 @@ unsafe fn get_method_id<
 ) -> JavaResult<'env, jni_sys::jmethodID> {
     let name = to_java_string(name);
     let signature = to_java_string(&T::__signature());
+    assert!(!class.is_null(), "Can't call GetMethodID on a null class.");
     // Safe because arguments are ensured to be the correct by construction and because
     // `GetMethodID` throws an exception before returning `null`.
     call_nullable_jni_method!(
@@ -52,6 +53,10 @@ unsafe fn get_static_method_id<
 ) -> JavaResult<'env, jni_sys::jmethodID> {
     let name = to_java_string(name);
     let signature = to_java_string(&T::__signature());
+    assert!(
+        !class.is_null(),
+        "Can't call GetStaticMethodID on a null class."
+    );
     // Safe because arguments are ensured to be the correct by construction and because
     // `GetStaticMethodID` throws an exception before returning `null`.
     call_nullable_jni_method!(

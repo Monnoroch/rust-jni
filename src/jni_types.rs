@@ -601,6 +601,7 @@ macro_rules! jni_method_call {
         ) -> $return_type {
             #[allow(non_snake_case)]
             let ($($argument,)*) = arguments;
+            assert!(!object.is_null(), concat!("Can't call ", stringify!($method), " on a null ", stringify!($type), "."));
             call_jni_method!(
                 object.env(),
                 $method,

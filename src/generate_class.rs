@@ -255,6 +255,22 @@ macro_rules! java_class {
                     .map(|object| Self { object })
             }
 
+            /// Create a null
+            #[doc = $link]
+            ///.
+            pub fn null(env: &'env JniEnv<'env>) -> Self {
+                <Self as JavaClassType>::from_object(Object::null(env))
+            }
+
+            /// Create a
+            #[doc = $link]
+            /// that is guaranteed to be non null.
+            /// Retuns [`None`](https://doc.rust-lang.org/stable/std/option/enum.Option.html#variant.None)
+            /// when it is null.
+            pub fn non_null(self) -> Option<Self> {
+                self.object.non_null().map(|object| Self { object })
+            }
+
             /// Convert the object to a string.
             ///
             /// [`Object::toString` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#toString())
@@ -374,6 +390,42 @@ macro_rules! generate_object_tests {
                 assert_eq!(object.env().raw_env(), jni_env);
                 mem::forget(object);
             }
+        }
+
+        #[test]
+        fn null() {
+            let vm = test_vm(ptr::null_mut());
+            let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
+            let env = test_env(&vm, jni_env);
+            unsafe {
+                let object = $class::null(&env);
+                assert_eq!(object.raw_object(), ptr::null_mut());
+                assert_eq!(object.env().raw_env(), jni_env);
+                mem::forget(object);
+            }
+        }
+
+        #[test]
+        fn non_null() {
+            let vm = test_vm(ptr::null_mut());
+            let env = test_env(&vm, ptr::null_mut());
+            let raw_object = 0x91011 as jni_sys::jobject;
+            unsafe {
+                let object = $class::from_object(test_object(&env, raw_object)).non_null().unwrap();
+                assert_eq!(object.raw_object(), raw_object);
+                mem::forget(object);
+            }
+        }
+
+        #[test]
+        fn non_null_null() {
+            let calls = test_raw_jni_env!(vec![JniCall::DeleteLocalRef(DeleteLocalRef {
+                object: ptr::null_mut(),
+            })]);
+            let vm = test_vm(ptr::null_mut());
+            let env = test_env(&vm, calls.env);
+            let object = $class::null(&env).non_null();
+            assert_eq!(object, None);
         }
 
         #[test]

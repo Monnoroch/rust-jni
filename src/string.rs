@@ -66,6 +66,10 @@ impl<'env> String<'env> {
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getstringlength)
     pub fn len(&self, _token: &NoException) -> usize {
+        assert!(
+            !self.is_null(),
+            "Can't call GetStringLength on a null string."
+        );
         // Safe because arguments are ensured to be the correct by construction.
         let length = unsafe {
             call_jni_method!(
@@ -81,6 +85,10 @@ impl<'env> String<'env> {
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getstringutflength)
     pub fn size(&self, _token: &NoException) -> usize {
+        assert!(
+            !self.is_null(),
+            "Can't call GetStringUTFLength on a null string."
+        );
         // Safe because arguments are ensured to be the correct by construction.
         let size = unsafe {
             call_jni_method!(
@@ -106,6 +114,10 @@ impl<'env> String<'env> {
 
         let size = self.size(token) + 1; // +1 for the '\0' byte.
         let mut buffer: Vec<u8> = Vec::with_capacity(size);
+        assert!(
+            !self.is_null(),
+            "Can't call GetStringUTFRegion on a null string."
+        );
         // Safe because arguments are ensured to be the correct by construction.
         unsafe {
             call_jni_method!(

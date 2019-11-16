@@ -12,6 +12,7 @@ pub fn test_object<'env>(
     env: &JniEnv<'env>,
     token: &NoException,
 ) {
+    assert!(!object.is_null());
     assert!(object.is_same_as(object, &token));
     assert_eq!(object, object);
     assert!(object.clone(&token).unwrap().is_same_as(&object, &token));

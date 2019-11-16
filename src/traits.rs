@@ -2,6 +2,7 @@ use crate::env::JniEnv;
 use crate::jni_types::private::{JniArgumentType, JniType};
 use crate::object::Object;
 use jni_sys;
+use std::ptr;
 
 pub trait JavaClassType<'env> {
     /// Compute the signature for this Java type.
@@ -37,6 +38,23 @@ pub trait ToJni {
     ///
     /// Should only be implemented and used by generated code.
     unsafe fn to_jni(&self) -> Self::JniType;
+}
+
+impl<'a, T> ToJni for Option<T>
+where
+    T: ToJni<JniType = jni_sys::jobject> + JavaClassType<'a>,
+{
+    type JniType = jni_sys::jobject;
+
+    fn signature() -> &'static str {
+        <T as JavaClassType>::signature()
+    }
+    /// Map the value to a JNI type value.
+    unsafe fn to_jni(&self) -> jni_sys::jobject {
+        self.as_ref()
+            .map(|value| value.to_jni())
+            .unwrap_or(ptr::null_mut())
+    }
 }
 
 /// Make references mappable to JNI types of their referenced types.

@@ -76,6 +76,7 @@ impl<'env> Class<'env> {
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getsuperclass)
     pub fn parent(&self, _token: &NoException) -> Option<Class<'env>> {
+        assert!(!self.is_null(), "Can't call GetSuperclass on a null class.");
         // Safe because the argument is ensured to be correct references by construction.
         let raw_java_class =
             unsafe { call_jni_method!(self.env(), GetSuperclass, self.raw_object()) };
@@ -95,6 +96,10 @@ impl<'env> Class<'env> {
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#isassignablefrom)
     pub fn is_subtype_of(&self, class: &Class, _token: &NoException) -> bool {
+        assert!(
+            !self.is_null() && !class.is_null(),
+            "Can't call IsAssignableFrom on a null class."
+        );
         // Safe because arguments are ensured to be the correct by construction.
         let assignable = unsafe {
             call_jni_method!(

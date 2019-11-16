@@ -33,6 +33,7 @@ impl<'env> Throwable<'env> {
     where
         'env: 'token,
     {
+        assert!(!self.is_null(), "Can't call Throw on a null throwable.");
         // Safe because the argument is ensured to be correct references by construction.
         let error = JniError::from_raw(unsafe {
             call_jni_method!(self.env(), Throw, self.raw_object() as jni_sys::jthrowable)

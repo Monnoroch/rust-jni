@@ -47,6 +47,10 @@ impl<'env> Object<'env> {
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getobjectclass)
     pub fn class(&self, _token: &NoException) -> Class<'env> {
+        assert!(
+            !self.is_null(),
+            "Can't call GetObjectClass on a null object."
+        );
         // Safe because arguments are ensured to be correct references by construction.
         let raw_java_class = unsafe { call_jni_method!(self.env, GetObjectClass, self.raw_object) };
         if raw_java_class == ptr::null_mut() {
@@ -76,6 +80,7 @@ impl<'env> Object<'env> {
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#isinstanceof)
     pub fn is_instance_of(&self, class: &Class, _token: &NoException) -> bool {
+        assert!(!class.is_null(), "Can't call IsInstanceOf on a null class.");
         // Safe because arguments are ensured to be correct references by construction.
         let is_instance = unsafe {
             call_jni_method!(
@@ -105,6 +110,31 @@ impl<'env> Object<'env> {
             unsafe { call_nullable_jni_method!(self.env, token, NewLocalRef, self.raw_object)? };
         // Safe because the argument is a valid class reference.
         Ok(unsafe { Self::from_raw(self.env, raw_object) })
+    }
+
+    /// Create a null [`Object`](struct.Object.html).
+    pub fn null<'a>(env: &'env JniEnv<'env>) -> Object<'env> {
+        Self {
+            env,
+            raw_object: ptr::null_mut(),
+        }
+    }
+
+    /// Check if the [`Object`](struct.Object.html) is null.
+    pub fn is_null(&self) -> bool {
+        // Safe because we're not dereferencing the pointer.
+        unsafe { self.raw_object() == ptr::null_mut() }
+    }
+
+    /// Create an [`Object`](struct.Object.html) that is guaranteed to be non null.
+    /// Retuns [`None`](https://doc.rust-lang.org/stable/std/option/enum.Option.html#variant.None)
+    /// when it is null.
+    pub fn non_null(self) -> Option<Self> {
+        if self.is_null() {
+            None
+        } else {
+            Some(self)
+        }
     }
 
     /// Construct from a raw pointer. Unsafe because an invalid pointer may be passed
@@ -148,6 +178,7 @@ impl<'env> JavaClassType<'env> for Object<'env> {
 impl<'env> Drop for Object<'env> {
     fn drop(&mut self) {
         // Safe because the argument is ensured to be correct references by construction.
+        // DeleteLocalRef can handle nulls without any issues.
         unsafe {
             call_jni_method!(self.env, DeleteLocalRef, self.raw_object);
         }
@@ -311,6 +342,25 @@ mod object_tests {
         let env = test_env(&vm, ptr::null_mut());
         let object = test_value(&env, ptr::null_mut());
         assert_eq!(&object as *const _, object.cast() as *const _);
+        mem::forget(object);
+    }
+
+    #[test]
+    fn is_null() {
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, ptr::null_mut());
+        let object = Object::null(&env);
+        assert!(object.is_null());
+        mem::forget(object);
+    }
+
+    #[test]
+    fn is_not_null() {
+        let vm = test_vm(ptr::null_mut());
+        let env = test_env(&vm, ptr::null_mut());
+        let raw_object = 0x91011 as jni_sys::jobject;
+        let object = test_object(&env, raw_object);
+        assert!(!object.is_null());
         mem::forget(object);
     }
 
