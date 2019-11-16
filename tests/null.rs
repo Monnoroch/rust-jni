@@ -21,7 +21,5 @@ mod null {
         }
         assert!(null.is_null());
         assert!(null.is_same_as(&Object::null(&env), &token));
-
-        let null_pointer_exception = null.to_string(&token).unwrap_err();
     }
 }
