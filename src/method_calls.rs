@@ -64,8 +64,6 @@ unsafe fn get_static_method_id<
     )
 }
 
-/// Get the id of a static method by it's name and type.
-/// Unsafe, because it's possible to pass an incorrect result.
 unsafe fn from_method_call_result<'env, Out: FromJni<'env>>(
     env: &'env JniEnv<'env>,
     result: Out::JniType,
@@ -77,8 +75,6 @@ unsafe fn from_method_call_result<'env, Out: FromJni<'env>>(
     }
 }
 
-/// Get the id of a static method by it's name and type.
-/// Unsafe, because it's possible to pass an incorrect result.
 unsafe fn from_object_method_call_result<'env, Out: JavaClassType<'env>>(
     env: &'env JniEnv<'env>,
     result: jni_sys::jobject,

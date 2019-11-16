@@ -53,12 +53,24 @@ java_class!(
     Throwable,
     "[`Throwable`](struct.Throwable.html)",
     constructors = (
+        doc = "Create a new [`Throwable`](struct.Throwable.html).",
+        link = "[`Throwable()` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>())",
+        new(),
+
         doc = "Create a new [`Throwable`](struct.Throwable.html) with a message.",
         link = "[`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.String))",
-        new(message: &String<'env>),
+        new_with_message(message: &String<'env>),
+
+        doc = "Create a new [`Throwable`](struct.Throwable.html) with a cause.",
+        link = "[`Throwable(Throwable)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.Throwable))",
+        new_with_cause(cause: &Throwable<'env>),
+
+        doc = "Create a new [`Throwable`](struct.Throwable.html) with a message and a cause.",
+        link = "[`Throwable(String, Throwable)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.String,java.lang.Throwable))",
+        new_with_message_and_cause(message: &String<'env>, cause: &Throwable<'env>),
     ),
     methods = (
-        doc = "Get the exception message.",
+        doc = "Returns a short description of this [`Throwable`](struct.Throwable.html).",
         link = "[`Throwable::getMessage` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#getMessage()).",
         java_name = "getMessage",
         get_message() -> String<'env>,

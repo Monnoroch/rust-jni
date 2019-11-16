@@ -15,7 +15,7 @@ mod throwable {
             .unwrap();
         let token = env.token();
 
-        let throwable = java::lang::Throwable::new(
+        let throwable = java::lang::Throwable::new_with_message(
             &env,
             &java::lang::String::new(&env, "test-string", &token).unwrap(),
             &token,

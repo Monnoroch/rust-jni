@@ -52,7 +52,10 @@ mod native_method_env {
                     assert_eq!(native_env.raw_env(), raw_env);
                     assert_eq!(native_env.version(), init_arguments.version());
                     let message = java::lang::String::new(native_env, message, &token).unwrap();
-                    Err(java::lang::Throwable::new(native_env, &message, &token).unwrap())
+                    Err(
+                        java::lang::Throwable::new_with_message(native_env, &message, &token)
+                            .unwrap(),
+                    )
                 });
             assert_eq!(actual_result, i32::default());
             check_exception_message(&env, message, &token);

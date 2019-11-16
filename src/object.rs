@@ -124,8 +124,9 @@ object_java_class!(
         link = "[`Object::toString` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#toString())",
         java_name = "toString",
         to_string() -> String<'env>,
+
         doc = "Compare to another Java object.",
-        link = "[`Object::equals`](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#equals(java.lang.Object))",
+        link = "[`Object::equals` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#equals(java.lang.Object))",
         java_name = "equals",
         equals(other: &Object) -> bool,
     ),
