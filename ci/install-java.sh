@@ -1,6 +1,6 @@
 set -e
 
-if [[ "${JDK}" != "java-1.8.0-openjdk-amd64" ]]; then
+if [[ "${JDK}" != "openjdk8" ]]; then
 	exit 0
 fi
 
