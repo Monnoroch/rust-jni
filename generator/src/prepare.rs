@@ -247,7 +247,8 @@ pub fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
             match definition {
                 JavaDefinitionKind::Class(class) => {
                     let JavaClass { extends, .. } = class;
-                    extends_map.insert(name, extends.unwrap_or(JavaName(quote!{java lang Object})));
+                    extends_map
+                        .insert(name, extends.unwrap_or(JavaName(quote! {java lang Object})));
                 }
                 _ => unreachable!(),
             }
@@ -268,7 +269,8 @@ pub fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
             match definition {
                 JavaDefinitionMetadataKind::Class(class) => {
                     let JavaClassMetadata { extends, .. } = class;
-                    extends_map.insert(name, extends.unwrap_or(JavaName(quote!{java lang Object})));
+                    extends_map
+                        .insert(name, extends.unwrap_or(JavaName(quote! {java lang Object})));
                 }
                 _ => unreachable!(),
             }
@@ -360,7 +362,7 @@ pub fn to_generator_data(definitions: JavaDefinitions) -> GeneratorData {
                         let full_signature = Literal::string(&format!("L{};", string_signature));
                         let super_class = extends
                             .map(|name| name.with_double_colons())
-                            .unwrap_or(quote!{::java::lang::Object});
+                            .unwrap_or(quote! {::java::lang::Object});
                         let implements =
                             get_interfaces(&Some(name.clone()), &definitions.definitions);
                         let mut implements = implements
@@ -505,7 +507,7 @@ mod to_generator_data_tests {
                 metadata: Metadata {
                     definitions: vec![
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{c d test1}),
+                            name: JavaName(quote! {c d test1}),
                             definition: JavaDefinitionMetadataKind::Interface(
                                 JavaInterfaceMetadata {
                                     methods: vec![],
@@ -514,10 +516,10 @@ mod to_generator_data_tests {
                             ),
                         },
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{a b test2}),
+                            name: JavaName(quote! {a b test2}),
                             definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
                                 extends: None,
-                                implements: vec![JavaName(quote!{c d test1})],
+                                implements: vec![JavaName(quote! {c d test1})],
                             }),
                         },
                     ],
@@ -534,10 +536,10 @@ mod to_generator_data_tests {
         assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{a b test1}),
+                    name: JavaName(quote! {a b test1}),
                     public: false,
                     definition: JavaDefinitionKind::Class(JavaClass {
-                        extends: Some(JavaName(quote!{c d test2})),
+                        extends: Some(JavaName(quote! {c d test2})),
                         implements: vec![],
                         methods: vec![],
                         native_methods: vec![],
@@ -552,8 +554,8 @@ mod to_generator_data_tests {
                 definitions: vec![GeneratorDefinition::Class(generate::Class {
                     class: Ident::new("test1", Span::call_site()),
                     public: false,
-                    super_class: quote!{::c::d::test2},
-                    transitive_extends: vec![quote!{::c::d::test2}],
+                    super_class: quote! {::c::d::test2},
+                    transitive_extends: vec![quote! {::c::d::test2}],
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
@@ -572,7 +574,7 @@ mod to_generator_data_tests {
         assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{a b test1}),
+                    name: JavaName(quote! {a b test1}),
                     public: false,
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
@@ -590,8 +592,8 @@ mod to_generator_data_tests {
                 definitions: vec![GeneratorDefinition::Class(generate::Class {
                     class: Ident::new("test1", Span::call_site()),
                     public: false,
-                    super_class: quote!{::java::lang::Object},
-                    transitive_extends: vec![quote!{::java::lang::Object}],
+                    super_class: quote! {::java::lang::Object},
+                    transitive_extends: vec![quote! {::java::lang::Object}],
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
@@ -611,10 +613,10 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        name: JavaName(quote!{c d test2}),
+                        name: JavaName(quote! {c d test2}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
-                            extends: Some(JavaName(quote!{e f test3})),
+                            extends: Some(JavaName(quote! {e f test3})),
                             implements: vec![],
                             methods: vec![],
                             native_methods: vec![],
@@ -622,10 +624,10 @@ mod to_generator_data_tests {
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{a b test1}),
+                        name: JavaName(quote! {a b test1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
-                            extends: Some(JavaName(quote!{c d test2})),
+                            extends: Some(JavaName(quote! {c d test2})),
                             implements: vec![],
                             methods: vec![],
                             native_methods: vec![],
@@ -636,16 +638,16 @@ mod to_generator_data_tests {
                 metadata: Metadata {
                     definitions: vec![
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{e f test4}),
+                            name: JavaName(quote! {e f test4}),
                             definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
                                 extends: None,
                                 implements: vec![],
                             }),
                         },
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{e f test3}),
+                            name: JavaName(quote! {e f test3}),
                             definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
-                                extends: Some(JavaName(quote!{e f test4})),
+                                extends: Some(JavaName(quote! {e f test4})),
                                 implements: vec![],
                             }),
                         },
@@ -657,11 +659,11 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test2", Span::call_site()),
                         public: false,
-                        super_class: quote!{::e::f::test3},
+                        super_class: quote! {::e::f::test3},
                         transitive_extends: vec![
-                            quote!{::e::f::test3},
-                            quote!{::e::f::test4},
-                            quote!{::java::lang::Object},
+                            quote! {::e::f::test3},
+                            quote! {::e::f::test4},
+                            quote! {::java::lang::Object},
                         ],
                         implements: vec![],
                         signature: Literal::string("c/d/test2"),
@@ -675,12 +677,12 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test1", Span::call_site()),
                         public: false,
-                        super_class: quote!{::c::d::test2},
+                        super_class: quote! {::c::d::test2},
                         transitive_extends: vec![
-                            quote!{::c::d::test2},
-                            quote!{::e::f::test3},
-                            quote!{::e::f::test4},
-                            quote!{::java::lang::Object},
+                            quote! {::c::d::test2},
+                            quote! {::e::f::test3},
+                            quote! {::e::f::test4},
+                            quote! {::java::lang::Object},
                         ],
                         implements: vec![],
                         signature: Literal::string("a/b/test1"),
@@ -702,7 +704,7 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        name: JavaName(quote!{e f test4}),
+                        name: JavaName(quote! {e f test4}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
                             methods: vec![],
@@ -710,13 +712,13 @@ mod to_generator_data_tests {
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{a b test1}),
+                        name: JavaName(quote! {a b test1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
                             implements: vec![
-                                JavaName(quote!{e f test3}),
-                                JavaName(quote!{e f test4}),
+                                JavaName(quote! {e f test3}),
+                                JavaName(quote! {e f test4}),
                             ],
                             methods: vec![],
                             native_methods: vec![],
@@ -726,7 +728,7 @@ mod to_generator_data_tests {
                 ],
                 metadata: Metadata {
                     definitions: vec![JavaDefinitionMetadata {
-                        name: JavaName(quote!{e f test3}),
+                        name: JavaName(quote! {e f test3}),
                         definition: JavaDefinitionMetadataKind::Interface(JavaInterfaceMetadata {
                             extends: vec![],
                             methods: vec![],
@@ -745,15 +747,15 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test1", Span::call_site()),
                         public: false,
-                        super_class: quote!{::java::lang::Object},
-                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        super_class: quote! {::java::lang::Object},
+                        transitive_extends: vec![quote! {::java::lang::Object}],
                         implements: vec![
                             generate::InterfaceImplementation {
-                                interface: quote!{::e::f::test3},
+                                interface: quote! {::e::f::test3},
                                 methods: vec![],
                             },
                             generate::InterfaceImplementation {
-                                interface: quote!{::e::f::test4},
+                                interface: quote! {::e::f::test4},
                                 methods: vec![],
                             },
                         ],
@@ -776,19 +778,19 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        name: JavaName(quote!{e f test3}),
+                        name: JavaName(quote! {e f test3}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
                             methods: vec![],
-                            extends: vec![JavaName(quote!{e f test4})],
+                            extends: vec![JavaName(quote! {e f test4})],
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{a b test1}),
+                        name: JavaName(quote! {a b test1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
-                            implements: vec![JavaName(quote!{e f test3})],
+                            implements: vec![JavaName(quote! {e f test3})],
                             methods: vec![],
                             native_methods: vec![],
                             constructors: vec![],
@@ -798,7 +800,7 @@ mod to_generator_data_tests {
                 metadata: Metadata {
                     definitions: vec![
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{g h test5}),
+                            name: JavaName(quote! {g h test5}),
                             definition: JavaDefinitionMetadataKind::Interface(
                                 JavaInterfaceMetadata {
                                     methods: vec![],
@@ -807,11 +809,11 @@ mod to_generator_data_tests {
                             ),
                         },
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{e f test4}),
+                            name: JavaName(quote! {e f test4}),
                             definition: JavaDefinitionMetadataKind::Interface(
                                 JavaInterfaceMetadata {
                                     methods: vec![],
-                                    extends: vec![JavaName(quote!{g h test5})],
+                                    extends: vec![JavaName(quote! {g h test5})],
                                 },
                             ),
                         },
@@ -823,25 +825,25 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test3", Span::call_site()),
                         public: false,
-                        extends: vec![quote!{::e::f::test4}],
+                        extends: vec![quote! {::e::f::test4}],
                         methods: vec![],
                     }),
                     GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test1", Span::call_site()),
                         public: false,
-                        super_class: quote!{::java::lang::Object},
-                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        super_class: quote! {::java::lang::Object},
+                        transitive_extends: vec![quote! {::java::lang::Object}],
                         implements: vec![
                             generate::InterfaceImplementation {
-                                interface: quote!{::e::f::test3},
+                                interface: quote! {::e::f::test3},
                                 methods: vec![],
                             },
                             generate::InterfaceImplementation {
-                                interface: quote!{::e::f::test4},
+                                interface: quote! {::e::f::test4},
                                 methods: vec![],
                             },
                             generate::InterfaceImplementation {
-                                interface: quote!{::g::h::test5},
+                                interface: quote! {::g::h::test5},
                                 methods: vec![],
                             },
                         ],
@@ -864,7 +866,7 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        name: JavaName(quote!{g h test4}),
+                        name: JavaName(quote! {g h test4}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
                             methods: vec![],
@@ -872,21 +874,21 @@ mod to_generator_data_tests {
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{e f test3}),
+                        name: JavaName(quote! {e f test3}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
                             methods: vec![],
-                            extends: vec![JavaName(quote!{g h test4})],
+                            extends: vec![JavaName(quote! {g h test4})],
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{a b test1}),
+                        name: JavaName(quote! {a b test1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
                             implements: vec![
-                                JavaName(quote!{e f test3}),
-                                JavaName(quote!{g h test4}),
+                                JavaName(quote! {e f test3}),
+                                JavaName(quote! {g h test4}),
                             ],
                             methods: vec![],
                             native_methods: vec![],
@@ -909,21 +911,21 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test3", Span::call_site()),
                         public: false,
-                        extends: vec![quote!{::g::h::test4}],
+                        extends: vec![quote! {::g::h::test4}],
                         methods: vec![],
                     }),
                     GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test1", Span::call_site()),
                         public: false,
-                        super_class: quote!{::java::lang::Object},
-                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        super_class: quote! {::java::lang::Object},
+                        transitive_extends: vec![quote! {::java::lang::Object}],
                         implements: vec![
                             generate::InterfaceImplementation {
-                                interface: quote!{::e::f::test3},
+                                interface: quote! {::e::f::test3},
                                 methods: vec![],
                             },
                             generate::InterfaceImplementation {
-                                interface: quote!{::g::h::test4},
+                                interface: quote! {::g::h::test4},
                                 methods: vec![],
                             },
                         ],
@@ -945,7 +947,7 @@ mod to_generator_data_tests {
         assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{a b test1}),
+                    name: JavaName(quote! {a b test1}),
                     public: true,
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
@@ -963,8 +965,8 @@ mod to_generator_data_tests {
                 definitions: vec![GeneratorDefinition::Class(generate::Class {
                     class: Ident::new("test1", Span::call_site()),
                     public: true,
-                    super_class: quote!{::java::lang::Object},
-                    transitive_extends: vec![quote!{::java::lang::Object}],
+                    super_class: quote! {::java::lang::Object},
+                    transitive_extends: vec![quote! {::java::lang::Object}],
                     implements: vec![],
                     signature: Literal::string("a/b/test1"),
                     full_signature: Literal::string("La/b/test1;"),
@@ -983,7 +985,7 @@ mod to_generator_data_tests {
         assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{a b test1}),
+                    name: JavaName(quote! {a b test1}),
                     public: false,
                     definition: JavaDefinitionKind::Interface(JavaInterface {
                         methods: vec![],
@@ -1011,7 +1013,7 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        name: JavaName(quote!{e f test3}),
+                        name: JavaName(quote! {e f test3}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
                             methods: vec![],
@@ -1019,18 +1021,21 @@ mod to_generator_data_tests {
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{a b test1}),
+                        name: JavaName(quote! {a b test1}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
                             methods: vec![],
-                            extends: vec![JavaName(quote!{c d test2}), JavaName(quote!{e f test3})],
+                            extends: vec![
+                                JavaName(quote! {c d test2}),
+                                JavaName(quote! {e f test3}),
+                            ],
                         }),
                     },
                 ],
                 metadata: Metadata {
                     definitions: vec![
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{c d test4}),
+                            name: JavaName(quote! {c d test4}),
                             definition: JavaDefinitionMetadataKind::Interface(
                                 JavaInterfaceMetadata {
                                     methods: vec![],
@@ -1039,11 +1044,11 @@ mod to_generator_data_tests {
                             ),
                         },
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{c d test2}),
+                            name: JavaName(quote! {c d test2}),
                             definition: JavaDefinitionMetadataKind::Interface(
                                 JavaInterfaceMetadata {
                                     methods: vec![],
-                                    extends: vec![JavaName(quote!{c d test4})],
+                                    extends: vec![JavaName(quote! {c d test4})],
                                 },
                             ),
                         },
@@ -1061,7 +1066,7 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Interface(generate::Interface {
                         interface: Ident::new("test1", Span::call_site()),
                         public: false,
-                        extends: vec![quote!{::c::d::test2}, quote!{::e::f::test3}],
+                        extends: vec![quote! {::c::d::test2}, quote! {::e::f::test3}],
                         methods: vec![],
                     }),
                 ],
@@ -1074,7 +1079,7 @@ mod to_generator_data_tests {
         assert_generator_data_equals(
             to_generator_data(JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{a b test1}),
+                    name: JavaName(quote! {a b test1}),
                     public: true,
                     definition: JavaDefinitionKind::Interface(JavaInterface {
                         methods: vec![],
@@ -1102,7 +1107,7 @@ mod to_generator_data_tests {
             to_generator_data(JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        name: JavaName(quote!{e f test_if1}),
+                        name: JavaName(quote! {e f test_if1}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
                             methods: vec![],
@@ -1110,7 +1115,7 @@ mod to_generator_data_tests {
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{e f test_if2}),
+                        name: JavaName(quote! {e f test_if2}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
                             methods: vec![],
@@ -1118,7 +1123,7 @@ mod to_generator_data_tests {
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{a b test1}),
+                        name: JavaName(quote! {a b test1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
@@ -1129,7 +1134,7 @@ mod to_generator_data_tests {
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{test2}),
+                        name: JavaName(quote! {test2}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
@@ -1161,8 +1166,8 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test1", Span::call_site()),
                         public: false,
-                        super_class: quote!{::java::lang::Object},
-                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        super_class: quote! {::java::lang::Object},
+                        transitive_extends: vec![quote! {::java::lang::Object}],
                         implements: vec![],
                         signature: Literal::string("a/b/test1"),
                         full_signature: Literal::string("La/b/test1;"),
@@ -1175,8 +1180,8 @@ mod to_generator_data_tests {
                     GeneratorDefinition::Class(generate::Class {
                         class: Ident::new("test2", Span::call_site()),
                         public: false,
-                        super_class: quote!{::java::lang::Object},
-                        transitive_extends: vec![quote!{::java::lang::Object}],
+                        super_class: quote! {::java::lang::Object},
+                        transitive_extends: vec![quote! {::java::lang::Object}],
                         implements: vec![],
                         signature: Literal::string("test2"),
                         full_signature: Literal::string("Ltest2;"),

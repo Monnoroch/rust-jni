@@ -117,9 +117,9 @@ fn generate_interface(definition: &Interface) -> TokenStream {
         methods,
     } = definition;
     let extends = if extends.is_empty() {
-        quote!{}
+        quote! {}
     } else {
-        quote!{: #(#extends<'a>)+*}
+        quote! {: #(#extends<'a>)+*}
     };
     let methods = methods.iter().map(generate_interface_method);
     let public = generate_public(*public);
@@ -139,7 +139,7 @@ fn generate_interface_method(method: &InterfaceMethod) -> TokenStream {
         argument_names,
         argument_types,
     } = method;
-    quote!{
+    quote! {
         fn #name(
             &self,
             #(#argument_names: #argument_types,)*
@@ -320,7 +320,7 @@ fn generate_constructor(method: &Constructor) -> TokenStream {
     let argument_types_1 = argument_types.iter();
     let argument_types = argument_types.iter();
     let public = generate_public(*public);
-    quote!{
+    quote! {
         #public fn #name(
             env: &'a ::rust_jni::JniEnv<'a>,
             #(#argument_names: #argument_types,)*
@@ -353,7 +353,7 @@ fn generate_class_method(method: &ClassMethod) -> TokenStream {
     let argument_types_1 = argument_types.iter();
     let argument_types = argument_types.iter();
     let public = generate_public(*public);
-    quote!{
+    quote! {
         #public fn #name(
             &self,
             #(#argument_names: #argument_types,)*
@@ -389,7 +389,7 @@ fn generate_static_class_method(method: &ClassMethod) -> TokenStream {
     let argument_types_1 = argument_types.iter();
     let argument_types = argument_types.iter();
     let public = generate_public(*public);
-    quote!{
+    quote! {
         #public fn #name(
             env: &'a ::rust_jni::JniEnv<'a>,
             #(#argument_names: #argument_types,)*
@@ -422,7 +422,7 @@ fn generate_class_native_method(method: &NativeMethod) -> TokenStream {
         ..
     } = method;
     let public = generate_public(*public);
-    quote!{
+    quote! {
         #public fn #rust_name(
             &self,
             #(#argument_names: #argument_types,)*
@@ -444,7 +444,7 @@ fn generate_static_class_native_method(method: &NativeMethod) -> TokenStream {
         ..
     } = method;
     let public = generate_public(*public);
-    quote!{
+    quote! {
         #public fn #rust_name(
             env: &'a ::rust_jni::JniEnv<'a>,
             #(#argument_names: #argument_types,)*
@@ -470,7 +470,7 @@ fn generate_class_native_method_function(method: &NativeMethod, class_name: &Ide
     let argument_names = argument_names.iter();
     let argument_types_no_lifetime_1 = argument_types_no_lifetime.iter();
     let argument_types_no_lifetime = argument_types_no_lifetime.iter();
-    quote!{
+    quote! {
         #[no_mangle]
         #[doc(hidden)]
         pub unsafe extern "C" fn #java_name<'a>(
@@ -535,7 +535,7 @@ fn generate_static_class_native_method_function(
         name.to_string(),
         class_name.to_string()
     );
-    quote!{
+    quote! {
         #[no_mangle]
         #[doc(hidden)]
         pub unsafe extern "C" fn #java_name<'a>(
@@ -600,11 +600,11 @@ fn generate_interface_method_implementation(
     let argument_names_1 = argument_names.iter();
     let argument_names = argument_names.iter();
     let class_cast = if *class_has_method {
-        quote!{Self}
+        quote! {Self}
     } else {
-        quote!{ <#super_class as #interface> }
+        quote! { <#super_class as #interface> }
     };
-    quote!{
+    quote! {
         fn #name(
             &self,
             #(#argument_names: #argument_types,)*
@@ -637,9 +637,9 @@ fn generate_interface_implementation(
 
 fn generate_public(public: bool) -> TokenStream {
     if public {
-        quote!{pub}
+        quote! {pub}
     } else {
-        quote!{}
+        quote! {}
     }
 }
 
@@ -652,7 +652,7 @@ mod generate_tests {
         let input = GeneratorData {
             definitions: vec![],
         };
-        let expected = quote!{};
+        let expected = quote! {};
         assert_tokens_equals(generate(&input), expected);
     }
 
@@ -675,7 +675,7 @@ mod generate_tests {
                 GeneratorDefinition::Class(Class {
                     class: Ident::new("test1", Span::call_site()),
                     public: false,
-                    super_class: quote!{c::d::test3},
+                    super_class: quote! {c::d::test3},
                     transitive_extends: vec![],
                     implements: vec![],
                     signature: Literal::string("test/sign1"),
@@ -689,7 +689,7 @@ mod generate_tests {
                 GeneratorDefinition::Class(Class {
                     class: Ident::new("test2", Span::call_site()),
                     public: false,
-                    super_class: quote!{c::d::test4},
+                    super_class: quote! {c::d::test4},
                     transitive_extends: vec![],
                     implements: vec![],
                     signature: Literal::string("test/sign2"),
@@ -702,7 +702,7 @@ mod generate_tests {
                 }),
             ],
         };
-        let expected = quote!{
+        let expected = quote! {
             trait test_if1<'a> {
             }
 
@@ -885,7 +885,7 @@ mod generate_interface_tests {
                 methods: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             trait test1<'a> {
             }
         };
@@ -902,7 +902,7 @@ mod generate_interface_tests {
                 methods: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             pub trait test1<'a> {
             }
         };
@@ -915,11 +915,11 @@ mod generate_interface_tests {
             definitions: vec![GeneratorDefinition::Interface(Interface {
                 interface: Ident::new("test1", Span::call_site()),
                 public: false,
-                extends: vec![quote!{c::d::test2}, quote!{e::f::test3}],
+                extends: vec![quote! {c::d::test2}, quote! {e::f::test3}],
                 methods: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             trait test1<'a> : c::d::test2<'a> + e::f::test3<'a> {
             }
         };
@@ -936,23 +936,23 @@ mod generate_interface_tests {
                 methods: vec![
                     InterfaceMethod {
                         name: Ident::new("test_method_1", Span::call_site()),
-                        return_type: quote!{return_type_1},
+                        return_type: quote! {return_type_1},
                         argument_names: vec![
                             Ident::new("arg1", Span::call_site()),
                             Ident::new("arg2", Span::call_site()),
                         ],
-                        argument_types: vec![quote!{type1}, quote!{type2}],
+                        argument_types: vec![quote! {type1}, quote! {type2}],
                     },
                     InterfaceMethod {
                         name: Ident::new("test_method_2", Span::call_site()),
-                        return_type: quote!{return_type_2},
+                        return_type: quote! {return_type_2},
                         argument_names: vec![],
                         argument_types: vec![],
                     },
                 ],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             trait test1<'a> {
                 fn test_method_1(
                     &self,
@@ -980,7 +980,7 @@ mod generate_class_tests {
             definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
                 public: false,
-                super_class: quote!{c::d::test2},
+                super_class: quote! {c::d::test2},
                 transitive_extends: vec![],
                 implements: vec![],
                 signature: Literal::string("test/sign1"),
@@ -992,7 +992,7 @@ mod generate_class_tests {
                 constructors: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct test1<'env> {
                 object: c::d::test2<'env>,
@@ -1081,7 +1081,7 @@ mod generate_class_tests {
             definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
                 public: true,
-                super_class: quote!{c::d::test2},
+                super_class: quote! {c::d::test2},
                 transitive_extends: vec![],
                 implements: vec![],
                 signature: Literal::string("test/sign1"),
@@ -1093,7 +1093,7 @@ mod generate_class_tests {
                 constructors: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             pub struct test1<'env> {
                 object: c::d::test2<'env>,
@@ -1182,8 +1182,8 @@ mod generate_class_tests {
             definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
                 public: false,
-                super_class: quote!{c::d::test2},
-                transitive_extends: vec![quote!{c::d::test2}, quote!{c::d::test3}],
+                super_class: quote! {c::d::test2},
+                transitive_extends: vec![quote! {c::d::test2}, quote! {c::d::test3}],
                 implements: vec![],
                 signature: Literal::string("test/sign1"),
                 full_signature: Literal::string("test/signature1"),
@@ -1194,7 +1194,7 @@ mod generate_class_tests {
                 constructors: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct test1<'env> {
                 object: c::d::test2<'env>,
@@ -1297,7 +1297,7 @@ mod generate_class_tests {
             definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
                 public: false,
-                super_class: quote!{c::d::test2},
+                super_class: quote! {c::d::test2},
                 transitive_extends: vec![],
                 implements: vec![],
                 signature: Literal::string("test/sign1"),
@@ -1306,18 +1306,18 @@ mod generate_class_tests {
                     ClassMethod {
                         name: Ident::new("test_method_1", Span::call_site()),
                         java_name: Literal::string("testMethod1"),
-                        return_type: quote!{return_type_1},
+                        return_type: quote! {return_type_1},
                         public: false,
                         argument_names: vec![
                             Ident::new("arg1", Span::call_site()),
                             Ident::new("arg2", Span::call_site()),
                         ],
-                        argument_types: vec![quote!{type1}, quote!{type2}],
+                        argument_types: vec![quote! {type1}, quote! {type2}],
                     },
                     ClassMethod {
                         name: Ident::new("test_method_2", Span::call_site()),
                         java_name: Literal::string("testMethod2"),
-                        return_type: quote!{return_type_2},
+                        return_type: quote! {return_type_2},
                         public: true,
                         argument_names: vec![],
                         argument_types: vec![],
@@ -1329,7 +1329,7 @@ mod generate_class_tests {
                 constructors: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct test1<'env> {
                 object: c::d::test2<'env>,
@@ -1454,7 +1454,7 @@ mod generate_class_tests {
             definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
                 public: false,
-                super_class: quote!{c::d::test2},
+                super_class: quote! {c::d::test2},
                 transitive_extends: vec![],
                 implements: vec![],
                 signature: Literal::string("test/sign1"),
@@ -1464,18 +1464,18 @@ mod generate_class_tests {
                     ClassMethod {
                         name: Ident::new("test_method_1", Span::call_site()),
                         java_name: Literal::string("testMethod1"),
-                        return_type: quote!{return_type_1},
+                        return_type: quote! {return_type_1},
                         public: false,
                         argument_names: vec![
                             Ident::new("arg1", Span::call_site()),
                             Ident::new("arg2", Span::call_site()),
                         ],
-                        argument_types: vec![quote!{type1}, quote!{type2}],
+                        argument_types: vec![quote! {type1}, quote! {type2}],
                     },
                     ClassMethod {
                         name: Ident::new("test_method_2", Span::call_site()),
                         java_name: Literal::string("testMethod2"),
-                        return_type: quote!{return_type_2},
+                        return_type: quote! {return_type_2},
                         public: true,
                         argument_names: vec![],
                         argument_types: vec![],
@@ -1486,7 +1486,7 @@ mod generate_class_tests {
                 constructors: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct test1<'env> {
                 object: c::d::test2<'env>,
@@ -1611,7 +1611,7 @@ mod generate_class_tests {
             definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
                 public: false,
-                super_class: quote!{c::d::test2},
+                super_class: quote! {c::d::test2},
                 transitive_extends: vec![],
                 implements: vec![],
                 signature: Literal::string("test/sign1"),
@@ -1628,7 +1628,7 @@ mod generate_class_tests {
                             Ident::new("arg1", Span::call_site()),
                             Ident::new("arg2", Span::call_site()),
                         ],
-                        argument_types: vec![quote!{type1}, quote!{type2}],
+                        argument_types: vec![quote! {type1}, quote! {type2}],
                     },
                     Constructor {
                         name: Ident::new("test_method_2", Span::call_site()),
@@ -1639,7 +1639,7 @@ mod generate_class_tests {
                 ],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct test1<'env> {
                 object: c::d::test2<'env>,
@@ -1762,7 +1762,7 @@ mod generate_class_tests {
             definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
                 public: false,
-                super_class: quote!{c::d::test2},
+                super_class: quote! {c::d::test2},
                 transitive_extends: vec![],
                 implements: vec![],
                 signature: Literal::string("test/sign1"),
@@ -1774,33 +1774,33 @@ mod generate_class_tests {
                         name: Ident::new("test_method_1", Span::call_site()),
                         rust_name: Ident::new("test_method_1_rust", Span::call_site()),
                         java_name: Ident::new("testMethod1", Span::call_site()),
-                        return_type: quote!{return_type_1},
+                        return_type: quote! {return_type_1},
                         public: false,
                         argument_names: vec![
                             Ident::new("arg1", Span::call_site()),
                             Ident::new("arg2", Span::call_site()),
                         ],
-                        argument_types: vec![quote!{type1<'a>}, quote!{type2<'a>}],
-                        argument_types_no_lifetime: vec![quote!{type1}, quote!{type2}],
-                        code: quote!{test code 1},
+                        argument_types: vec![quote! {type1<'a>}, quote! {type2<'a>}],
+                        argument_types_no_lifetime: vec![quote! {type1}, quote! {type2}],
+                        code: quote! {test code 1},
                     },
                     NativeMethod {
                         name: Ident::new("test_method_2", Span::call_site()),
                         rust_name: Ident::new("test_method_2_rust", Span::call_site()),
                         java_name: Ident::new("testMethod2", Span::call_site()),
-                        return_type: quote!{return_type_2},
+                        return_type: quote! {return_type_2},
                         public: true,
                         argument_names: vec![],
                         argument_types: vec![],
                         argument_types_no_lifetime: vec![],
-                        code: quote!{test code 2},
+                        code: quote! {test code 2},
                     },
                 ],
                 static_native_methods: vec![],
                 constructors: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct test1<'env> {
                 object: c::d::test2<'env>,
@@ -1966,7 +1966,7 @@ mod generate_class_tests {
             definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
                 public: false,
-                super_class: quote!{c::d::test2},
+                super_class: quote! {c::d::test2},
                 transitive_extends: vec![],
                 implements: vec![],
                 signature: Literal::string("test/sign1"),
@@ -1979,32 +1979,32 @@ mod generate_class_tests {
                         name: Ident::new("test_method_1", Span::call_site()),
                         rust_name: Ident::new("test_method_1_rust", Span::call_site()),
                         java_name: Ident::new("testMethod1", Span::call_site()),
-                        return_type: quote!{return_type_1},
+                        return_type: quote! {return_type_1},
                         public: false,
                         argument_names: vec![
                             Ident::new("arg1", Span::call_site()),
                             Ident::new("arg2", Span::call_site()),
                         ],
-                        argument_types: vec![quote!{type1<'a>}, quote!{type2<'a>}],
-                        argument_types_no_lifetime: vec![quote!{type1}, quote!{type2}],
-                        code: quote!{test code 1},
+                        argument_types: vec![quote! {type1<'a>}, quote! {type2<'a>}],
+                        argument_types_no_lifetime: vec![quote! {type1}, quote! {type2}],
+                        code: quote! {test code 1},
                     },
                     NativeMethod {
                         name: Ident::new("test_method_2", Span::call_site()),
                         rust_name: Ident::new("test_method_2_rust", Span::call_site()),
                         java_name: Ident::new("testMethod2", Span::call_site()),
-                        return_type: quote!{return_type_2},
+                        return_type: quote! {return_type_2},
                         public: true,
                         argument_names: vec![],
                         argument_types: vec![],
                         argument_types_no_lifetime: vec![],
-                        code: quote!{test code 2},
+                        code: quote! {test code 2},
                     },
                 ],
                 constructors: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct test1<'env> {
                 object: c::d::test2<'env>,
@@ -2180,15 +2180,15 @@ mod generate_class_tests {
             definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
                 public: false,
-                super_class: quote!{c::d::test2},
+                super_class: quote! {c::d::test2},
                 transitive_extends: vec![],
                 implements: vec![
                     InterfaceImplementation {
-                        interface: quote!{e::f::test3},
+                        interface: quote! {e::f::test3},
                         methods: vec![],
                     },
                     InterfaceImplementation {
-                        interface: quote!{e::f::test4},
+                        interface: quote! {e::f::test4},
                         methods: vec![],
                     },
                 ],
@@ -2201,7 +2201,7 @@ mod generate_class_tests {
                 constructors: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct test1<'env> {
                 object: c::d::test2<'env>,
@@ -2296,24 +2296,24 @@ mod generate_class_tests {
             definitions: vec![GeneratorDefinition::Class(Class {
                 class: Ident::new("test1", Span::call_site()),
                 public: false,
-                super_class: quote!{c::d::test2},
+                super_class: quote! {c::d::test2},
                 transitive_extends: vec![],
                 implements: vec![InterfaceImplementation {
-                    interface: quote!{e::f::test3},
+                    interface: quote! {e::f::test3},
                     methods: vec![
                         InterfaceMethodImplementation {
                             name: Ident::new("test_method_1", Span::call_site()),
-                            return_type: quote!{return_type_1},
+                            return_type: quote! {return_type_1},
                             argument_names: vec![
                                 Ident::new("arg1", Span::call_site()),
                                 Ident::new("arg2", Span::call_site()),
                             ],
-                            argument_types: vec![quote!{type1}, quote!{type2}],
+                            argument_types: vec![quote! {type1}, quote! {type2}],
                             class_has_method: false,
                         },
                         InterfaceMethodImplementation {
                             name: Ident::new("test_method_2", Span::call_site()),
-                            return_type: quote!{return_type_2},
+                            return_type: quote! {return_type_2},
                             argument_names: vec![],
                             argument_types: vec![],
                             class_has_method: true,
@@ -2329,7 +2329,7 @@ mod generate_class_tests {
                 constructors: vec![],
             })],
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct test1<'env> {
                 object: c::d::test2<'env>,

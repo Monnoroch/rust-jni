@@ -35,17 +35,17 @@ mod java_generate_tests {
 
     #[test]
     fn empty() {
-        let input = quote!{};
-        let expected = quote!{};
+        let input = quote! {};
+        let expected = quote! {};
         assert_tokens_equals(java_generate_impl(input), expected);
     }
 
     #[test]
     fn one_class() {
-        let input = quote!{
+        let input = quote! {
             class TestClass1 extends TestClass2 {}
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct TestClass1<'env> {
                 object: ::TestClass2<'env>,
@@ -137,12 +137,12 @@ mod java_generate_tests {
 
     #[test]
     fn one_class_implements() {
-        let input = quote!{
+        let input = quote! {
             interface a.b.TestInterface1 {}
             interface a.b.TestInterface2 {}
             class TestClass1 extends TestClass2 implements a.b.TestInterface1, a.b.TestInterface2 {}
         };
-        let expected = quote!{
+        let expected = quote! {
             trait TestInterface1<'a> {
             }
 
@@ -246,10 +246,10 @@ mod java_generate_tests {
 
     #[test]
     fn one_class_packaged() {
-        let input = quote!{
+        let input = quote! {
             class a.b.TestClass1 extends c.d.TestClass2 {}
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             struct TestClass1<'env> {
                 object: ::c::d::TestClass2<'env>,
@@ -341,10 +341,10 @@ mod java_generate_tests {
 
     #[test]
     fn one_class_public() {
-        let input = quote!{
+        let input = quote! {
             public class TestClass1 extends TestClass2 {}
         };
-        let expected = quote!{
+        let expected = quote! {
             #[derive(Debug)]
             pub struct TestClass1<'env> {
                 object: ::TestClass2<'env>,
@@ -436,10 +436,10 @@ mod java_generate_tests {
 
     #[test]
     fn one_interface() {
-        let input = quote!{
+        let input = quote! {
             interface TestInterface1 {}
         };
-        let expected = quote!{
+        let expected = quote! {
             trait TestInterface1<'a> {
             }
         };
@@ -448,10 +448,10 @@ mod java_generate_tests {
 
     #[test]
     fn one_interface_packaged() {
-        let input = quote!{
+        let input = quote! {
             interface a.b.TestInterface1 {}
         };
-        let expected = quote!{
+        let expected = quote! {
             trait TestInterface1<'a> {
             }
         };
@@ -460,10 +460,10 @@ mod java_generate_tests {
 
     #[test]
     fn one_interface_public() {
-        let input = quote!{
+        let input = quote! {
             public interface TestInterface1 {}
         };
-        let expected = quote!{
+        let expected = quote! {
             pub trait TestInterface1<'a> {
             }
         };
@@ -472,12 +472,12 @@ mod java_generate_tests {
 
     #[test]
     fn one_interface_extends() {
-        let input = quote!{
+        let input = quote! {
             interface TestInterface2 {}
             interface TestInterface3 {}
             interface TestInterface1 extends TestInterface2, TestInterface3 {}
         };
-        let expected = quote!{
+        let expected = quote! {
             trait TestInterface2<'a> {
             }
 
@@ -492,7 +492,7 @@ mod java_generate_tests {
 
     #[test]
     fn multiple() {
-        let input = quote!{
+        let input = quote! {
             interface TestInterface1 {}
             interface TestInterface2 {}
             class TestClass1 {}
@@ -503,7 +503,7 @@ mod java_generate_tests {
                 class TestClass3;
             }
         };
-        let expected = quote!{
+        let expected = quote! {
             trait TestInterface1<'a> {
             }
 
@@ -687,7 +687,7 @@ mod java_generate_tests {
 
     #[test]
     fn integration() {
-        let input = quote!{
+        let input = quote! {
             public interface a.b.TestInterface3 {
                 long primitiveInterfaceFunc3(int arg1, char arg2);
                 a.b.TestClass3 objectInterfaceFunc3(a.b.TestClass3 arg);
@@ -749,7 +749,7 @@ mod java_generate_tests {
                 class c.d.TestClass2 extends c.d.TestClass1 implements e.f.TestInterface1;
             }
         };
-        let expected = quote!{
+        let expected = quote! {
             pub trait TestInterface3<'a> {
                 fn primitiveInterfaceFunc3(
                     &self,

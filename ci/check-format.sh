@@ -7,5 +7,5 @@ fi
 files=$(find . -type f -name "*.rs")
 
 for file in $files; do
-	rustfmt --error-on-unformatted --write-mode check "$file"
+	rustfmt --edition 2018 --check "$file"
 done
