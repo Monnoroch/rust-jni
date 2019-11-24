@@ -1,7 +1,4 @@
-extern crate jni_sys;
-extern crate rust_jni;
-
-#[cfg(test)]
+#[cfg(all(test, feature = "libjvm"))]
 mod create_jvm {
     use jni_sys;
     use rust_jni::*;
@@ -9,11 +6,13 @@ mod create_jvm {
     #[test]
     fn unrecognized_option() {
         assert_eq!(
-            JavaVM::create(&InitArguments::get_default(JniVersion::V8)
-                .unwrap()
-                .with_option(JvmOption::Unknown("utest".to_owned()))
-                .fail_on_unrecognized_options())
-                .unwrap_err(),
+            JavaVM::create(
+                &InitArguments::get_default(JniVersion::V8)
+                    .unwrap()
+                    .with_option(JvmOption::Unknown("utest".to_owned()))
+                    .fail_on_unrecognized_options()
+            )
+            .unwrap_err(),
             JniError::Unknown(jni_sys::JNI_ERR)
         );
     }

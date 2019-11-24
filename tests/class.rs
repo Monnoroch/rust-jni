@@ -1,52 +1,47 @@
-extern crate rust_jni;
-
-mod object;
-
 /// An integration test for the `java::lang::Class` type.
-#[cfg(test)]
+#[cfg(all(test, feature = "libjvm"))]
 mod class {
-    use object;
+    use rust_jni::java::lang::*;
     use rust_jni::*;
 
     #[test]
     fn test() {
         let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
         let vm = JavaVM::create(&init_arguments).unwrap();
-        let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
-        let token = env.token();
+        vm.with_attached(
+            &AttachArguments::new(init_arguments.version()),
+            |env, token| {
+                let class = Class::find(env, &token, "java/lang/RuntimeException").unwrap();
 
-        let class = java::lang::Class::find(&env, "java/lang/RuntimeException", &token).unwrap();
+                assert!(class
+                    .class(&token)
+                    .is_same_as(&token, &Class::class(env, &token).unwrap(),));
 
-        object::test_object(
-            &class,
-            "java/lang/Class",
-            "class java.lang.RuntimeException",
-            &env,
-            &token,
-        );
+                let parent_class = Throwable::class(env, &token).unwrap();
 
-        assert!(
-            class
-                .class(&token)
-                .is_same_as(&java::lang::Class::get_class(&env, &token).unwrap(), &token)
-        );
+                assert!(class.is_subtype_of(&token, &parent_class));
+                assert!(!parent_class.is_subtype_of(&token, &class));
 
-        let parent_class = java::lang::Class::find(&env, "java/lang/Throwable", &token).unwrap();
-        assert!(class.is_subtype_of(&parent_class, &token));
-        assert!(!parent_class.is_subtype_of(&class, &token));
-        assert!(
-            class
-                .parent(&token)
-                .unwrap()
-                .parent(&token)
-                .unwrap()
-                .is_same_as(&parent_class, &token)
-        );
+                assert!(class
+                    .parent(&token)
+                    .unwrap()
+                    .parent(&token)
+                    .unwrap()
+                    .is_same_as(&token, &parent_class));
 
-        let exception = java::lang::Class::find(&env, "java/lang/Invalid", &token).unwrap_err();
-        assert_eq!(
-            exception.get_message(&token).unwrap().as_string(&token),
-            "java/lang/Invalid"
-        );
+                let exception = Class::find(env, &token, "java/lang/Invalid").unwrap_err();
+                assert_eq!(
+                    exception
+                        .get_message(&token)
+                        .or_npe(env, &token)
+                        .unwrap()
+                        .as_string(&token),
+                    "java/lang/Invalid"
+                );
+
+                ((), token)
+            },
+        )
+        .unwrap();
     }
 }
