@@ -10,8 +10,6 @@
 //! and panic whenever it's impossible to have a compile error.
 // TODO: a complete example.
 
-#![feature(fn_traits, unboxed_closures)]
-
 #[cfg(test)]
 #[macro_use]
 pub mod testing;
