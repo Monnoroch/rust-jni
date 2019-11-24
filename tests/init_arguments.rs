@@ -1,37 +1,30 @@
-extern crate rust_jni;
-
-#[cfg(test)]
+#[cfg(all(test, feature = "libjvm"))]
 mod default_jvm_arguments {
     #[test]
     fn supported_versions() {
         use rust_jni::{InitArguments, JniVersion};
         assert_eq!(
-            InitArguments::get_default_or_closest_supported(JniVersion::V1).version(),
+            InitArguments::get_default(JniVersion::V2)
+                .unwrap()
+                .version(),
             JniVersion::V2
         );
         assert_eq!(
-            InitArguments::get_default_or_closest_supported(JniVersion::V2).version(),
-            JniVersion::V2
-        );
-        assert_eq!(
-            InitArguments::get_default_or_closest_supported(JniVersion::V4).version(),
+            InitArguments::get_default(JniVersion::V4)
+                .unwrap()
+                .version(),
             JniVersion::V4
         );
         assert_eq!(
-            InitArguments::get_default_or_closest_supported(JniVersion::V6).version(),
+            InitArguments::get_default(JniVersion::V6)
+                .unwrap()
+                .version(),
             JniVersion::V6
         );
         assert_eq!(
-            InitArguments::get_default_or_closest_supported(JniVersion::V8).version(),
-            JniVersion::V8
-        );
-    }
-
-    #[test]
-    fn latest_version() {
-        use rust_jni::{InitArguments, JniVersion};
-        assert_eq!(
-            InitArguments::get_latest_default().version(),
+            InitArguments::get_default(JniVersion::V8)
+                .unwrap()
+                .version(),
             JniVersion::V8
         );
     }

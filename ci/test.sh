@@ -1,9 +1,9 @@
 set -e
 
-cargo test --verbose --features libjvm
-(cd java && cargo test --verbose)
+cargo build --verbose
 
-if [[ ${TRAVIS_RUST_VERSION} == "nightly" ]]; then
-	(cd examples/java-lib && ./test.sh)
-	(cd generator && cargo test --verbose)
-fi
+# Unit tests only.
+cargo test --verbose --lib
+
+# All tests.
+cargo test --verbose --features libjvm

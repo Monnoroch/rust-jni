@@ -595,7 +595,7 @@ mod parse_tests {
 
     #[test]
     fn empty() {
-        let input = quote!{};
+        let input = quote! {};
         assert_eq!(
             parse_java_definition(input),
             JavaDefinitions {
@@ -609,14 +609,14 @@ mod parse_tests {
 
     #[test]
     fn one_class() {
-        let input = quote!{
+        let input = quote! {
             class TestClass1 {}
         };
         assert_eq!(
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{TestClass1}),
+                    name: JavaName(quote! {TestClass1}),
                     public: false,
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
@@ -635,17 +635,17 @@ mod parse_tests {
 
     #[test]
     fn one_class_extends() {
-        let input = quote!{
+        let input = quote! {
             class TestClass1 extends test1 {}
         };
         assert_eq!(
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{TestClass1}),
+                    name: JavaName(quote! {TestClass1}),
                     public: false,
                     definition: JavaDefinitionKind::Class(JavaClass {
-                        extends: Some(JavaName(quote!{test1})),
+                        extends: Some(JavaName(quote! {test1})),
                         implements: vec![],
                         methods: vec![],
                         native_methods: vec![],
@@ -661,14 +661,14 @@ mod parse_tests {
 
     #[test]
     fn one_class_public() {
-        let input = quote!{
+        let input = quote! {
             public class TestClass1 {}
         };
         assert_eq!(
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{TestClass1}),
+                    name: JavaName(quote! {TestClass1}),
                     public: true,
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
@@ -687,14 +687,14 @@ mod parse_tests {
 
     #[test]
     fn one_class_packaged() {
-        let input = quote!{
+        let input = quote! {
             class a.b.TestClass1 {}
         };
         assert_eq!(
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{a b TestClass1}),
+                    name: JavaName(quote! {a b TestClass1}),
                     public: false,
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
@@ -713,18 +713,18 @@ mod parse_tests {
 
     #[test]
     fn one_class_implements() {
-        let input = quote!{
+        let input = quote! {
             class TestClass1 implements test2, a.b.test3 {}
         };
         assert_eq!(
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{TestClass1}),
+                    name: JavaName(quote! {TestClass1}),
                     public: false,
                     definition: JavaDefinitionKind::Class(JavaClass {
                         extends: None,
-                        implements: vec![JavaName(quote!{test2}), JavaName(quote!{a b test3})],
+                        implements: vec![JavaName(quote! {test2}), JavaName(quote! {a b test3})],
                         methods: vec![],
                         native_methods: vec![],
                         constructors: vec![],
@@ -739,14 +739,14 @@ mod parse_tests {
 
     #[test]
     fn one_interface() {
-        let input = quote!{
+        let input = quote! {
             interface TestInterface1 {}
         };
         assert_eq!(
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{TestInterface1}),
+                    name: JavaName(quote! {TestInterface1}),
                     public: false,
                     definition: JavaDefinitionKind::Interface(JavaInterface {
                         methods: vec![],
@@ -762,14 +762,14 @@ mod parse_tests {
 
     #[test]
     fn one_interface_public() {
-        let input = quote!{
+        let input = quote! {
             public interface TestInterface1 {}
         };
         assert_eq!(
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{TestInterface1}),
+                    name: JavaName(quote! {TestInterface1}),
                     public: true,
                     definition: JavaDefinitionKind::Interface(JavaInterface {
                         methods: vec![],
@@ -785,14 +785,14 @@ mod parse_tests {
 
     #[test]
     fn one_interface_packaged() {
-        let input = quote!{
+        let input = quote! {
             interface a.b.TestInterface1 {}
         };
         assert_eq!(
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{a b TestInterface1}),
+                    name: JavaName(quote! {a b TestInterface1}),
                     public: false,
                     definition: JavaDefinitionKind::Interface(JavaInterface {
                         methods: vec![],
@@ -808,20 +808,20 @@ mod parse_tests {
 
     #[test]
     fn one_interface_extends() {
-        let input = quote!{
+        let input = quote! {
             interface TestInterface1 extends TestInterface2, a.b.TestInterface3 {}
         };
         assert_eq!(
             parse_java_definition(input),
             JavaDefinitions {
                 definitions: vec![JavaDefinition {
-                    name: JavaName(quote!{TestInterface1}),
+                    name: JavaName(quote! {TestInterface1}),
                     public: false,
                     definition: JavaDefinitionKind::Interface(JavaInterface {
                         methods: vec![],
                         extends: vec![
-                            JavaName(quote!{TestInterface2}),
-                            JavaName(quote!{a b TestInterface3}),
+                            JavaName(quote! {TestInterface2}),
+                            JavaName(quote! {a b TestInterface3}),
                         ],
                     }),
                 }],
@@ -834,7 +834,7 @@ mod parse_tests {
 
     #[test]
     fn multiple() {
-        let input = quote!{
+        let input = quote! {
             interface TestInterface1 {}
             interface TestInterface2 {}
             class TestClass1 {}
@@ -845,7 +845,7 @@ mod parse_tests {
             JavaDefinitions {
                 definitions: vec![
                     JavaDefinition {
-                        name: JavaName(quote!{TestInterface1}),
+                        name: JavaName(quote! {TestInterface1}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
                             methods: vec![],
@@ -853,7 +853,7 @@ mod parse_tests {
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{TestInterface2}),
+                        name: JavaName(quote! {TestInterface2}),
                         public: false,
                         definition: JavaDefinitionKind::Interface(JavaInterface {
                             methods: vec![],
@@ -861,7 +861,7 @@ mod parse_tests {
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{TestClass1}),
+                        name: JavaName(quote! {TestClass1}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
@@ -872,7 +872,7 @@ mod parse_tests {
                         }),
                     },
                     JavaDefinition {
-                        name: JavaName(quote!{TestClass2}),
+                        name: JavaName(quote! {TestClass2}),
                         public: false,
                         definition: JavaDefinitionKind::Class(JavaClass {
                             extends: None,
@@ -892,7 +892,7 @@ mod parse_tests {
 
     #[test]
     fn metadata_empty() {
-        let input = quote!{
+        let input = quote! {
             metadata {}
         };
         assert_eq!(
@@ -908,7 +908,7 @@ mod parse_tests {
 
     #[test]
     fn metadata() {
-        let input = quote!{
+        let input = quote! {
             metadata {
                 interface TestInterface1 {}
                 interface TestInterface2 extends TestInterface1 {}
@@ -923,7 +923,7 @@ mod parse_tests {
                 metadata: Metadata {
                     definitions: vec![
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{TestInterface1}),
+                            name: JavaName(quote! {TestInterface1}),
                             definition: JavaDefinitionMetadataKind::Interface(
                                 JavaInterfaceMetadata {
                                     extends: vec![],
@@ -932,28 +932,28 @@ mod parse_tests {
                             ),
                         },
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{TestInterface2}),
+                            name: JavaName(quote! {TestInterface2}),
                             definition: JavaDefinitionMetadataKind::Interface(
                                 JavaInterfaceMetadata {
-                                    extends: vec![JavaName(quote!{TestInterface1})],
+                                    extends: vec![JavaName(quote! {TestInterface1})],
                                     methods: vec![],
                                 },
                             ),
                         },
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{TestClass2}),
+                            name: JavaName(quote! {TestClass2}),
                             definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
                                 extends: None,
                                 implements: vec![],
                             }),
                         },
                         JavaDefinitionMetadata {
-                            name: JavaName(quote!{TestClass1}),
+                            name: JavaName(quote! {TestClass1}),
                             definition: JavaDefinitionMetadataKind::Class(JavaClassMetadata {
-                                extends: Some(JavaName(quote!{TestClass2})),
+                                extends: Some(JavaName(quote! {TestClass2})),
                                 implements: vec![
-                                    JavaName(quote!{TestInterface1}),
-                                    JavaName(quote!{TestInterface2}),
+                                    JavaName(quote! {TestInterface1}),
+                                    JavaName(quote! {TestInterface2}),
                                 ],
                             }),
                         },
@@ -966,7 +966,7 @@ mod parse_tests {
     #[test]
     #[should_panic(expected = "Expected \"class\" or \"interface\"")]
     fn invalid_definition_kind() {
-        let input = quote!{
+        let input = quote! {
             invalid 1
         };
         parse_java_definition(input);
@@ -975,7 +975,7 @@ mod parse_tests {
     #[test]
     #[should_panic(expected = "Expected a Java name")]
     fn too_few_tokens() {
-        let input = quote!{
+        let input = quote! {
             class
         };
         parse_java_definition(input);
@@ -984,7 +984,7 @@ mod parse_tests {
     #[test]
     #[should_panic(expected = "Expected an identifier")]
     fn definition_name_not_identifier_after_dot() {
-        let input = quote!{
+        let input = quote! {
             class a.1 {}
         };
         parse_java_definition(input);
@@ -993,7 +993,7 @@ mod parse_tests {
     #[test]
     #[should_panic(expected = "Expected a dot")]
     fn definition_name_no_dot_after_identifier() {
-        let input = quote!{
+        let input = quote! {
             class a b {}
         };
         parse_java_definition(input);
@@ -1002,7 +1002,7 @@ mod parse_tests {
     #[test]
     #[should_panic(expected = "Expected a dot")]
     fn definition_name_not_dot_punctuation() {
-        let input = quote!{
+        let input = quote! {
             class a,b {}
         };
         parse_java_definition(input);
@@ -1011,7 +1011,7 @@ mod parse_tests {
     #[test]
     #[should_panic(expected = "Expected braces")]
     fn metadata_not_group() {
-        let input = quote!{
+        let input = quote! {
             metadata abc
         };
         parse_java_definition(input);
@@ -1020,7 +1020,7 @@ mod parse_tests {
     #[test]
     #[should_panic(expected = "Expected braces")]
     fn metadata_not_braces_group() {
-        let input = quote!{
+        let input = quote! {
             metadata ()
         };
         parse_java_definition(input);
@@ -1029,7 +1029,7 @@ mod parse_tests {
     #[test]
     #[should_panic(expected = "Expected \"class\" or \"interface\"")]
     fn invalid_definition_metadata_kind() {
-        let input = quote!{
+        let input = quote! {
             metadata {
                 abc
             }

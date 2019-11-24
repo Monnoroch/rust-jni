@@ -91,7 +91,8 @@ impl JavaName {
                     panic!("Expected an identifier, got {:?}.", token);
                 }
             }
-        }).filter(|token| match token {
+        })
+        .filter(|token| match token {
             TokenTree::Ident(_) => true,
             _ => false,
         });
@@ -128,7 +129,7 @@ impl JavaName {
     pub fn with_double_colons(self) -> TokenStream {
         let mut tokens = vec![];
         for token in self.0.into_iter() {
-            tokens.extend(quote!{::});
+            tokens.extend(quote! {::});
             tokens.push(token);
         }
         TokenStream::from_iter(tokens.iter().cloned())
@@ -141,7 +142,7 @@ impl JavaName {
             if first {
                 first = false;
             } else {
-                tokens.extend(quote!{.});
+                tokens.extend(quote! {.});
             }
             tokens.push(token);
         }
@@ -153,23 +154,23 @@ impl JavaName {
         if tokens.len() == 1 {
             let token = &tokens[0];
             if is_identifier(&token, "int") {
-                Some(quote!{i32})
+                Some(quote! {i32})
             } else if is_identifier(&token, "long") {
-                Some(quote!{i64})
+                Some(quote! {i64})
             } else if is_identifier(&token, "char") {
-                Some(quote!{char})
+                Some(quote! {char})
             } else if is_identifier(&token, "byte") {
-                Some(quote!{u8})
+                Some(quote! {u8})
             } else if is_identifier(&token, "boolean") {
-                Some(quote!{bool})
+                Some(quote! {bool})
             } else if is_identifier(&token, "float") {
-                Some(quote!{f32})
+                Some(quote! {f32})
             } else if is_identifier(&token, "double") {
-                Some(quote!{f64})
+                Some(quote! {f64})
             } else if is_identifier(&token, "void") {
-                Some(quote!{()})
+                Some(quote! {()})
             } else if is_identifier(&token, "short") {
-                Some(quote!{i64})
+                Some(quote! {i64})
             } else {
                 None
             }
@@ -214,19 +215,19 @@ impl JavaName {
     pub fn as_rust_type(self) -> TokenStream {
         let primitive = self.as_primitive_type();
         let with_double_colons = self.with_double_colons();
-        primitive.unwrap_or(quote!{#with_double_colons <'a>})
+        primitive.unwrap_or(quote! {#with_double_colons <'a>})
     }
 
     pub fn as_rust_type_no_lifetime(self) -> TokenStream {
         let primitive = self.as_primitive_type();
         let with_double_colons = self.with_double_colons();
-        primitive.unwrap_or(quote!{#with_double_colons})
+        primitive.unwrap_or(quote! {#with_double_colons})
     }
 
     pub fn as_rust_type_reference(self) -> TokenStream {
         let primitive = self.as_primitive_type();
         let with_double_colons = self.with_double_colons();
-        primitive.unwrap_or(quote!{& #with_double_colons <'a>})
+        primitive.unwrap_or(quote! {& #with_double_colons <'a>})
     }
 }
 

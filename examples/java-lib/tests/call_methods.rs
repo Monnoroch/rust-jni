@@ -23,7 +23,8 @@ mod call_methods {
                 &env,
                 &fs::read(format!("./java/rustjni/test/{}.class", class_name)).unwrap(),
                 &token,
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         let other = TestMethodsClass::init(&env, &token).unwrap();

@@ -1,48 +1,75 @@
-extern crate rust_jni;
-
-mod object;
-
 /// An integration test for the `java::lang::Throwable` type.
-#[cfg(test)]
+#[cfg(all(test, feature = "libjvm"))]
 mod throwable {
-    use object;
+    use rust_jni::java::lang::*;
     use rust_jni::*;
 
     #[test]
     fn test() {
         let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
         let vm = JavaVM::create(&init_arguments).unwrap();
-        let env = vm.attach(&AttachArguments::new(&init_arguments)).unwrap();
-        let token = env.token();
+        vm.with_attached(
+            &AttachArguments::new(init_arguments.version()),
+            |env, token| {
+                let _throwable = Throwable::new(env, &token).unwrap();
 
-        let throwable = java::lang::Throwable::new(
-            &env,
-            &java::lang::String::new(&env, "test-string", &token).unwrap(),
-            &token,
-        ).unwrap();
+                let throwable = Throwable::new_with_message(
+                    env,
+                    &token,
+                    &String::new(env, &token, "cause").unwrap(),
+                )
+                .unwrap();
 
-        object::test_object(
-            &throwable,
-            "java/lang/Throwable",
-            "java.lang.Throwable: test-string",
-            &env,
-            &token,
-        );
-        assert!(throwable.class(&token).is_same_as(
-            &java::lang::Throwable::get_class(&env, &token).unwrap(),
-            &token
-        ));
+                let _ = Throwable::new_with_cause(env, &token, &throwable).unwrap();
 
-        assert_eq!(
-            throwable.get_message(&token).unwrap().as_string(&token),
-            "test-string"
-        );
+                let throwable = Throwable::new_with_message_and_cause(
+                    env,
+                    &token,
+                    &String::new(env, &token, "message").unwrap(),
+                    &throwable,
+                )
+                .unwrap();
 
-        let token = throwable.throw(token);
-        let (exception, token) = token.unwrap();
-        assert_eq!(
-            exception.to_string(&token).unwrap().as_string(&token),
-            "java.lang.Throwable: test-string"
-        );
+                assert!(throwable
+                    .class(&token)
+                    .is_same_as(&token, &Throwable::class(env, &token).unwrap()));
+
+                assert_eq!(
+                    throwable
+                        .get_message(&token)
+                        .unwrap()
+                        .unwrap()
+                        .as_string(&token),
+                    "message"
+                );
+
+                assert_eq!(
+                    throwable
+                        .get_cause(&token)
+                        .unwrap()
+                        .unwrap()
+                        .get_message(&token)
+                        .unwrap()
+                        .unwrap()
+                        .as_string(&token),
+                    "cause"
+                );
+
+                let token = throwable.throw(token);
+                let (throwable, token) = token.unwrap();
+
+                assert_eq!(
+                    throwable
+                        .get_message(&token)
+                        .unwrap()
+                        .unwrap()
+                        .as_string(&token),
+                    "message"
+                );
+
+                ((), token)
+            },
+        )
+        .unwrap();
     }
 }

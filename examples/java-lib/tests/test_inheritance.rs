@@ -80,7 +80,8 @@ mod test_inheritance {
                 &env,
                 &fs::read(format!("./java/rustjni/test/{}.class", class_name)).unwrap(),
                 &token,
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         let value = TestClass::create(&env, &token).unwrap();
