@@ -1,7 +1,10 @@
 use crate::class::Class;
 use crate::env::JniEnv;
 use crate::error::JniError;
+use crate::java_class::JavaClass;
+use crate::java_methods::JavaArgumentTuple;
 use crate::java_methods::JavaArgumentType;
+use crate::java_methods::JavaMethodSignature;
 use crate::java_string::to_java_string_null_terminated;
 use crate::jni_types::private::JniType;
 use crate::object::Object;
@@ -30,6 +33,7 @@ where
 {
     type JniType = <Self as JavaArgumentType>::JniType;
 
+    #[inline(always)]
     fn to_jni(&self) -> Self::JniType {
         JavaArgumentType::to_jni(self)
     }
@@ -38,9 +42,74 @@ where
 impl NativeMethodResult for () {
     type JniType = ();
 
+    #[inline(always)]
     fn to_jni(&self) -> Self::JniType {
         *self
     }
+}
+
+pub trait FromNativeArgument: JavaArgumentType {
+    type ResultType;
+
+    unsafe fn from_jni_argument<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self::ResultType;
+}
+
+impl<T> FromNativeArgument for T
+where
+    for<'a> T: JavaClass<'a>,
+{
+    type ResultType = Option<Self>;
+
+    #[inline(always)]
+    unsafe fn from_jni_argument<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self::ResultType {
+        NonNull::new(value).map(|value| Self::from_object(Object::from_raw(env, value)))
+    }
+}
+
+pub trait FromNativeArgumentTuple: JavaArgumentTuple {
+    type ResultType;
+
+    unsafe fn from_jni_argument<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self::ResultType;
+}
+
+macro_rules! peel_from_native_argument_tuple_impls {
+    () => ();
+    ($type:ident, $($other:ident,)*) => (from_native_argument_tuple_impls! { $($other,)* });
+}
+
+macro_rules! from_native_argument_tuple_impls {
+    ( $($type:ident,)*) => (
+        impl<$($type),*> FromNativeArgumentTuple for ($($type,)*)
+        where
+            $($type: FromNativeArgument,)*
+        {
+            type ResultType = ($($type::ResultType,)*);
+
+            #[inline(always)]
+            unsafe fn from_jni_argument<'a>(#[allow(unused_variables)] env: &'a JniEnv<'a>, value: Self::JniType) -> Self::ResultType {
+                #[allow(non_snake_case)]
+                let ($($type,)*) = value;
+                ($(<$type as FromNativeArgument>::from_jni_argument(env, $type),)*)
+            }
+        }
+
+        peel_from_native_argument_tuple_impls! { $($type,)* }
+    );
+}
+
+from_native_argument_tuple_impls! {
+    T0,
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6,
+    T7,
+    T8,
+    T9,
+    T10,
+    T11,
 }
 
 /// Implementation of a static native Java method.
@@ -72,12 +141,13 @@ impl NativeMethodResult for () {
 /// unsafe extern "C" fn Java_java_lang_String_valueOf__I(
 ///     raw_env: *mut jni_sys::JNIEnv,
 ///     raw_class: jni_sys::jclass,
-///     argument: jni_sys::jint,
+///     raw_argument: jni_sys::jint,
 /// ) -> jni_sys::jstring {
-///     static_native_method_implementation::<String, _>(
+///     static_native_method_implementation::<_, _, _, fn(i32) -> String<'static>>(
 ///         raw_env,
 ///         raw_class,
-///         |class, token| {
+///         (raw_argument,),
+///         |class, token, (argument,)| {
 ///             let env = class.env();
 ///             assert_eq!(
 ///                 class
@@ -87,7 +157,7 @@ impl NativeMethodResult for () {
 ///                     .as_string(&token),
 ///                 "java.lang.String",
 ///             );
-///             let result = String::value_of_int(env, &token, argument)
+///             let result = String::value_of_int(env, &token, *argument)
 ///                 .or_npe(env, &token)
 ///                 .unwrap();
 ///             assert_eq!(result.as_string(&token), "17");
@@ -112,9 +182,10 @@ impl NativeMethodResult for () {
 ///
 /// This function is unsafe because it is possible to pass an invalid [`JNIEnv`](../jni_sys/type.JNIEnv.html)
 /// pointer or an invalid [`jclass`](../jni_sys/type.jclass.html).
-pub unsafe fn static_native_method_implementation<R, F>(
+pub unsafe fn static_native_method_implementation<R, A, F, S>(
     raw_env: *mut jni_sys::JNIEnv,
     raw_class: jni_sys::jclass,
+    arguments: A::JniType,
     callback: F,
 ) -> R::JniType
 where
@@ -123,21 +194,29 @@ where
     for<'a> F: FnOnce(
             &'a Class<'a>,
             NoException<'a>,
+            &'a A::ResultType,
         ) -> (
             JavaResult<'a, Box<dyn NativeMethodResult<JniType = R::JniType> + 'a>>,
             NoException<'a>,
         ) + std::panic::UnwindSafe,
     R: NativeMethodResult,
+    A: FromNativeArgumentTuple,
+    <A as JavaArgumentTuple>::JniType: std::panic::UnwindSafe,
+    S: JavaMethodSignature<A, R>,
 {
-    generic_native_method_implementation::<R, _>(raw_env, |env, token| {
-        // Should not panic if the class pointer is valid.
-        let class = Class::from_raw(&env, NonNull::new(raw_class).unwrap());
-        let (result, token) = callback(&class, token);
-        let result = to_jni_type::<R>(result, token);
-        // We don't own the reference.
-        mem::forget(class);
-        result
-    })
+    generic_native_method_implementation::<R, A, _, S>(
+        raw_env,
+        arguments,
+        |env, token, arguments| {
+            // Should not panic if the class pointer is valid.
+            let class = Class::from_raw(&env, NonNull::new(raw_class).unwrap());
+            let (result, token) = callback(&class, token, arguments);
+            let result = to_jni_type::<R>(result, token);
+            // We don't own the refe    rence.
+            mem::forget(class);
+            result
+        },
+    )
 }
 
 /// Implementation of a native Java method.
@@ -169,12 +248,13 @@ where
 /// unsafe extern "C" fn Java_java_lang_String_valueOf__I(
 ///     raw_env: *mut jni_sys::JNIEnv,
 ///     raw_object: jni_sys::jobject,
-///     argument: jni_sys::jint,
+///     raw_argument: jni_sys::jint,
 /// ) -> jni_sys::jstring {
-///     native_method_implementation::<String, _>(
+///     native_method_implementation::<_, _, _, fn(i32) -> String<'static>>(
 ///         raw_env,
 ///         raw_object,
-///         |object, token| {
+///         (raw_argument,),
+///         |object, token, (argument,)| {
 ///             let env = object.env();
 ///             assert_eq!(
 ///                 object
@@ -185,7 +265,7 @@ where
 ///                     .as_string(&token),
 ///                 "java.lang.String",
 ///             );
-///             let result = String::value_of_int(env, &token, argument)
+///             let result = String::value_of_int(env, &token, *argument)
 ///                 .or_npe(env, &token)
 ///                 .unwrap();
 ///             assert_eq!(result.as_string(&token), "17");
@@ -210,9 +290,10 @@ where
 ///
 /// This function is unsafe because it is possible to pass an invalid [`JNIEnv`](../jni_sys/type.JNIEnv.html)
 /// pointer or an invalid [`jobject`](../jni_sys/type.jobject.html).
-pub unsafe fn native_method_implementation<R, F>(
+pub unsafe fn native_method_implementation<R, A, F, S>(
     raw_env: *mut jni_sys::JNIEnv,
     raw_object: jni_sys::jobject,
+    arguments: A::JniType,
     callback: F,
 ) -> R::JniType
 where
@@ -221,32 +302,45 @@ where
     for<'a> F: FnOnce(
             &'a Object<'a>,
             NoException<'a>,
+            &'a A::ResultType,
         ) -> (
             JavaResult<'a, Box<dyn NativeMethodResult<JniType = R::JniType> + 'a>>,
             NoException<'a>,
         ) + std::panic::UnwindSafe,
     R: NativeMethodResult,
+    A: FromNativeArgumentTuple,
+    <A as JavaArgumentTuple>::JniType: std::panic::UnwindSafe,
+    S: JavaMethodSignature<A, R>,
 {
-    generic_native_method_implementation::<R, _>(raw_env, |env, token| {
-        // Should not panic if the class pointer is valid.
-        let object = Object::from_raw(&env, NonNull::new(raw_object).unwrap());
-        let (result, token) = callback(&object, token);
-        let result = to_jni_type::<R>(result, token);
-        // We don't own the reference.
-        mem::forget(object);
-        result
-    })
+    generic_native_method_implementation::<R, A, _, S>(
+        raw_env,
+        arguments,
+        |env, token, arguments| {
+            // Should not panic if the class pointer is valid.
+            let object = Object::from_raw(&env, NonNull::new(raw_object).unwrap());
+            let (result, token) = callback(&object, token, arguments);
+            let result = to_jni_type::<R>(result, token);
+            // We don't own the reference.
+            mem::forget(object);
+            result
+        },
+    )
 }
 
 /// This function is unsafe because it is possible to pass an invalid [`JNIEnv`](../jni_sys/type.JNIEnv.html)
 /// pointer.
-unsafe fn generic_native_method_implementation<R, F>(
+unsafe fn generic_native_method_implementation<R, A, F, S>(
     raw_env: *mut jni_sys::JNIEnv,
+    arguments: A::JniType,
     callback: F,
 ) -> R::JniType
 where
-    for<'a> F: FnOnce(&'a JniEnv<'a>, NoException<'a>) -> R::JniType + std::panic::UnwindSafe,
+    for<'a> F: FnOnce(&'a JniEnv<'a>, NoException<'a>, &'a A::ResultType) -> R::JniType
+        + std::panic::UnwindSafe,
     R: NativeMethodResult,
+    A: FromNativeArgumentTuple,
+    <A as JavaArgumentTuple>::JniType: std::panic::UnwindSafe,
+    S: JavaMethodSignature<A, R>,
 {
     let result = panic::catch_unwind(|| {
         let mut java_vm: *mut jni_sys::JavaVM = ptr::null_mut();
@@ -272,7 +366,10 @@ where
         #[allow(unused_unsafe)]
         let env = unsafe { JniEnv::native(&vm, NonNull::new(raw_env).unwrap()) };
         let token = env.token();
-        let result = callback(&env, token);
+        let arguments = <A as FromNativeArgumentTuple>::from_jni_argument(&env, arguments);
+        let result = callback(&env, token, &arguments);
+        // We don't own argument references.
+        mem::forget(arguments);
         // We don't own the reference.
         mem::forget(env);
         result
