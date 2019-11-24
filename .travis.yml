@@ -11,7 +11,7 @@ env:
     - LD_LIBRARY_PATH="$JAVA_HOME/jre/lib/amd64/server"
   matrix:
     - JDK=oraclejdk8
-    - JDK=openjdk8
+    - JDK=java-1.8.0-openjdk-amd64
 before_script:
   - ./ci/install-java.sh
   - jdk_switcher use $JDK
@@ -26,7 +26,7 @@ jobs:
     - stage: "Test release versions of all crates"
       if: fork = false AND branch = master AND commit_message ~= /!sudo publish (rust-jni)/
       rust: nightly
-      jdk: openjdk8
+      jdk: java-1.8.0-openjdk-amd64
       before_script:
         - jdk_switcher use $JDK
       script:
@@ -35,7 +35,7 @@ jobs:
     - stage: "Publish rust-jni"
       if: fork = false AND branch = master AND commit_message ~= /!sudo publish rust-jni/
       rust: stable
-      jdk: openjdk8
+      jdk: java-1.8.0-openjdk-amd64
       script:
         - cargo login $CARGO_TOKEN
         - cargo publish
