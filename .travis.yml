@@ -6,23 +6,23 @@ rust:
   - beta
   - nightly
 env:
-  global:
-    # TODO(https://github.com/rust-lang/cargo/issues/4895): remove this.
-    - LD_LIBRARY_PATH="$JAVA_HOME/jre/lib/amd64/server"
   matrix:
     - JDK=oraclejdk8
     - JDK=openjdk8
 before_script:
   - ./ci/install-java.sh
   - jdk_switcher use $JDK
-  - find /usr/lib -name "libjvm.so"
   - echo $JAVA_HOME
-  - echo $LD_LIBRARY_PATH
   # TODO(https://github.com/rust-lang/cargo/issues/4895): remove this.
   - export LD_LIBRARY_PATH="$JAVA_HOME/jre/lib/amd64/server"
+  - echo $LD_LIBRARY_PATH
 install:
   - rustup component add rustfmt
 script:
+  - find /usr/lib -name "libjvm.so"
+  - echo $JAVA_HOME
+  - echo $LD_LIBRARY_PATH
+  - ls $LD_LIBRARY_PATH/libjvm.so
   - ci/check-format.sh
   - ci/test.sh
 jobs:
