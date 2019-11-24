@@ -11,7 +11,6 @@ env:
     - JDK=openjdk8
 before_script:
   - ./ci/install-java.sh
-  - jdk_switcher --help
   - jdk_switcher use $JDK
   # jdk_switcher doesn't set JAVA_HOMe correctly for manually installed openjdk8.
   - if [[ "$JDK" == "openjdk8" ]]; then export JAVA_HOME="$JAVA_HOME-amd64"; fi
