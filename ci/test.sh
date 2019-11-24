@@ -9,3 +9,4 @@ cargo test --verbose --lib
 # TOOD(https://github.com/rust-lang/cargo/issues/5015): stop cd-ing into individual
 # crates once the features bug is fixed.
 (cd rust-jni && cargo test --verbose --features libjvm)
+(cd java && cargo test --verbose)

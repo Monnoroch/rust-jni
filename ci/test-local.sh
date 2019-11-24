@@ -7,3 +7,4 @@ cargo test --lib
 
 # All tests.
 (cd rust-jni && cargo test --features libjvm)
+(cd java && cargo test)
