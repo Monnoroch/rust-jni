@@ -12,4 +12,7 @@ sudo update-java-alternatives -s java-1.8.0-openjdk-amd64
 
 # change JAVA_HOME to Java 8
 export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+
+find /usr/lib -name "libjvm.so"
+# TODO(https://github.com/rust-lang/cargo/issues/4895): remove this.
 export LD_LIBRARY_PATH="$JAVA_HOME/jre/lib/amd64/server"

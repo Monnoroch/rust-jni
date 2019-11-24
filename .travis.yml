@@ -7,6 +7,7 @@ rust:
   - nightly
 env:
   global:
+    # TODO(https://github.com/rust-lang/cargo/issues/4895): remove this.
     - LD_LIBRARY_PATH="$JAVA_HOME/jre/lib/amd64/server"
   matrix:
     - JDK=oraclejdk8
@@ -14,6 +15,7 @@ env:
 before_script:
   - ./ci/install-java.sh
   - jdk_switcher use $JDK
+  - find /usr/lib -name "libjvm.so"
 install:
   - rustup component add rustfmt
 script:
