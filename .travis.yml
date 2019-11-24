@@ -12,9 +12,8 @@ env:
     - JDK=oraclejdk8
     - JDK=openjdk8
 before_script:
+  - ./ci/install-java.sh
   - jdk_switcher use $JDK
-install:
-  - rustup component add rustfmt-preview
 script:
   - ci/check-format.sh
   - ci/test.sh
