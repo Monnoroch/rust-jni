@@ -11,10 +11,9 @@ env:
     - LD_LIBRARY_PATH="$JAVA_HOME/jre/lib/amd64/server"
   matrix:
     - JDK=oraclejdk8
-    - JDK=java-1.8.0-openjdk-amd64
+    - JDK=openjdk8
 before_script:
   - ./ci/install-java.sh
-  - jdk_switcher use $JDK
   - find /usr/lib -name "libjvm.so"
   - echo $JAVA_HOME
   - echo $LD_LIBRARY_PATH
