@@ -14,6 +14,8 @@ env:
 before_script:
   - ./ci/install-java.sh
   - jdk_switcher use $JDK
+install:
+  - rustup component add rustfmt
 script:
   - ci/check-format.sh
   - ci/test.sh
