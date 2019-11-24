@@ -1,0 +1,39 @@
+[package]
+name = "rust-jni"
+version = "0.1.0"
+authors = ["Monnoroch <monnoroch@gmail.com>"]
+license = "MIT"
+description = "A package for easy Java interop"
+repository = "https://github.com/Monnoroch/rust-jni"
+documentation = "https://docs.rs/rust-jni/"
+keywords = ["java"]
+readme = "README.md"
+include = [
+    "Cargo.toml",
+    "build.rs",
+    "src/**/*.rs",
+    "tests/**/*.rs",
+    "README.md",
+    "LICENSE",
+]
+edition = "2018"
+build = "build.rs"
+
+[badges]
+travis-ci = { repository = "Monnoroch/rust-jni", branch = "master" }
+
+[dependencies]
+cesu8 = "1.1.0"
+jni-sys = "0.3.0"
+cfg-if = "0.1.10"
+
+[dev-dependencies]
+mockall = "0.5.2"
+serial_test = "0.2.0"
+serial_test_derive = "0.2.0"
+
+[build-dependencies]
+walkdir = "2.2.9"
+
+[features]
+libjvm = []
