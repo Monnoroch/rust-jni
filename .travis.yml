@@ -16,6 +16,8 @@ before_script:
   - ./ci/install-java.sh
   - jdk_switcher use $JDK
   - find /usr/lib -name "libjvm.so"
+  - echo $JAVA_HOME
+  - echo $LD_LIBRARY_PATH
 install:
   - rustup component add rustfmt
 script:
