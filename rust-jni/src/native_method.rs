@@ -6,6 +6,7 @@ use crate::java_methods::JavaArgumentTuple;
 use crate::java_methods::JavaArgumentType;
 use crate::java_methods::JavaMethodSignature;
 use crate::java_string::to_java_string_null_terminated;
+use crate::jni_types::private::JniArgumentTypeTuple;
 use crate::jni_types::private::JniType;
 use crate::object::Object;
 use crate::result::JavaResult;
@@ -204,15 +205,18 @@ where
     <A as JavaArgumentTuple>::JniType: std::panic::UnwindSafe,
     S: JavaMethodSignature<A, R>,
 {
-    generic_native_method_implementation::<R, A, _, S>(
+    generic_native_method_implementation::<R::JniType, A::JniType, _>(
         raw_env,
         arguments,
         |env, token, arguments| {
             // Should not panic if the class pointer is valid.
             let class = Class::from_raw(&env, NonNull::new(raw_class).unwrap());
-            let (result, token) = callback(&class, token, arguments);
+            let arguments = <A as FromNativeArgumentTuple>::from_jni_argument(env, arguments);
+            let (result, token) = callback(&class, token, &arguments);
             let result = to_jni_type::<R>(result, token);
-            // We don't own the refe    rence.
+            // We don't own argument references.
+            mem::forget(arguments);
+            // We don't own the reference.
             mem::forget(class);
             result
         },
@@ -312,14 +316,17 @@ where
     <A as JavaArgumentTuple>::JniType: std::panic::UnwindSafe,
     S: JavaMethodSignature<A, R>,
 {
-    generic_native_method_implementation::<R, A, _, S>(
+    generic_native_method_implementation::<R::JniType, A::JniType, _>(
         raw_env,
         arguments,
         |env, token, arguments| {
             // Should not panic if the class pointer is valid.
             let object = Object::from_raw(&env, NonNull::new(raw_object).unwrap());
-            let (result, token) = callback(&object, token, arguments);
+            let arguments = <A as FromNativeArgumentTuple>::from_jni_argument(env, arguments);
+            let (result, token) = callback(&object, token, &arguments);
             let result = to_jni_type::<R>(result, token);
+            // We don't own argument references.
+            mem::forget(arguments);
             // We don't own the reference.
             mem::forget(object);
             result
@@ -327,20 +334,45 @@ where
     )
 }
 
-/// This function is unsafe because it is possible to pass an invalid [`JNIEnv`](../jni_sys/type.JNIEnv.html)
-/// pointer.
-unsafe fn generic_native_method_implementation<R, A, F, S>(
-    raw_env: *mut jni_sys::JNIEnv,
-    arguments: A::JniType,
-    callback: F,
+fn to_jni_type<'a, R>(
+    result: JavaResult<'a, Box<dyn NativeMethodResult<JniType = R::JniType> + 'a>>,
+    token: NoException<'a>,
 ) -> R::JniType
 where
-    for<'a> F: FnOnce(&'a JniEnv<'a>, NoException<'a>, &'a A::ResultType) -> R::JniType
-        + std::panic::UnwindSafe,
-    R: NativeMethodResult,
-    A: FromNativeArgumentTuple,
-    <A as JavaArgumentTuple>::JniType: std::panic::UnwindSafe,
-    S: JavaMethodSignature<A, R>,
+    R: NativeMethodResult + 'a,
+{
+    match result {
+        Ok(result) => {
+            mem::forget(token);
+            let java_result = result.to_jni();
+            // Here we want to free memory of the Box, but don't want to run the destructor of the boxed value.
+            // Running the destructor for primitive types won't do anything, but running the destructor
+            // for a Java class wrapper will delete it's reference, which will make Java delete the object.
+            // Here we could use mem:;forget(result), but that would leak the Box-es memory, which we don't want.
+            let result = Box::into_raw(result);
+            // Safe because we just took ownership of this memory.
+            unsafe { alloc::dealloc(result as *mut u8, alloc::Layout::for_value(&*result)) };
+            java_result
+        }
+        #[cold]
+        Err(exception) => {
+            let _ = exception.throw(token);
+            R::JniType::default()
+        }
+    }
+}
+
+/// This function is unsafe because it is possible to pass an invalid [`JNIEnv`](../jni_sys/type.JNIEnv.html)
+/// pointer.
+unsafe fn generic_native_method_implementation<R, A, F>(
+    raw_env: *mut jni_sys::JNIEnv,
+    arguments: A,
+    callback: F,
+) -> R
+where
+    for<'a> F: FnOnce(&'a JniEnv<'a>, NoException<'a>, A) -> R + panic::UnwindSafe,
+    R: JniType,
+    A: JniArgumentTypeTuple + panic::UnwindSafe,
 {
     let result = panic::catch_unwind(|| {
         let mut java_vm: *mut jni_sys::JavaVM = ptr::null_mut();
@@ -366,10 +398,7 @@ where
         #[allow(unused_unsafe)]
         let env = unsafe { JniEnv::native(&vm, NonNull::new(raw_env).unwrap()) };
         let token = env.token();
-        let arguments = <A as FromNativeArgumentTuple>::from_jni_argument(&env, arguments);
-        let result = callback(&env, token, &arguments);
-        // We don't own argument references.
-        mem::forget(arguments);
+        let result = callback(&env, token, arguments);
         // We don't own the reference.
         mem::forget(env);
         result
@@ -397,35 +426,7 @@ where
                     throw_new_runtime_exception(raw_env, "Rust panic: generic panic.\0")
                 };
             }
-            R::JniType::default()
-        }
-    }
-}
-
-fn to_jni_type<'a, R>(
-    result: JavaResult<'a, Box<dyn NativeMethodResult<JniType = R::JniType> + 'a>>,
-    token: NoException<'a>,
-) -> R::JniType
-where
-    R: NativeMethodResult + 'a,
-{
-    match result {
-        Ok(result) => {
-            mem::forget(token);
-            let java_result = result.to_jni();
-            // Here we want to free memory of the Box, but don't want to run the destructor of the boxed value.
-            // Running the destructor for primitive types won't do anything, but running the destructor
-            // for a Java class wrapper will delete it's reference, which will make Java delete the object.
-            // Here we could use mem:;forget(result), but that would leak the Box-es memory, which we don't want.
-            let result = Box::into_raw(result);
-            // Safe because we just took ownership of this memory.
-            unsafe { alloc::dealloc(result as *mut u8, alloc::Layout::for_value(&*result)) };
-            java_result
-        }
-        #[cold]
-        Err(exception) => {
-            let _ = exception.throw(token);
-            R::JniType::default()
+            R::default()
         }
     }
 }
