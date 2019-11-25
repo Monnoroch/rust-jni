@@ -8,7 +8,6 @@ use crate::java_methods::JniSignature;
 use crate::jni_bool;
 use crate::jni_methods;
 use crate::jni_types::private::JniPrimitiveType;
-use crate::native_method::FromNativeArgument;
 use crate::result::JavaResult;
 use crate::token::NoException;
 use std::char;
@@ -107,18 +106,6 @@ macro_rules! jni_primitive_argument_traits {
             #[inline(always)]
             fn to_jni(&self) -> Self::JniType {
                 *self as Self::JniType
-            }
-        }
-
-        impl FromNativeArgument for $type {
-            type ResultType = Self;
-
-            #[inline(always)]
-            unsafe fn from_jni_argument<'a>(
-                _env: &'a JniEnv<'a>,
-                value: Self::JniType,
-            ) -> Self::ResultType {
-                <Self as JavaPrimitiveResultType>::from_jni(value)
             }
         }
     };
