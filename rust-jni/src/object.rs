@@ -141,9 +141,10 @@ impl<'env> Object<'env> {
 
     /// Construct from a raw pointer. Unsafe because an invalid pointer may be passed
     /// as the argument.
+    ///
     /// Unsafe because an incorrect object reference can be passed.
     #[inline(always)]
-    pub(crate) unsafe fn from_raw<'a>(
+    pub unsafe fn from_raw<'a>(
         env: &'a JniEnv<'a>,
         raw_object: NonNull<jni_sys::_jobject>,
     ) -> Object<'a> {
