@@ -152,6 +152,12 @@ impl<'env> AsRef<Object<'env>> for String<'env> {
     }
 }
 
+impl<'a> Into<Object<'a>> for String<'a> {
+    fn into(self) -> Object<'a> {
+        self.object
+    }
+}
+
 impl<'env> FromObject<'env> for String<'env> {
     #[inline(always)]
     unsafe fn from_object(object: Object<'env>) -> Self {

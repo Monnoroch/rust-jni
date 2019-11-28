@@ -112,6 +112,12 @@ impl<'env> AsRef<Object<'env>> for Class<'env> {
     }
 }
 
+impl<'a> Into<Object<'a>> for Class<'a> {
+    fn into(self) -> Object<'a> {
+        self.object
+    }
+}
+
 impl<'env> FromObject<'env> for Class<'env> {
     #[inline(always)]
     unsafe fn from_object(object: Object<'env>) -> Self {

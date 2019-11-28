@@ -27,6 +27,18 @@ impl<'env> AsRef<Object<'env>> for Exception<'env> {
     }
 }
 
+impl<'a> Into<Throwable<'a>> for Exception<'a> {
+    fn into(self) -> Throwable<'a> {
+        self.object
+    }
+}
+
+impl<'a> Into<Object<'a>> for Exception<'a> {
+    fn into(self) -> Object<'a> {
+        self.object.into()
+    }
+}
+
 impl<'env> FromObject<'env> for Exception<'env> {
     #[inline(always)]
     unsafe fn from_object(object: Object<'env>) -> Self {
