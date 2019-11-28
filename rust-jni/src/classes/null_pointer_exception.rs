@@ -5,6 +5,7 @@ use crate::java_methods::FromObject;
 use crate::java_methods::JniSignature;
 use crate::object::Object;
 use crate::result::JavaResult;
+use crate::throwable::Throwable;
 use crate::token::NoException;
 
 /// A type representing a Java
@@ -42,6 +43,24 @@ impl<'env> AsRef<Object<'env>> for NullPointerException<'env> {
     #[inline(always)]
     fn as_ref(&self) -> &Object<'env> {
         &self.object
+    }
+}
+
+impl<'a> Into<Exception<'a>> for NullPointerException<'a> {
+    fn into(self) -> Exception<'a> {
+        self.object
+    }
+}
+
+impl<'a> Into<Throwable<'a>> for NullPointerException<'a> {
+    fn into(self) -> Throwable<'a> {
+        self.object.into()
+    }
+}
+
+impl<'a> Into<Object<'a>> for NullPointerException<'a> {
+    fn into(self) -> Object<'a> {
+        self.object.into()
     }
 }
 

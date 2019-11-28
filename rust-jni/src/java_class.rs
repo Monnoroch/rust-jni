@@ -109,7 +109,7 @@ where
             Some(value) => Ok(value),
             None => {
                 let npe = NullPointerException::new(env, token)?;
-                Err(npe.object.object)
+                Err(npe.into())
             }
         }
     }
