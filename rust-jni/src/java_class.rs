@@ -79,6 +79,7 @@ pub trait NullableJavaClassExt<'a, R> {
     ///     .or_npe(env, &token)?
     ///     .class(&token)
     ///     .parent(&token)
+    ///     .as_ref()
     ///     .or_npe(env, &token)?;
     /// # Ok(token)
     /// # }
@@ -101,7 +102,7 @@ pub trait NullableJavaClassExt<'a, R> {
 /// to [`Option<T: JavaClass>`](type.JavaResult.html).
 impl<'a, R> NullableJavaClassExt<'a, R> for Option<R>
 where
-    R: JavaClass<'a>,
+    R: JavaClassRef<'a>,
 {
     #[inline(always)]
     fn or_npe(self, env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, R> {

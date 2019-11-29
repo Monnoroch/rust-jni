@@ -1,5 +1,5 @@
 use crate::env::JniEnv;
-use crate::java_class::JavaClass;
+use crate::java_class::JavaClassRef;
 use crate::java_class::NullableJavaClassExt;
 use crate::throwable::Throwable;
 use crate::token::NoException;
@@ -11,10 +11,10 @@ use crate::token::NoException;
 pub type JavaResult<'env, T> = Result<T, Throwable<'env>>;
 
 /// Add nullable object helper methods from [`NullableJavaClassExt`](trait.NullableJavaClassExt.html)
-/// to [`JavaResult<Option<T: JavaClass>>`](type.JavaResult.html).
+/// to [`JavaResult<Option<T: JavaClassRef>>`](type.JavaResult.html).
 impl<'a, R> NullableJavaClassExt<'a, R> for JavaResult<'a, Option<R>>
 where
-    R: JavaClass<'a>,
+    R: JavaClassRef<'a>,
 {
     #[inline(always)]
     fn or_npe(self, env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, R> {
