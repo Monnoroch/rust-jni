@@ -6,6 +6,7 @@ use crate::java_methods::JniSignature;
 use crate::object::Object;
 use crate::result::JavaResult;
 use crate::token::NoException;
+use std::ptr::NonNull;
 
 pub trait JavaClassRef<'a>: JniSignature + AsRef<Object<'a>> {}
 
@@ -36,6 +37,15 @@ pub trait JavaClassExt<'a> {
     /// Calls [`Class::find`](java/lang/struct.Class.html#method.find) with the correct
     /// type signature.
     fn class(env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, Class<'a>>;
+
+    /// Get the raw object pointer with ownership transfer.
+    ///
+    /// The caller is responsible for managing the Java object's lifecycle ofter calling this.
+    ///
+    /// This function provides low-level access to the Java object and thus is unsafe.
+    unsafe fn take_raw_object(self) -> NonNull<jni_sys::_jobject>
+    where
+        Self: Into<Object<'a>>;
 }
 
 impl<'a, T> JavaClassExt<'a> for T
@@ -52,6 +62,14 @@ where
     #[inline(always)]
     fn class(env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, Class<'a>> {
         find_class::<Self>(env, token)
+    }
+
+    #[inline(always)]
+    unsafe fn take_raw_object(self) -> NonNull<jni_sys::_jobject>
+    where
+        Self: Into<Object<'a>>,
+    {
+        Object::take_raw_object(self)
     }
 }
 
