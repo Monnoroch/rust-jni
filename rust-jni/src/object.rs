@@ -10,6 +10,7 @@ use crate::token::{CallOutcome, NoException};
 use core::ptr::NonNull;
 use jni_sys;
 use std::fmt;
+use std::mem;
 
 include!("call_jni_method.rs");
 
@@ -36,6 +37,19 @@ impl<'env> Object<'env> {
     #[inline(always)]
     pub unsafe fn raw_object(&self) -> NonNull<jni_sys::_jobject> {
         self.raw_object
+    }
+
+    /// Get the raw object pointer with ownership transfer.
+    ///
+    /// The caller is responsible for managing the Java object's lifecycle ofter calling this.
+    ///
+    /// This function provides low-level access to the Java object and thus is unsafe.
+    #[inline(always)]
+    pub unsafe fn take_raw_object(value: impl Into<Object<'env>>) -> NonNull<jni_sys::_jobject> {
+        let value = value.into();
+        let result = value.raw_object();
+        mem::forget(value);
+        result
     }
 
     /// Get the [`JniEnv`](../../struct.JniEnv.html) this object is bound to.
