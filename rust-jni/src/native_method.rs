@@ -3,6 +3,7 @@ use crate::env::JniEnv;
 use crate::error::JniError;
 use crate::java_class::JavaClass;
 use crate::java_methods::FromObject;
+use crate::java_methods::JavaArgumentType;
 use crate::java_string::to_java_string_null_terminated;
 use crate::jni_types::private::JniArgumentType;
 use crate::jni_types::private::JniArgumentTypeTuple;
@@ -16,6 +17,40 @@ use std::mem;
 use std::panic;
 use std::ptr::{self, NonNull};
 
+/// A trait representing types that can be returned from a native Java method wrapper.
+///
+/// These are types that can be passed to Java method wrappers as arguments plus
+/// [`()`](https://doc.rust-lang.org/std/primitive.unit.html).
+pub trait ToJavaNativeResult {
+    type JniType: JniType;
+
+    fn to_java_native_result(&self) -> Self::JniType;
+}
+
+impl<T> ToJavaNativeResult for T
+where
+    T: JavaArgumentType,
+{
+    type JniType = <T as JavaArgumentType>::JniType;
+
+    fn to_java_native_result(&self) -> Self::JniType {
+        <T as JavaArgumentType>::to_jni(self)
+    }
+}
+
+impl ToJavaNativeResult for () {
+    type JniType = ();
+
+    fn to_java_native_result(&self) -> Self::JniType {
+        ()
+    }
+}
+
+/// A trait representing types that can be passed to native Java method wrappers
+/// as arguments.
+///
+/// These are either primitive types convertible to JNI types or
+/// [`Option`](https://doc.rust-lang.org/std/option/enum.Option.html)-s of Java class wrappers.
 pub trait ToJavaNativeArgument {
     type JniType: JniArgumentType;
 
@@ -123,7 +158,7 @@ java_argument_type_impls! {
 ///     raw_class: jni_sys::jclass,
 ///     raw_argument: jni_sys::jint,
 /// ) -> jni_sys::jstring {
-///     static_native_method_implementation::<(i32,), _, _>(
+///     static_native_method_implementation::<(i32,), String, _>(
 ///         raw_env,
 ///         raw_class,
 ///         (raw_argument,),
@@ -183,7 +218,7 @@ java_argument_type_impls! {
 ///     raw_class: jni_sys::jclass,
 ///     raw_argument: jni_sys::jint,
 /// ) -> jni_sys::jstring {
-///     static_native_method_implementation::<(i32,), _, _>(
+///     static_native_method_implementation::<(i32,), String, _>(
 ///         raw_env,
 ///         raw_class,
 ///         (raw_argument,),
@@ -222,17 +257,20 @@ pub unsafe fn static_native_method_implementation<A, R, F>(
     raw_class: jni_sys::jclass,
     raw_arguments: A::JniType,
     callback: F,
-) -> R
+) -> R::JniType
 where
-    for<'a> F:
-        FnOnce(&'a Class<'a>, NoException<'a>, &'a A) -> (JavaResult<'a, R>, NoException<'a>),
+    for<'a> F: FnOnce(
+        &'a Class<'a>,
+        NoException<'a>,
+        &'a A,
+    ) -> (JavaResult<'a, R::JniType>, NoException<'a>),
     F: panic::UnwindSafe,
     // TODO(monnoroch): this should be + 'a for the 'a in the HKTB above.
     A: ToJavaNativeArgumentTuple,
     A::JniType: panic::UnwindSafe,
-    R: JniType,
+    R: ToJavaNativeResult,
 {
-    generic_native_method_implementation::<R, A::JniType, _>(
+    generic_native_method_implementation::<R::JniType, A::JniType, _>(
         raw_env,
         raw_arguments,
         |env, token, arguments| {
@@ -240,7 +278,7 @@ where
             let class = Class::from_raw(env, NonNull::new(raw_class).unwrap());
             let arguments = <A as ToJavaNativeArgumentTuple>::from_raw(env, arguments);
             let (result, token) = callback(&class, token, &arguments);
-            let java_result = to_jni_type::<R>(result, token);
+            let java_result = to_jni_type::<R::JniType>(result, token);
             // We don't own the reference.
             mem::forget(arguments);
             // We don't own the reference.
@@ -283,7 +321,7 @@ where
 ///     raw_object: jni_sys::jobject,
 ///     raw_argument: jni_sys::jobject,
 /// ) -> jni_sys::jboolean {
-///     native_method_implementation::<(Option<Object>,), _, _>(
+///     native_method_implementation::<(Option<Object>,), bool, _>(
 ///         raw_env,
 ///         raw_object,
 ///         (raw_argument,),
@@ -342,7 +380,7 @@ where
 ///     raw_object: jni_sys::jobject,
 ///     raw_argument: jni_sys::jobject,
 /// ) -> jni_sys::jboolean {
-///     native_method_implementation::<(Option<Object>,), _, _>(
+///     native_method_implementation::<(Option<Object>,), bool, _>(
 ///         raw_env,
 ///         raw_object,
 ///         (raw_argument,),
@@ -382,17 +420,20 @@ pub unsafe fn native_method_implementation<A, R, F>(
     raw_object: jni_sys::jobject,
     raw_arguments: A::JniType,
     callback: F,
-) -> R
+) -> R::JniType
 where
-    for<'a> F:
-        FnOnce(&'a Object<'a>, NoException<'a>, &'a A) -> (JavaResult<'a, R>, NoException<'a>),
+    for<'a> F: FnOnce(
+        &'a Object<'a>,
+        NoException<'a>,
+        &'a A,
+    ) -> (JavaResult<'a, R::JniType>, NoException<'a>),
     F: panic::UnwindSafe,
     // TODO(monnoroch): this should be + 'a for the 'a in the HKTB above.
     A: ToJavaNativeArgumentTuple,
     A::JniType: panic::UnwindSafe,
-    R: JniType,
+    R: ToJavaNativeResult,
 {
-    generic_native_method_implementation::<R, A::JniType, _>(
+    generic_native_method_implementation::<R::JniType, A::JniType, _>(
         raw_env,
         raw_arguments,
         |env, token, arguments| {
@@ -400,7 +441,7 @@ where
             let object = Object::from_raw(env, NonNull::new(raw_object).unwrap());
             let arguments = <A as ToJavaNativeArgumentTuple>::from_raw(env, arguments);
             let (result, token) = callback(&object, token, &arguments);
-            let java_result = to_jni_type::<R>(result, token);
+            let java_result = to_jni_type::<R::JniType>(result, token);
             // We don't own the reference.
             mem::forget(arguments);
             // We don't own the reference.
