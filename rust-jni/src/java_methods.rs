@@ -9,7 +9,7 @@ use crate::jni_types::private::JniArgumentTypeTuple;
 use crate::object::Object;
 use crate::result::JavaResult;
 use crate::token::NoException;
-use core::ptr::NonNull;
+use core::ptr::{self, NonNull};
 
 /// A trait to be implemented by all types that can be passed or returned from JNI.
 ///
@@ -86,6 +86,33 @@ where
     fn to_jni(&self) -> Self::JniType {
         // Safe because we use the pointer only to pass it to JNI.
         unsafe { self.as_ref().raw_object().as_ptr() }
+    }
+}
+
+impl<'a, T> JniSignature for Option<T>
+where
+    T: JavaClassRef<'a>,
+{
+    #[inline(always)]
+    fn signature() -> &'static str {
+        T::signature()
+    }
+}
+
+impl<'a, T> JavaArgumentType for Option<T>
+where
+    T: JavaClassRef<'a>,
+{
+    type JniType = jni_sys::jobject;
+
+    #[inline(always)]
+    fn to_jni(&self) -> Self::JniType {
+        // Safe because we use the pointer only to pass it to JNI.
+        unsafe {
+            self.as_ref().map_or(ptr::null_mut(), |value| {
+                value.as_ref().raw_object().as_ptr()
+            })
+        }
     }
 }
 
