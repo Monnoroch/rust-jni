@@ -27,6 +27,20 @@ impl<'env> AsRef<Object<'env>> for Exception<'env> {
     }
 }
 
+impl<'env> AsRef<Throwable<'env>> for Exception<'env> {
+    #[inline(always)]
+    fn as_ref(&self) -> &Throwable<'env> {
+        &self.object
+    }
+}
+
+impl<'env> AsRef<Exception<'env>> for Exception<'env> {
+    #[inline(always)]
+    fn as_ref(&self) -> &Exception<'env> {
+        &*self
+    }
+}
+
 impl<'a> Into<Throwable<'a>> for Exception<'a> {
     fn into(self) -> Throwable<'a> {
         self.object
@@ -70,6 +84,6 @@ where
     T: AsRef<Object<'env>>,
 {
     fn eq(&self, other: &T) -> bool {
-        self.as_ref().eq(other.as_ref())
+        Object::as_ref(self).eq(other.as_ref())
     }
 }

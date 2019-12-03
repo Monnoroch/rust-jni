@@ -112,6 +112,13 @@ impl<'env> AsRef<Object<'env>> for Class<'env> {
     }
 }
 
+impl<'env> AsRef<Class<'env>> for Class<'env> {
+    #[inline(always)]
+    fn as_ref(&self) -> &Class<'env> {
+        &*self
+    }
+}
+
 impl<'a> Into<Object<'a>> for Class<'a> {
     fn into(self) -> Object<'a> {
         self.object
@@ -148,6 +155,6 @@ where
 {
     #[inline(always)]
     fn eq(&self, other: &T) -> bool {
-        self.as_ref().eq(other.as_ref())
+        Object::as_ref(self).eq(other.as_ref())
     }
 }

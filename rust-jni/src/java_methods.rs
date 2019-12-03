@@ -116,6 +116,51 @@ where
     }
 }
 
+/// A helper trait to allow accepting as many types
+/// as possible as method arguments in place of Java objects.
+///
+/// Currently supports:
+///  - `T: JavaClassRef`
+///  - `Option<T: JavaClassRef>`
+///
+/// Supporting both `T` and `Option<T>` essentially allow passing nullable class references.
+pub trait JavaObjectArgument<'a, AT>
+where
+    AT: JavaClassRef<'a>,
+{
+    fn as_argument<'r>(&'r self) -> Option<&'r AT>
+    where
+        'a: 'r;
+}
+
+impl<'a, AT, T> JavaObjectArgument<'a, AT> for T
+where
+    T: JavaClassRef<'a> + AsRef<AT>,
+    AT: JavaClassRef<'a>,
+{
+    #[inline(always)]
+    fn as_argument<'r>(&'r self) -> Option<&'r AT>
+    where
+        'a: 'r,
+    {
+        Some(self.as_ref())
+    }
+}
+
+impl<'a, AT, T> JavaObjectArgument<'a, AT> for Option<T>
+where
+    T: JavaClassRef<'a> + AsRef<AT>,
+    AT: JavaClassRef<'a>,
+{
+    #[inline(always)]
+    fn as_argument<'r>(&'r self) -> Option<&'r AT>
+    where
+        'a: 'r,
+    {
+        self.as_ref().map(|value| value.as_ref())
+    }
+}
+
 pub trait JavaArgumentTuple {
     type JniType: JniArgumentTypeTuple;
 
