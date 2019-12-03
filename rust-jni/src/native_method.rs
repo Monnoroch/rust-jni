@@ -13,6 +13,7 @@ use crate::result::JavaResult;
 use crate::token::NoException;
 use crate::vm::JavaVMRef;
 use jni_sys;
+use std::alloc;
 use std::mem;
 use std::panic;
 use std::ptr::{self, NonNull};
@@ -33,6 +34,7 @@ where
 {
     type JniType = <T as JavaArgumentType>::JniType;
 
+    #[inline(always)]
     fn to_java_native_result(&self) -> Self::JniType {
         <T as JavaArgumentType>::to_jni(self)
     }
@@ -41,6 +43,7 @@ where
 impl ToJavaNativeResult for () {
     type JniType = ();
 
+    #[inline(always)]
     fn to_java_native_result(&self) -> Self::JniType {
         ()
     }
@@ -63,6 +66,7 @@ where
 {
     type JniType = jni_sys::jobject;
 
+    #[inline(always)]
     unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self {
         // We use extend_lifetime_object() to satisfy the "T: JavaClass<'b>"
         // condition on the trait impl. This is safe as we then shrink the
@@ -176,7 +180,70 @@ java_argument_type_impls! {
 ///                 .or_npe(env, &token)
 ///                 .unwrap();
 ///             assert_eq!(result.as_string(&token), "17");
-///             (Ok(result.take_raw_object().as_ptr()), token)
+///             (Ok(Box::new(result)), token)
+///         }
+///     )
+/// }
+///
+/// # fn jni_main<'a>(env: &'a JniEnv<'a>, token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
+/// # unsafe {
+/// let string_class = String::empty(env, &token)?.class(&token);
+/// let string = Java_java_lang_String_valueOf__I(
+///     env.raw_env().as_ptr(),
+///     string_class.raw_object().as_ptr(),
+///     17 as jni_sys::jint,
+/// );
+/// assert_ne!(string, ptr::null_mut());
+/// # }
+/// # Ok(token)
+/// # }
+/// ```
+///
+/// Example returning an [`Option`](https://doc.rust-lang.org/std/option/enum.Option.html):
+/// ```
+/// # use rust_jni::*;
+/// # use rust_jni::java::lang::{Object, String};
+/// # use std::ptr;
+/// # use std::mem;
+/// #
+/// # fn main() {
+/// #     let init_arguments = InitArguments::default();
+/// #     let vm = JavaVM::create(&init_arguments).unwrap();
+/// #     let _ = vm.with_attached(
+/// #        &AttachArguments::new(init_arguments.version()),
+/// #        |env: &JniEnv, token: NoException| {
+/// #            ((), jni_main(env, token).unwrap())
+/// #        },
+/// #     );
+/// # }
+/// #
+/// #[no_mangle]
+/// unsafe extern "C" fn Java_java_lang_String_valueOf__I(
+///     raw_env: *mut jni_sys::JNIEnv,
+///     raw_class: jni_sys::jclass,
+///     raw_argument: jni_sys::jint,
+/// ) -> jni_sys::jstring {
+///     static_native_method_implementation::<(i32,), String, _>(
+///         raw_env,
+///         raw_class,
+///         (raw_argument,),
+///         |class, token, (argument,)| {
+///             let env = class.env();
+///             assert_eq!(
+///                 class
+///                     .get_name(&token)
+///                     .or_npe(env, &token)
+///                     .unwrap()
+///                     .as_string(&token),
+///                 "java.lang.String",
+///             );
+///             let result = String::value_of_int(env, &token, *argument)
+///                 .unwrap();
+///             if result.as_ref().unwrap().as_string(&token) == "17" {
+///                 (Ok(Box::new(result)), token)
+///             } else {
+///                 (Ok(Box::new(None as Option<String>)), token)
+///             }
 ///         }
 ///     )
 /// }
@@ -263,7 +330,10 @@ where
         &'a Class<'a>,
         NoException<'a>,
         &'a A,
-    ) -> (JavaResult<'a, R::JniType>, NoException<'a>),
+    ) -> (
+        JavaResult<'a, Box<dyn ToJavaNativeResult<JniType = R::JniType> + 'a>>,
+        NoException<'a>,
+    ),
     F: panic::UnwindSafe,
     // TODO(monnoroch): this should be + 'a for the 'a in the HKTB above.
     A: ToJavaNativeArgumentTuple,
@@ -278,7 +348,7 @@ where
             let class = Class::from_raw(env, NonNull::new(raw_class).unwrap());
             let arguments = <A as ToJavaNativeArgumentTuple>::from_raw(env, arguments);
             let (result, token) = callback(&class, token, &arguments);
-            let java_result = to_jni_type::<R::JniType>(result, token);
+            let java_result = to_jni_type::<R>(result, token);
             // We don't own the reference.
             mem::forget(arguments);
             // We don't own the reference.
@@ -332,12 +402,7 @@ where
 ///                 .or_npe(env, &token)
 ///                 .unwrap();
 ///             let result = object.equals(&token, &argument).unwrap();
-///             let result = if result {
-///                 jni_sys::JNI_TRUE
-///             } else {
-///                 jni_sys::JNI_FALSE
-///             };
-///             (Ok(result), token)
+///             (Ok(Box::new(result)), token)
 ///         }
 ///     )
 /// }
@@ -426,7 +491,10 @@ where
         &'a Object<'a>,
         NoException<'a>,
         &'a A,
-    ) -> (JavaResult<'a, R::JniType>, NoException<'a>),
+    ) -> (
+        JavaResult<'a, Box<dyn ToJavaNativeResult<JniType = R::JniType> + 'a>>,
+        NoException<'a>,
+    ),
     F: panic::UnwindSafe,
     // TODO(monnoroch): this should be + 'a for the 'a in the HKTB above.
     A: ToJavaNativeArgumentTuple,
@@ -441,7 +509,7 @@ where
             let object = Object::from_raw(env, NonNull::new(raw_object).unwrap());
             let arguments = <A as ToJavaNativeArgumentTuple>::from_raw(env, arguments);
             let (result, token) = callback(&object, token, &arguments);
-            let java_result = to_jni_type::<R::JniType>(result, token);
+            let java_result = to_jni_type::<R>(result, token);
             // We don't own the reference.
             mem::forget(arguments);
             // We don't own the reference.
@@ -451,20 +519,30 @@ where
     )
 }
 
-fn to_jni_type<'a, R>(result: JavaResult<'a, R>, token: NoException<'a>) -> R
+fn to_jni_type<'a, R>(
+    result: JavaResult<'a, Box<dyn ToJavaNativeResult<JniType = R::JniType> + 'a>>,
+    token: NoException<'a>,
+) -> R::JniType
 where
-    R: JniType,
+    R: ToJavaNativeResult + 'a,
 {
     match result {
         Ok(result) => {
-            // The token is consumed.
             mem::forget(token);
-            result
+            let java_result = result.to_java_native_result();
+            // Here we want to free memory of the Box, but don't want to run the destructor of the boxed value.
+            // Running the destructor for primitive types won't do anything, but running the destructor
+            // for a Java class wrapper will delete it's reference, which will make Java delete the object.
+            // Here we could use mem::forget(result), but that would leak the Box-es memory, which we don't want.
+            let result = Box::into_raw(result);
+            // Safe because we just took ownership of this memory.
+            unsafe { alloc::dealloc(result as *mut u8, alloc::Layout::for_value(&*result)) };
+            java_result
         }
         #[cold]
         Err(exception) => {
             let _ = exception.throw(token);
-            R::default()
+            R::JniType::default()
         }
     }
 }
