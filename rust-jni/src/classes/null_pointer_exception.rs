@@ -46,6 +46,27 @@ impl<'env> AsRef<Object<'env>> for NullPointerException<'env> {
     }
 }
 
+impl<'env> AsRef<Throwable<'env>> for NullPointerException<'env> {
+    #[inline(always)]
+    fn as_ref(&self) -> &Throwable<'env> {
+        self.object.as_ref()
+    }
+}
+
+impl<'env> AsRef<Exception<'env>> for NullPointerException<'env> {
+    #[inline(always)]
+    fn as_ref(&self) -> &Exception<'env> {
+        &self.object
+    }
+}
+
+impl<'env> AsRef<NullPointerException<'env>> for NullPointerException<'env> {
+    #[inline(always)]
+    fn as_ref(&self) -> &NullPointerException<'env> {
+        &*self
+    }
+}
+
 impl<'a> Into<Exception<'a>> for NullPointerException<'a> {
     fn into(self) -> Exception<'a> {
         self.object
@@ -95,6 +116,6 @@ where
     T: AsRef<Object<'env>>,
 {
     fn eq(&self, other: &T) -> bool {
-        self.as_ref().eq(other.as_ref())
+        Object::as_ref(self).eq(other.as_ref())
     }
 }

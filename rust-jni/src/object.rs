@@ -1,6 +1,7 @@
 use crate::class::Class;
 use crate::env::JniEnv;
 use crate::java_methods::FromObject;
+use crate::java_methods::JavaObjectArgument;
 use crate::java_methods::JniSignature;
 use crate::java_methods::{call_constructor, call_method};
 use crate::jni_bool;
@@ -126,11 +127,16 @@ impl<'env> Object<'env> {
     pub fn equals(
         &self,
         token: &NoException<'env>,
-        other: &Object<'env>,
+        other: impl JavaObjectArgument<'env, Object<'env>>,
     ) -> JavaResult<'env, bool> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_method::<Self, _, _, fn(&Object<'env>) -> bool>(self, token, "equals\0", (other,))
+            call_method::<Self, _, _, fn(Option<&Object<'env>>) -> bool>(
+                self,
+                token,
+                "equals\0",
+                (other.as_argument(),),
+            )
         }
     }
 

@@ -152,6 +152,13 @@ impl<'env> AsRef<Object<'env>> for String<'env> {
     }
 }
 
+impl<'env> AsRef<String<'env>> for String<'env> {
+    #[inline(always)]
+    fn as_ref(&self) -> &String<'env> {
+        &*self
+    }
+}
+
 impl<'a> Into<Object<'a>> for String<'a> {
     fn into(self) -> Object<'a> {
         self.object
@@ -187,6 +194,6 @@ where
     T: AsRef<Object<'env>>,
 {
     fn eq(&self, other: &T) -> bool {
-        self.as_ref().eq(other.as_ref())
+        Object::as_ref(self).eq(other.as_ref())
     }
 }

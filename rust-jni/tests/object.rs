@@ -49,8 +49,22 @@ mod class {
                 assert_ne!(string1, string3);
 
                 assert!(string1.equals(&token, &string1).unwrap());
-                assert!(string1.equals(&token, &string2).unwrap());
-                assert!(string1.equals(&token, &string3).unwrap());
+                assert!(string1.equals(&token, Some(&string2)).unwrap());
+                assert!(string1.equals(&token, Some(string2)).unwrap());
+                assert!(string1.equals(&token, string3).unwrap());
+
+                assert!(string1
+                    .equals(&token, &String::new(env, &token, "test").unwrap())
+                    .unwrap());
+                assert!(string1
+                    .equals(&token, Some(&String::new(env, &token, "test").unwrap()))
+                    .unwrap());
+                assert!(string1
+                    .equals(&token, Some(String::new(env, &token, "test").unwrap()))
+                    .unwrap());
+                assert!(string1
+                    .equals(&token, String::new(env, &token, "test").unwrap())
+                    .unwrap());
 
                 assert_eq!(
                     object.to_string(&token).unwrap().unwrap().as_string(&token),

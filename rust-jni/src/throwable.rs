@@ -1,6 +1,7 @@
 use crate::env::JniEnv;
 use crate::error::JniError;
 use crate::java_methods::FromObject;
+use crate::java_methods::JavaObjectArgument;
 use crate::java_methods::{call_constructor, call_method, JniSignature};
 use crate::object::Object;
 use crate::result::JavaResult;
@@ -76,9 +77,15 @@ impl<'env> Throwable<'env> {
     pub fn new_with_message(
         env: &'env JniEnv<'env>,
         token: &NoException<'env>,
-        message: &String<'env>,
+        message: impl JavaObjectArgument<'env, String<'env>>,
     ) -> JavaResult<'env, Throwable<'env>> {
-        unsafe { call_constructor::<Self, _, fn(&String<'env>)>(env, token, (message,)) }
+        unsafe {
+            call_constructor::<Self, _, fn(Option<&String<'env>>)>(
+                env,
+                token,
+                (message.as_argument(),),
+            )
+        }
     }
 
     /// Create a new [`Throwable`](struct.Throwable.html) with a cause.
@@ -87,9 +94,15 @@ impl<'env> Throwable<'env> {
     pub fn new_with_cause(
         env: &'env JniEnv<'env>,
         token: &NoException<'env>,
-        cause: &Throwable<'env>,
+        cause: impl JavaObjectArgument<'env, Throwable<'env>>,
     ) -> JavaResult<'env, Throwable<'env>> {
-        unsafe { call_constructor::<Self, _, fn(&Throwable<'env>)>(env, token, (cause,)) }
+        unsafe {
+            call_constructor::<Self, _, fn(Option<&Throwable<'env>>)>(
+                env,
+                token,
+                (cause.as_argument(),),
+            )
+        }
     }
 
     /// Create a new [`Throwable`](struct.Throwable.html) with a message and a cause.
@@ -98,14 +111,14 @@ impl<'env> Throwable<'env> {
     pub fn new_with_message_and_cause(
         env: &'env JniEnv<'env>,
         token: &NoException<'env>,
-        message: &String<'env>,
-        cause: &Throwable<'env>,
+        message: impl JavaObjectArgument<'env, String<'env>>,
+        cause: impl JavaObjectArgument<'env, Throwable<'env>>,
     ) -> JavaResult<'env, Throwable<'env>> {
         unsafe {
-            call_constructor::<Self, _, fn(&String<'env>, &Throwable<'env>)>(
+            call_constructor::<Self, _, fn(Option<&String<'env>>, Option<&Throwable<'env>>)>(
                 env,
                 token,
-                (message, cause),
+                (message.as_argument(), cause.as_argument()),
             )
         }
     }
@@ -136,6 +149,13 @@ impl<'env> AsRef<Object<'env>> for Throwable<'env> {
     #[inline(always)]
     fn as_ref(&self) -> &Object<'env> {
         &self.object
+    }
+}
+
+impl<'env> AsRef<Throwable<'env>> for Throwable<'env> {
+    #[inline(always)]
+    fn as_ref(&self) -> &Throwable<'env> {
+        &*self
     }
 }
 
@@ -174,6 +194,6 @@ where
     T: AsRef<Object<'env>>,
 {
     fn eq(&self, other: &T) -> bool {
-        self.as_ref().eq(other.as_ref())
+        Object::as_ref(self).eq(other.as_ref())
     }
 }
