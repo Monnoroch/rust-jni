@@ -247,11 +247,32 @@ java_primitive_traits!(
     jni_sys::jlong,
     "[`i64`](https://doc.rust-lang.org/std/primitive.i64.html)"
 );
-java_primitive_traits!(
+
+jni_signature_trait!(
     f32,
     jni_sys::jfloat,
     "[`f32`](https://doc.rust-lang.org/std/primitive.f32.html)"
 );
+java_primitive_result_type_trait!(f32, jni_sys::jfloat);
+
+// TODO(#25): floating point numbers don't work properly.
+// impl JavaArgumentType for $type {
+//     type JniType = $jni_type;
+
+//     #[inline(always)]
+//     fn to_jni(&self) -> Self::JniType {
+//         *self as Self::JniType
+//     }
+// }
+
+impl ToJavaNativeArgument for f32 {
+    type JniType = <Self as JavaPrimitiveResultType>::JniType;
+
+    unsafe fn from_raw<'a>(_env: &'a JniEnv<'a>, value: Self::JniType) -> Self {
+        <Self as JavaPrimitiveResultType>::from_jni(value)
+    }
+}
+
 java_primitive_traits!(
     f64,
     jni_sys::jdouble,

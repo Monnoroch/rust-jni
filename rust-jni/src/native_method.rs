@@ -49,6 +49,16 @@ impl ToJavaNativeResult for () {
     }
 }
 
+// TODO(#25): floating point numbers don't work properly.
+impl ToJavaNativeResult for f32 {
+    type JniType = jni_sys::jfloat;
+
+    #[inline(always)]
+    fn to_java_native_result(&self) -> Self::JniType {
+        *self as Self::JniType
+    }
+}
+
 /// A trait representing types that can be passed to native Java method wrappers
 /// as arguments.
 ///
