@@ -265,6 +265,7 @@ java_argument_type_impls! {
 /// # Ok(token)
 /// # }
 /// #
+/// # #[cfg(feature = "libjvm")]
 /// # fn main() {
 /// #     let init_arguments = InitArguments::default();
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
@@ -275,6 +276,9 @@ java_argument_type_impls! {
 /// #        },
 /// #     );
 /// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 ///
 /// Note that method name string *must* be null-terminating.
@@ -332,6 +336,7 @@ where
 /// # Ok(token)
 /// # }
 /// #
+/// # #[cfg(feature = "libjvm")]
 /// # fn main() {
 /// #     let init_arguments = InitArguments::default();
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
@@ -342,6 +347,9 @@ where
 /// #        },
 /// #     );
 /// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 ///
 /// Note that method name string must be null-terminating.
@@ -392,6 +400,7 @@ where
 /// # Ok(token)
 /// # }
 /// #
+/// # #[cfg(feature = "libjvm")]
 /// # fn main() {
 /// #     let init_arguments = InitArguments::default();
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
@@ -402,6 +411,9 @@ where
 /// #        },
 /// #     );
 /// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 ///
 /// See more info about how to pass or return types from Java calls in [`JniSignature`](trait.JniSignature.html)

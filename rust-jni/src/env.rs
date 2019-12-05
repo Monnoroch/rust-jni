@@ -21,6 +21,8 @@ include!("call_jni_method.rs");
 /// The best way to obtain a [`&JniEnv`](struct.JniEnv.html) is to attach the current thread with the
 /// [`with_attached`](struct.JavaVM.html#method.with_attached) method:
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// use rust_jni::*;
 /// use std::ptr;
 ///
@@ -33,6 +35,10 @@ include!("call_jni_method.rs");
 ///         ((), token)
 ///     },
 /// );
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 /// The method also provides a [`NoException`](struct.NoException.html) token. See more about exception
 /// handling in [`NoException`](struct.NoException.html) documentation.
@@ -40,6 +46,8 @@ include!("call_jni_method.rs");
 /// If ownership of the [`JniEnv`](struct.JniEnv.html) is required it can be obtained by
 /// [`attach`](struct.JavaVM.html#method.attach)-ing the current thread manually:
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// # use rust_jni::*;
 /// # use std::ptr;
 /// #
@@ -49,6 +57,10 @@ include!("call_jni_method.rs");
 ///     .attach(&AttachArguments::new(init_arguments.version()))
 ///     .unwrap();
 /// unsafe { env.raw_env() };
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 /// The attached thread will automatically get detached when [`JniEnv`](struct.JniEnv.html) is
 /// [`drop`](https://doc.rust-lang.org/std/ops/trait.Drop.html#tymethod.drop)-ed.
@@ -56,6 +68,8 @@ include!("call_jni_method.rs");
 /// [`JniEnv::detach`](struct.JniEnv.html#method.detach) explicitly instead of relying on
 /// [`Drop`](https://doc.rust-lang.org/std/ops/trait.Drop.html):
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// # use rust_jni::*;
 /// # use std::ptr;
 /// #
@@ -67,6 +81,10 @@ include!("call_jni_method.rs");
 /// let token = env.token();
 /// let token = token.consume();
 /// let error = env.detach(token);
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 /// See [`ConsumedNoException`](struct.ConsumedNoException.html) documentation for more details on the syntax.
 /// Note that manual [`detach`](struct.JniEnv.html#method.detach)-ing is not required (or possible) when using
@@ -88,6 +106,8 @@ include!("call_jni_method.rs");
 /// can't be two [`JniEnv`](struct.JniEnv.html)-s per thread.
 /// [`attach`](struct.JavaVM.html#methods.attach) will panic if you attempt to do so:
 /// ```should_panic
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// # use rust_jni::*;
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
@@ -98,6 +118,10 @@ include!("call_jni_method.rs");
 /// let env = vm
 ///     .attach(&AttachArguments::new(init_arguments.version()))
 ///     .unwrap(); // panics!
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {panic!()}
 /// ```
 /// Note how this error is impossible when using [`with_attached`](struct.JavaVM.html#method.with_attached)
 /// to get a [`&JniEnv`](struct.JniEnv.html) since it manages the [`JniEnv`](struct.JniEnv.html) automatically.
@@ -134,6 +158,8 @@ include!("call_jni_method.rs");
 /// ```
 /// Instead, you need to [`attach`](struct.JavaVM.html#method.attach) each new thread to the VM:
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// # use rust_jni::*;
 /// # use std::ptr;
 /// # use std::thread;
@@ -154,6 +180,10 @@ include!("call_jni_method.rs");
 ///     });
 /// }
 /// unsafe { env.raw_env() };
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 /// The thread is automatically detached once the [`JniEnv`](struct.JniEnv.html) is
 /// [`drop`](https://doc.rust-lang.org/std/ops/trait.Drop.html#tymethod.drop)-ed.

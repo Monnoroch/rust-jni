@@ -155,6 +155,7 @@ java_argument_type_impls! {
 /// # use std::ptr;
 /// # use std::mem;
 /// #
+/// # #[cfg(feature = "libjvm")]
 /// # fn main() {
 /// #     let init_arguments = InitArguments::default();
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
@@ -165,6 +166,9 @@ java_argument_type_impls! {
 /// #        },
 /// #     );
 /// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// #
 /// #[no_mangle]
 /// unsafe extern "C" fn Java_java_lang_String_valueOf__I(
@@ -216,6 +220,7 @@ java_argument_type_impls! {
 /// # use std::ptr;
 /// # use std::mem;
 /// #
+/// # #[cfg(feature = "libjvm")]
 /// # fn main() {
 /// #     let init_arguments = InitArguments::default();
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
@@ -226,6 +231,9 @@ java_argument_type_impls! {
 /// #        },
 /// #     );
 /// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// #
 /// #[no_mangle]
 /// unsafe extern "C" fn Java_java_lang_String_valueOf__I(
@@ -278,6 +286,7 @@ java_argument_type_impls! {
 /// # use rust_jni::java::lang::{String, Throwable};
 /// # use std::ptr;
 /// #
+/// # #[cfg(feature = "libjvm")]
 /// # fn main() {
 /// #     let init_arguments = InitArguments::default();
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
@@ -288,6 +297,9 @@ java_argument_type_impls! {
 /// #        },
 /// #     );
 /// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// #
 /// #[no_mangle]
 /// unsafe extern "C" fn Java_java_lang_String_valueOf__I(
@@ -385,6 +397,7 @@ where
 /// # use std::mem;
 /// # use jni_sys;
 /// #
+/// # #[cfg(feature = "libjvm")]
 /// # fn main() {
 /// #     let init_arguments = InitArguments::default();
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
@@ -395,6 +408,10 @@ where
 /// #        },
 /// #     );
 /// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
+/// #
 /// #[no_mangle]
 /// unsafe extern "C" fn Java_java_lang_Object_equals__Ljava_lang_Object_2(
 ///     raw_env: *mut jni_sys::JNIEnv,
@@ -439,6 +456,7 @@ where
 /// # use jni_sys;
 /// # use std::ptr;
 /// #
+/// # #[cfg(feature = "libjvm")]
 /// # fn main() {
 /// #     let init_arguments = InitArguments::default();
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
@@ -449,6 +467,10 @@ where
 /// #        },
 /// #     );
 /// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
+/// #
 /// #[no_mangle]
 /// unsafe extern "C" fn Java_java_lang_Object_equals__Ljava_lang_Object_2(
 ///     raw_env: *mut jni_sys::JNIEnv,

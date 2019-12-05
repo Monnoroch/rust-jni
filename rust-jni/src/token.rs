@@ -32,6 +32,8 @@ include!("call_jni_method.rs");
 /// The best way to get the token is to attach the current thread with the
 /// [`with_attached`](struct.JavaVM.html#method.with_attached) method:
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// use rust_jni::*;
 ///
 /// let init_arguments = InitArguments::default();
@@ -40,12 +42,18 @@ include!("call_jni_method.rs");
 ///     &AttachArguments::new(init_arguments.version()),
 ///     |_env: &JniEnv, token: NoException| ((), token),
 /// );
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 /// Note how the token needs to be returned, this ensures that there are no pending exceptions
 /// when the thread is detached after the user code is done executing.
 ///
 /// Once obtained, the token can be used to call JNI methods:
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// # use rust_jni::*;
 /// #
 /// # let init_arguments = InitArguments::default();
@@ -60,10 +68,16 @@ include!("call_jni_method.rs");
 ///     )
 ///     .unwrap();
 /// assert_eq!(empty_string_length, 0);
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 /// The caller also can obtain the token after [`attach`](struct.JavaVM.html#method.attach)-ing
 /// the thread to the Java VM manually:
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// # use rust_jni::*;
 /// #
 /// # let init_arguments = InitArguments::default();
@@ -72,10 +86,16 @@ include!("call_jni_method.rs");
 ///     .attach(&AttachArguments::new(init_arguments.version()))
 ///     .unwrap();
 /// let token = env.token();
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 /// When using this method a token also can not be obtained twice from a [`JniEnv`](struct.JniEnv.html) value.
 /// [`JniEnv`](struct.JniEnv.html) panics on subsequent [`JniEnv::token`](struct.JniEnv.html#method.token) calls:
 /// ```should_panic
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// # use rust_jni::*;
 /// #
 /// # let init_arguments = InitArguments::default();
@@ -85,6 +105,10 @@ include!("call_jni_method.rs");
 ///     .unwrap();
 /// let token = env.token();
 /// let token = env.token(); // panics!
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {panic!()}
 /// ```
 /// Note how this is a runtime error. Using the [`with_attached`](struct.JavaVM.html#method.with_attached) method
 /// and never getting the token manually will completely prevent any runtime errors and therefore is the preferred
@@ -98,6 +122,8 @@ include!("call_jni_method.rs");
 /// so they never consume the [`NoException`](struct.NoException.html) token, but they always
 /// require it to be present:
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// # use rust_jni::*;
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
@@ -111,6 +137,10 @@ include!("call_jni_method.rs");
 ///             ((), token)
 ///         },
 ///     );
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 /// The token is bound to the [`JniEnv`](struct.JniEnv.html) object, so it can't outlive it:
 /// ```compile_fail
@@ -152,6 +182,8 @@ include!("call_jni_method.rs");
 /// value with the pending exception. Unwrapping the [`Exception`](struct.Exception.html) token
 /// will clear the pending exception, so it is again safe to call JNI methods:
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// # use rust_jni::*;
 /// #
 /// # let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
@@ -167,6 +199,10 @@ include!("call_jni_method.rs");
 ///             ((), token)
 ///         },
 ///     );
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 /// Since [`NoException`](struct.NoException.html) token represents absence of a pending exception on
 /// the current thread, it is [`!Send`](https://doc.rust-lang.org/std/marker/trait.Send.html)
@@ -235,6 +271,8 @@ pub struct NoException<'this> {
 /// ```
 /// which doesn't compile, we have to write:
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// # use rust_jni::*;
 /// #
 /// # let init_arguments = InitArguments::default();
@@ -245,6 +283,10 @@ pub struct NoException<'this> {
 /// let token = env.token();
 /// let token = token.consume();
 /// env.detach(token);
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 pub struct ConsumedNoException;
 
