@@ -34,17 +34,8 @@ macro_rules! jni_signature_trait {
     };
 }
 
-macro_rules! java_primitive_result_type_trait {
+macro_rules! java_method_result_trait {
     ($type:ty, $jni_type:ty) => {
-        impl JavaPrimitiveResultType for $type {
-            type JniType = $jni_type;
-
-            #[inline(always)]
-            fn from_jni(value: Self::JniType) -> Self {
-                value as Self
-            }
-        }
-
         impl<'a> JavaMethodResult<'a> for $type {
             type JniType = $jni_type;
             type ResultType = Self;
@@ -94,6 +85,21 @@ macro_rules! java_primitive_result_type_trait {
                 Ok(Self::from_jni(result))
             }
         }
+    };
+}
+
+macro_rules! java_primitive_result_type_trait {
+    ($type:ty, $jni_type:ty) => {
+        impl JavaPrimitiveResultType for $type {
+            type JniType = $jni_type;
+
+            #[inline(always)]
+            fn from_jni(value: Self::JniType) -> Self {
+                value as Self
+            }
+        }
+
+        java_method_result_trait!($type, $jni_type);
     };
 }
 
@@ -149,55 +155,7 @@ impl JavaPrimitiveResultType for bool {
     }
 }
 
-impl<'a> JavaMethodResult<'a> for bool {
-    type JniType = jni_sys::jboolean;
-    type ResultType = Self;
-
-    #[inline(always)]
-    unsafe fn call_method<T, A>(
-        object: &T,
-        token: &NoException<'a>,
-        name: &str,
-        signature: &str,
-        arguments: A,
-    ) -> JavaResult<'a, Self::ResultType>
-    where
-        T: JavaClassRef<'a>,
-        A: JavaArgumentTuple,
-    {
-        let result: Self::JniType = jni_methods::call_primitive_method(
-            object.as_ref(),
-            token,
-            name,
-            signature,
-            JavaArgumentTuple::to_jni(&arguments),
-        )?;
-        Ok(Self::from_jni(result))
-    }
-
-    #[inline(always)]
-    unsafe fn call_static_method<T, A>(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        name: &str,
-        signature: &str,
-        arguments: A,
-    ) -> JavaResult<'a, Self::ResultType>
-    where
-        T: JavaClassRef<'a>,
-        A: JavaArgumentTuple,
-    {
-        let class = find_class::<T>(env, token)?;
-        let result = jni_methods::call_static_primitive_method(
-            &class,
-            token,
-            name,
-            signature,
-            JavaArgumentTuple::to_jni(&arguments),
-        )?;
-        Ok(Self::from_jni(result))
-    }
-}
+java_method_result_trait!(bool, jni_sys::jboolean);
 
 jni_primitive_argument_traits!(
     char,
@@ -226,6 +184,8 @@ impl JavaPrimitiveResultType for char {
         character
     }
 }
+
+java_method_result_trait!(char, jni_sys::jchar);
 
 java_primitive_traits!(
     u8,
