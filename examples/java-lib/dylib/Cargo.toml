@@ -2,9 +2,10 @@
 name = "rust-jni-java-dylib"
 version = "0.1.0"
 authors = ["Monnoroch <monnoroch@gmail.com>"]
-
-[dependencies]
-rust-jni-java-lib = { path = "../../java-lib" }
+edition = "2018"
 
 [lib]
 crate-type = ["dylib"]
+
+[dependencies]
+rust-jni-java-lib = { path = "../../java-lib" }

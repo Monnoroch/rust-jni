@@ -3,4 +3,6 @@
 members = [
     "rust-jni",
     "java",
+    "examples/java-lib",
+    "examples/java-lib/dylib",
 ]

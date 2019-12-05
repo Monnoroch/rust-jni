@@ -1,7 +1,7 @@
 set -e
 
 if [[ "${JDK}" != "openjdk8" ]]; then
-	exit 0
+    exit 0
 fi
 
 # install Java 8
