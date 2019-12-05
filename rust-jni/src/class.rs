@@ -10,7 +10,7 @@ use crate::string::String;
 use crate::token::{CallOutcome, NoException};
 use jni_sys;
 use std::os::raw::c_char;
-use std::ptr::NonNull;
+use std::ptr::{self, NonNull};
 
 include!("call_jni_method.rs");
 
@@ -38,6 +38,31 @@ impl<'env> Class<'env> {
         let raw_class = unsafe {
             call_nullable_jni_method!(env, token, FindClass, class_name.as_ptr() as *const c_char)
         }?;
+        // Safe because the argument is a valid class reference.
+        Ok(unsafe { Self::from_raw(env, raw_class) })
+    }
+
+    /// Define a new Java class from a `.class` file contents.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#defineclass)
+    pub fn define<'a>(
+        env: &'a JniEnv<'a>,
+        bytes: &[u8],
+        token: &NoException<'a>,
+    ) -> JavaResult<'a, Class<'a>> {
+        // Safe because the arguments are correct and because `DefineClass` throws an exception
+        // before returning `null`.
+        let raw_class = unsafe {
+            call_nullable_jni_method!(
+                env,
+                token,
+                DefineClass,
+                ptr::null() as *const c_char,
+                ptr::null_mut() as jni_sys::jobject,
+                bytes.as_ptr() as *const jni_sys::jbyte,
+                bytes.len() as jni_sys::jsize
+            )?
+        };
         // Safe because the argument is a valid class reference.
         Ok(unsafe { Self::from_raw(env, raw_class) })
     }
