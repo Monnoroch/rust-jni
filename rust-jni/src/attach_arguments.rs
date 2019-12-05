@@ -11,11 +11,17 @@ use std::ptr;
 ///
 /// # Example
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// use rust_jni::{AttachArguments, JniVersion};
 ///
 /// let attach_arguments = AttachArguments::new(JniVersion::V8);
 ///
 /// assert_eq!(attach_arguments.version(), JniVersion::V8);
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 #[derive(Debug, PartialEq, Eq)]
 pub struct AttachArguments {

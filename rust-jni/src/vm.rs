@@ -80,6 +80,8 @@ mod java_vm_ref_tests {
 ///
 /// # Examples
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// use rust_jni::*;
 /// use std::ptr;
 ///
@@ -93,9 +95,15 @@ mod java_vm_ref_tests {
 /// unsafe {
 ///     assert_eq!(vms[0].raw_jvm(), vm.raw_jvm());
 /// }
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 /// [`JavaVM`](struct.JavaVM.html) is `Send + Sync`. It means it can be shared between threads.
 /// ```
+/// # #[cfg(feature = "libjvm")]
+/// # fn main() {
 /// use rust_jni::*;
 /// use std::ptr;
 /// use std::sync::Arc;
@@ -108,6 +116,10 @@ mod java_vm_ref_tests {
 ///     });
 /// }
 /// unsafe { vm.raw_jvm() };
+/// # }
+/// #
+/// # #[cfg(not(feature = "libjvm"))]
+/// # fn main() {}
 /// ```
 ///
 /// The main purpose of [`JavaVM`](struct.JavaVM.html) is to attach threads by provisioning
@@ -1359,7 +1371,7 @@ mod java_vm_attach_tests {
 }
 
 cfg_if! {
-    if #[cfg(test)] {
+    if #[cfg(any(test, feature = "mock-jvm"))] {
         generate_jni_functions_mock!(jni_mock);
     } else {
         use jni_sys::JNI_CreateJavaVM;

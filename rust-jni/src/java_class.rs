@@ -102,6 +102,7 @@ pub trait NullableJavaClassExt<'a, R> {
     /// # Ok(token)
     /// # }
     /// #
+    /// # #[cfg(feature = "libjvm")]
     /// # fn main() {
     /// #     let init_arguments = InitArguments::default();
     /// #     let vm = JavaVM::create(&init_arguments).unwrap();
@@ -112,6 +113,9 @@ pub trait NullableJavaClassExt<'a, R> {
     /// #        },
     /// #     );
     /// # }
+    /// #
+    /// # #[cfg(not(feature = "libjvm"))]
+    /// # fn main() {}
     /// ```
     fn or_npe(self, env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, R>;
 }

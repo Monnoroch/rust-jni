@@ -36,4 +36,6 @@ serial_test_derive = "0.2.0"
 walkdir = "2.2.9"
 
 [features]
+default = ["libjvm"]
 libjvm = []
+mock-jvm = []
