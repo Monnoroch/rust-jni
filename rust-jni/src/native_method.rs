@@ -535,8 +535,13 @@ where
             // for a Java class wrapper will delete it's reference, which will make Java delete the object.
             // Here we could use mem::forget(result), but that would leak the Box-es memory, which we don't want.
             let result = Box::into_raw(result);
-            // Safe because we just took ownership of this memory.
-            unsafe { alloc::dealloc(result as *mut u8, alloc::Layout::for_value(&*result)) };
+            // This is a very hacky hack: when a ZST (e.g. `()`) is converted to a `Box<dyn Trait>`,
+            // it has a pointer with value `0x1`, not `0x0`.
+            // Thus deallocating crashes for ZSTs (e.g. `()`) and not deallocating this leaks memory.
+            if result as *mut u8 as usize != 0x1 {
+                // Safe because we just took ownership of this memory.
+                unsafe { alloc::dealloc(result as *mut u8, alloc::Layout::for_value(&*result)) };
+            }
             java_result
         }
         #[cold]
