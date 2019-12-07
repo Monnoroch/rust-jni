@@ -518,7 +518,7 @@ pub mod init_arguments_manipulation_tests {
 #[cfg(test)]
 pub(crate) mod init_arguments_creation_tests {
     use super::*;
-    use serial_test_derive::serial;
+    use serial_test::serial;
 
     pub(crate) fn default_args() -> InitArguments {
         InitArguments {

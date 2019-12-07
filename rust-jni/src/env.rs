@@ -409,7 +409,7 @@ impl<'vm> Drop for JniEnv<'vm> {
 mod jni_env_tests {
     use super::*;
     use mockall::*;
-    use serial_test_derive::serial;
+    use serial_test::serial;
 
     generate_java_vm_mock!(mock);
     generate_jni_env_mock!(jni_mock);
