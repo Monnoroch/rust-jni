@@ -458,7 +458,7 @@ mod no_exception_tests {
     use super::*;
     use crate::vm::JavaVMRef;
     use mockall::*;
-    use serial_test_derive::serial;
+    use serial_test::serial;
     use std::ptr;
 
     generate_jni_env_mock!(jni_mock);
@@ -625,7 +625,7 @@ mod exception_tests {
     use super::*;
     use crate::vm::JavaVMRef;
     use mockall::*;
-    use serial_test_derive::serial;
+    use serial_test::serial;
 
     generate_jni_env_mock!(jni_mock);
 

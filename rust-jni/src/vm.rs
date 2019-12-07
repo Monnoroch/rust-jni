@@ -524,7 +524,7 @@ mod java_vm_tests {
 #[cfg(test)]
 mod java_vm_drop_tests {
     use super::*;
-    use serial_test_derive::serial;
+    use serial_test::serial;
 
     generate_java_vm_mock!(mock);
 
@@ -576,7 +576,7 @@ mod java_vm_drop_tests {
 mod java_vm_create_tests {
     use super::*;
     use mockall::*;
-    use serial_test_derive::serial;
+    use serial_test::serial;
     use std::mem;
 
     generate_java_vm_mock!(mock);
@@ -681,7 +681,7 @@ mod java_vm_create_tests {
 mod java_vm_list_tests {
     use super::*;
     use mockall::*;
-    use serial_test_derive::serial;
+    use serial_test::serial;
 
     #[test]
     #[serial]
@@ -772,7 +772,7 @@ mod java_vm_with_attached_tests {
     use crate::java_string::from_java_string;
     use crate::version::JniVersion;
     use mockall::*;
-    use serial_test_derive::serial;
+    use serial_test::serial;
     use std::cell::RefCell;
     use std::ffi::{c_void, CStr};
 
@@ -1112,7 +1112,7 @@ mod java_vm_attach_tests {
     use crate::java_string::from_java_string;
     use crate::version::JniVersion;
     use mockall::*;
-    use serial_test_derive::serial;
+    use serial_test::serial;
     use std::cell::RefCell;
     use std::ffi::{c_void, CStr};
     use std::mem;
