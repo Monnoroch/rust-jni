@@ -466,8 +466,8 @@ mod no_exception_tests {
     #[test]
     #[serial]
     fn with_owned_ok() {
-        let vm = JavaVMRef::test(ptr::null_mut());
-        let env = JniEnv::test(&vm, ptr::null_mut());
+        let vm = JavaVMRef::test_default();
+        let env = JniEnv::test_default(&vm);
         let token = NoException::test();
         let result = token
             .with_owned(&env, |token| CallOutcome::Ok((12, token)))
@@ -497,7 +497,7 @@ mod no_exception_tests {
             .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
             .return_const(())
             .in_sequence(&mut sequence);
-        let vm = JavaVMRef::test(ptr::null_mut());
+        let vm = JavaVMRef::test_default();
         let env = JniEnv::test(&vm, raw_env_ptr);
         let token = NoException::test();
         let exception = token
@@ -532,7 +532,7 @@ mod no_exception_tests {
             .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
             .return_const(())
             .in_sequence(&mut sequence);
-        let vm = JavaVMRef::test(ptr::null_mut());
+        let vm = JavaVMRef::test_default();
         let env = JniEnv::test(&vm, raw_env_ptr);
         let token = NoException::test();
         let exception = token
@@ -555,7 +555,7 @@ mod no_exception_tests {
             .times(1)
             .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
             .returning_st(|_env| ptr::null_mut());
-        let vm = JavaVMRef::test(ptr::null_mut());
+        let vm = JavaVMRef::test_default();
         let env = JniEnv::test(&vm, raw_env_ptr);
         let token = NoException::test();
         let result = token
@@ -626,7 +626,6 @@ mod exception_tests {
     use crate::vm::JavaVMRef;
     use mockall::*;
     use serial_test_derive::serial;
-    use std::ptr;
 
     generate_jni_env_mock!(jni_mock);
 
@@ -652,7 +651,7 @@ mod exception_tests {
             .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
             .return_const(())
             .in_sequence(&mut sequence);
-        let vm = JavaVMRef::test(ptr::null_mut());
+        let vm = JavaVMRef::test_default();
         let env = JniEnv::test(&vm, raw_env_ptr);
         let token = Exception::test(&env);
         let (exception, _) = token.unwrap();

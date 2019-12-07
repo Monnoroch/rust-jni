@@ -356,6 +356,11 @@ impl<'this> JniEnv<'this> {
             need_drop: false,
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn test_default<'vm>(vm: &'vm JavaVMRef) -> JniEnv<'vm> {
+        JniEnv::test(vm, 0x1 as *mut jni_sys::JNIEnv)
+    }
 }
 
 /// [`Drop`](https://doc.rust-lang.org/std/ops/trait.Drop.html) detaches the current thread from the Java VM.
@@ -405,7 +410,6 @@ mod jni_env_tests {
     use super::*;
     use mockall::*;
     use serial_test_derive::serial;
-    use std::ptr;
 
     generate_java_vm_mock!(mock);
     generate_jni_env_mock!(jni_mock);
@@ -413,7 +417,7 @@ mod jni_env_tests {
     #[test]
     fn raw_jvm() {
         let vm = JavaVMRef::test(0x1234 as *mut jni_sys::JavaVM);
-        let env = JniEnv::test(&vm, ptr::null_mut());
+        let env = JniEnv::test_default(&vm);
         unsafe {
             assert_eq!(env.raw_jvm(), vm.raw_jvm());
         }
@@ -421,7 +425,7 @@ mod jni_env_tests {
 
     #[test]
     fn raw_env() {
-        let vm = JavaVMRef::test(ptr::null_mut());
+        let vm = JavaVMRef::test_default();
         let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
         let env = JniEnv::test(&vm, jni_env);
         unsafe {
@@ -441,7 +445,7 @@ mod jni_env_tests {
             .times(1)
             .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
             .return_const(jni_sys::JNI_VERSION_1_4);
-        let vm = JavaVMRef::test(ptr::null_mut());
+        let vm = JavaVMRef::test_default();
         let env = JniEnv::test(&vm, raw_env_ptr);
         assert_eq!(env.version(), JniVersion::V4);
     }
@@ -460,7 +464,7 @@ mod jni_env_tests {
             .withf(move |java_vm| *java_vm == raw_java_vm_ptr_usize as *mut jni_sys::JavaVM)
             .return_const(jni_sys::JNI_OK);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
-        let mut env = JniEnv::test(&vm, ptr::null_mut());
+        let mut env = JniEnv::test_default(&vm);
         env.need_drop = true; // need to test that drop wasn't called.
         assert_eq!(env.detach(ConsumedNoException), None);
     }
@@ -473,7 +477,7 @@ mod jni_env_tests {
         let detach_thread_mock = mock::detach_thread_context();
         detach_thread_mock.expect().return_const(jni_sys::JNI_ERR);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
-        let mut env = JniEnv::test(&vm, ptr::null_mut());
+        let mut env = JniEnv::test_default(&vm);
         env.need_drop = true; // need to test that drop wasn't called.
         assert_eq!(
             env.detach(ConsumedNoException),

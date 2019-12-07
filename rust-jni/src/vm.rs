@@ -55,6 +55,11 @@ impl JavaVMRef {
             java_vm: unsafe { NonNull::new_unchecked(ptr) },
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn test_default() -> JavaVMRef {
+        JavaVMRef::test(1 as *mut jni_sys::JavaVM)
+    }
 }
 
 #[cfg(test)]
