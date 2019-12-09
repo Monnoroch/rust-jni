@@ -88,13 +88,13 @@ impl<'env> Class<'env> {
     /// implementing.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#isassignablefrom)
-    pub fn is_subtype_of(&self, _token: &NoException, class: &Class) -> bool {
+    pub fn is_subtype_of<'a>(&self, _token: &NoException, class: impl AsRef<Class<'a>>) -> bool {
         // Safe because arguments are ensured to be the correct by construction.
         let assignable = unsafe {
             call_jni_object_method!(
                 self,
                 IsAssignableFrom,
-                class.raw_object().as_ptr() as jni_sys::jclass
+                class.as_ref().raw_object().as_ptr() as jni_sys::jclass
             )
         };
         jni_bool::to_rust(assignable)
