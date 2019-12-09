@@ -8,7 +8,7 @@ use crate::jni_bool;
 use crate::result::JavaResult;
 use crate::string::String;
 use crate::token::{CallOutcome, NoException};
-use core::ptr::NonNull;
+use core::ptr::{self, NonNull};
 use jni_sys;
 use std::fmt;
 use std::mem;
@@ -76,20 +76,32 @@ impl<'env> Object<'env> {
     /// Compare with another Java object by reference.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#issameobject)
-    pub fn is_same_as(&self, _token: &NoException, other: &Object) -> bool {
+    pub fn is_same_as<'a>(
+        &self,
+        _token: &NoException,
+        other: impl JavaObjectArgument<'a, Object<'a>>,
+    ) -> bool {
         // Safe because arguments are ensured to be correct references by construction.
-        let same =
-            unsafe { call_jni_object_method!(self, IsSameObject, other.raw_object().as_ptr()) };
+        let same = unsafe {
+            call_jni_object_method!(
+                self,
+                IsSameObject,
+                other
+                    .as_argument()
+                    .map_or(ptr::null_mut(), |value| value.raw_object().as_ptr())
+            )
+        };
         jni_bool::to_rust(same)
     }
 
     /// Check if the object is an instance of the class.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#isinstanceof)
-    pub fn is_instance_of(&self, _token: &NoException, class: &Class) -> bool {
+    pub fn is_instance_of<'a>(&self, _token: &NoException, class: impl AsRef<Class<'a>>) -> bool {
         // Safe because arguments are ensured to be correct references by construction.
-        let is_instance =
-            unsafe { call_jni_object_method!(self, IsInstanceOf, class.raw_object().as_ptr()) };
+        let is_instance = unsafe {
+            call_jni_object_method!(self, IsInstanceOf, class.as_ref().raw_object().as_ptr())
+        };
         jni_bool::to_rust(is_instance)
     }
 
