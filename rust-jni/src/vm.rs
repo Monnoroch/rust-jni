@@ -533,8 +533,6 @@ mod java_vm_drop_tests {
     fn drop() {
         let raw_java_vm = mock::raw_java_vm();
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        // Need to pass a number to the closure below as pointers are not Send.
-        let raw_java_vm_ptr_usize = raw_java_vm_ptr as usize;
         let destroy_vm_mock = mock::destroy_vm_context();
         {
             let mut vm = JavaVM::test(raw_java_vm_ptr);
@@ -544,7 +542,7 @@ mod java_vm_drop_tests {
             destroy_vm_mock
                 .expect()
                 .times(1)
-                .withf(move |x| *x as usize == raw_java_vm_ptr_usize)
+                .withf_st(move |x| *x == raw_java_vm_ptr)
                 .return_const(jni_sys::JNI_OK);
         }
         // Expectations are checked after the scope has ended.
@@ -586,14 +584,12 @@ mod java_vm_create_tests {
     fn create() {
         let raw_java_vm = mock::raw_java_vm();
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        // Need to pass a number to the closure below as pointers are not Send.
-        let raw_java_vm_ptr_usize = raw_java_vm_ptr as usize;
         let mut sequence = Sequence::new();
         let create_vm_mock = jni_mock::JNI_CreateJavaVM_context();
         create_vm_mock
             .expect()
             .times(1)
-            .withf(move |java_vm, _jni_env, arguments| {
+            .withf_st(move |java_vm, _jni_env, arguments| {
                 let arguments = *arguments as *mut jni_sys::JavaVMInitArgs;
                 // We know that this pointer points to a valid value.
                 match unsafe { arguments.as_ref() } {
@@ -606,7 +602,7 @@ mod java_vm_create_tests {
                         } else {
                             // Safe because we allocated a valid value on the stack in JavaVM::create().
                             unsafe {
-                                **java_vm = raw_java_vm_ptr_usize as *mut jni_sys::JavaVM;
+                                **java_vm = raw_java_vm_ptr;
                             }
                             true
                         }
@@ -619,7 +615,7 @@ mod java_vm_create_tests {
         detach_thread_mock
             .expect()
             .times(1)
-            .withf(move |java_vm| *java_vm as usize == raw_java_vm_ptr_usize)
+            .withf_st(move |java_vm| *java_vm == raw_java_vm_ptr)
             .return_const(jni_sys::JNI_OK)
             .in_sequence(&mut sequence);
         let vm = JavaVM::create(&InitArguments::default()).unwrap();
@@ -690,16 +686,12 @@ mod java_vm_list_tests {
         let raw_java_vm_ptr_2 = 0x1235 as *mut jni_sys::JavaVM;
         assert_ne!(raw_java_vm_ptr_1, raw_java_vm_ptr_2);
 
-        // Need to pass a number to the closure below as pointers are not Send.
-        let raw_java_vm_ptr_1_usize = raw_java_vm_ptr_1 as usize;
-        let raw_java_vm_ptr_2_usize = raw_java_vm_ptr_2 as usize;
-
         let mut sequence = Sequence::new();
         let list_vms_mock = jni_mock::JNI_GetCreatedJavaVMs_context();
         list_vms_mock
             .expect()
             .times(1)
-            .withf(move |java_vms, buffer_size, vms_count| {
+            .withf_st(move |java_vms, buffer_size, vms_count| {
                 if *java_vms != ptr::null_mut() || *buffer_size != 0 {
                     false
                 } else {
@@ -715,13 +707,13 @@ mod java_vm_list_tests {
         list_vms_mock
             .expect()
             .times(1)
-            .withf(move |java_vms, buffer_size, vms_count| {
+            .withf_st(move |java_vms, buffer_size, vms_count| {
                 if *buffer_size != 2 {
                     false
                 } else {
                     unsafe {
-                        **java_vms = raw_java_vm_ptr_1_usize as *mut jni_sys::JavaVM;
-                        *((*java_vms).offset(1)) = raw_java_vm_ptr_2_usize as *mut jni_sys::JavaVM;
+                        **java_vms = raw_java_vm_ptr_1;
+                        *((*java_vms).offset(1)) = raw_java_vm_ptr_2;
                         **vms_count = 2 as jni_sys::jint;
                     }
                     true
@@ -784,19 +776,15 @@ mod java_vm_with_attached_tests {
     fn with_attached() {
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let raw_java_vm = mock::raw_java_vm();
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        // Need to pass a number to the closure below as pointers are not Send.
-        let raw_java_vm_ptr_usize = raw_java_vm_ptr as usize;
         let mut sequence = Sequence::new();
         let get_env_mock = mock::get_env_context();
         get_env_mock
             .expect()
             .times(1)
-            .withf(move |java_vm, _jni_env, version| {
-                *java_vm == raw_java_vm_ptr_usize as *mut jni_sys::JavaVM
-                    && *version == jni_sys::JNI_VERSION_1_8
+            .withf_st(move |java_vm, _jni_env, version| {
+                *java_vm == raw_java_vm_ptr && *version == jni_sys::JNI_VERSION_1_8
             })
             .return_const(jni_sys::JNI_EDETACHED)
             .in_sequence(&mut sequence);
@@ -804,16 +792,16 @@ mod java_vm_with_attached_tests {
         attach_current_thread_mock
             .expect()
             .times(1)
-            .withf(move |java_vm, jni_env, argument| unsafe {
+            .withf_st(move |java_vm, jni_env, argument| unsafe {
                 let thread_name =
                     CStr::from_ptr((*(*argument as *mut jni_sys::JavaVMAttachArgs)).name)
                         .to_bytes_with_nul();
-                if *java_vm != raw_java_vm_ptr_usize as *mut jni_sys::JavaVM
+                if *java_vm != raw_java_vm_ptr
                     || from_java_string(thread_name).unwrap() != "test-name"
                 {
                     return false;
                 }
-                **jni_env = raw_env_ptr_usize as *mut c_void;
+                **jni_env = raw_env_ptr as *mut c_void;
                 true
             })
             .return_const(jni_sys::JNI_OK)
@@ -822,14 +810,14 @@ mod java_vm_with_attached_tests {
         exception_check_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .return_const(jni_sys::JNI_FALSE)
             .in_sequence(&mut sequence);
         let detach_thread_mock = mock::detach_thread_context();
         detach_thread_mock
             .expect()
             .times(1)
-            .withf(move |java_vm| *java_vm as usize == raw_java_vm_ptr_usize)
+            .withf_st(move |java_vm| *java_vm == raw_java_vm_ptr)
             .return_const(jni_sys::JNI_OK)
             .in_sequence(&mut sequence);
         let vm = JavaVM::test(raw_java_vm_ptr);
@@ -899,6 +887,196 @@ mod java_vm_with_attached_tests {
 
     #[test]
     #[serial]
+    fn with_attached_attach_error() {
+        let raw_env_ptr = 0x1234 as *mut ::jni_sys::JNIEnv;
+        let raw_java_vm = mock::raw_java_vm();
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        let mut sequence = Sequence::new();
+        let get_env_mock = mock::get_env_context();
+        get_env_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EDETACHED)
+            .in_sequence(&mut sequence);
+        let attach_current_thread_mock = mock::attach_current_thread_context();
+        attach_current_thread_mock
+            .expect()
+            .times(1)
+            .withf_st(move |_java_vm, jni_env, _argument| unsafe {
+                **jni_env = raw_env_ptr as *mut c_void;
+                true
+            })
+            .return_const(jni_sys::JNI_ERR)
+            .in_sequence(&mut sequence);
+        let vm = JavaVM::test(raw_java_vm_ptr);
+        let result = vm
+            .with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
+                ((), token)
+            })
+            .unwrap_err();
+        assert_eq!(result, JniError::Unknown(jni_sys::JNI_ERR));
+    }
+
+    #[test]
+    #[serial]
+    // `serial` messes up compiler lints for other attributes.
+    #[allow(unused_attributes)]
+    #[should_panic(expected = "Newly attached thread has a pending exception")]
+    fn with_attached_pending_exception() {
+        let raw_env = jni_mock::raw_jni_env();
+        let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
+        let raw_java_vm = mock::raw_java_vm();
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        let mut sequence = Sequence::new();
+        let get_env_mock = mock::get_env_context();
+        get_env_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EDETACHED)
+            .in_sequence(&mut sequence);
+        let attach_current_thread_mock = mock::attach_current_thread_context();
+        attach_current_thread_mock
+            .expect()
+            .times(1)
+            .withf_st(move |_java_vm, jni_env, _argument| unsafe {
+                **jni_env = raw_env_ptr as *mut c_void;
+                true
+            })
+            .return_const(jni_sys::JNI_OK)
+            .in_sequence(&mut sequence);
+        let exception_check_mock = jni_mock::exception_check_context();
+        exception_check_mock
+            .expect()
+            .times(1)
+            .withf_st(move |env| *env == raw_env_ptr)
+            .return_const(jni_sys::JNI_TRUE)
+            .in_sequence(&mut sequence);
+        let exception_describe_mock = jni_mock::exception_describe_context();
+        exception_describe_mock
+            .expect()
+            .times(1)
+            .return_const(())
+            .in_sequence(&mut sequence);
+        let vm = JavaVM::test(raw_java_vm_ptr);
+        vm.with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
+            ((), token)
+        })
+        .unwrap();
+    }
+
+    #[test]
+    #[serial]
+    fn with_attached_detach_error() {
+        let raw_env = jni_mock::raw_jni_env();
+        let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
+        let raw_java_vm = mock::raw_java_vm();
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        let mut sequence = Sequence::new();
+        let get_env_mock = mock::get_env_context();
+        get_env_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EDETACHED)
+            .in_sequence(&mut sequence);
+        let attach_current_thread_mock = mock::attach_current_thread_context();
+        attach_current_thread_mock
+            .expect()
+            .times(1)
+            .withf_st(move |_java_vm, jni_env, _argument| unsafe {
+                **jni_env = raw_env_ptr as *mut c_void;
+                true
+            })
+            .return_const(jni_sys::JNI_OK)
+            .in_sequence(&mut sequence);
+        let exception_check_mock = jni_mock::exception_check_context();
+        exception_check_mock
+            .expect()
+            .times(1)
+            .withf_st(move |env| *env == raw_env_ptr)
+            .return_const(jni_sys::JNI_FALSE)
+            .in_sequence(&mut sequence);
+        let detach_thread_mock = mock::detach_thread_context();
+        detach_thread_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_ERR)
+            .in_sequence(&mut sequence);
+        let vm = JavaVM::test(raw_java_vm_ptr);
+        let result = vm
+            .with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
+                ((), token)
+            })
+            .unwrap_err();
+        assert_eq!(result, JniError::Unknown(jni_sys::JNI_ERR));
+    }
+
+    #[test]
+    #[serial]
+    fn with_attached_daemon() {
+        let raw_env = jni_mock::raw_jni_env();
+        let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
+        let raw_java_vm = mock::raw_java_vm();
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        let mut sequence = Sequence::new();
+        let get_env_mock = mock::get_env_context();
+        get_env_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EDETACHED)
+            .in_sequence(&mut sequence);
+        let attach_current_thread_mock = mock::attach_current_thread_context();
+        attach_current_thread_mock
+            .expect()
+            .times(1)
+            .withf_st(move |_java_vm, jni_env, _argument| unsafe {
+                **jni_env = raw_env_ptr as *mut c_void;
+                true
+            })
+            .return_const(jni_sys::JNI_OK)
+            .in_sequence(&mut sequence);
+        let exception_check_mock = jni_mock::exception_check_context();
+        exception_check_mock
+            .expect()
+            .times(1)
+            .withf_st(move |env| *env == raw_env_ptr)
+            .return_const(jni_sys::JNI_FALSE)
+            .in_sequence(&mut sequence);
+        let detach_thread_mock = mock::detach_thread_context();
+        detach_thread_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_OK)
+            .in_sequence(&mut sequence);
+        let vm = JavaVM::test(raw_java_vm_ptr);
+        let result = vm
+            .with_attached(&AttachArguments::new(JniVersion::V8), |env, token| {
+                unsafe {
+                    assert_eq!(env.raw_jvm().as_ptr(), raw_java_vm_ptr);
+                    assert_eq!(env.raw_env().as_ptr(), raw_env_ptr);
+                }
+                assert_eq!(env.has_token, RefCell::new(false));
+                (17, token)
+            })
+            .unwrap();
+        assert_eq!(result, 17);
+    }
+}
+
+// Need a separate module for separate mocks.
+// `serial` doesn't seem to serialize `should_panic` tests correctly.
+// See https://github.com/palfrey/serial_test/issues/12.
+#[cfg(test)]
+mod java_vm_with_attached_tests_1 {
+    use super::*;
+    use crate::version::JniVersion;
+    use mockall::*;
+    use serial_test::serial;
+
+    generate_java_vm_mock!(mock);
+    generate_jni_env_mock!(jni_mock);
+
+    #[test]
+    #[serial]
     // `serial` messes up compiler lints for other attributes.
     #[allow(unused_attributes)]
     #[should_panic(expected = "upsupported version")]
@@ -924,186 +1102,6 @@ mod java_vm_with_attached_tests {
         })
         .unwrap();
     }
-
-    #[test]
-    #[serial]
-    fn with_attached_attach_error() {
-        let raw_env_ptr = 0x1234 as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
-        let raw_java_vm = mock::raw_java_vm();
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let mut sequence = Sequence::new();
-        let get_env_mock = mock::get_env_context();
-        get_env_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_EDETACHED)
-            .in_sequence(&mut sequence);
-        let attach_current_thread_mock = mock::attach_current_thread_context();
-        attach_current_thread_mock
-            .expect()
-            .times(1)
-            .withf(move |_java_vm, jni_env, _argument| unsafe {
-                **jni_env = raw_env_ptr_usize as *mut c_void;
-                true
-            })
-            .return_const(jni_sys::JNI_ERR)
-            .in_sequence(&mut sequence);
-        let vm = JavaVM::test(raw_java_vm_ptr);
-        let result = vm
-            .with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
-                ((), token)
-            })
-            .unwrap_err();
-        assert_eq!(result, JniError::Unknown(jni_sys::JNI_ERR));
-    }
-
-    #[test]
-    #[serial]
-    // `serial` messes up compiler lints for other attributes.
-    #[allow(unused_attributes)]
-    #[should_panic(expected = "Newly attached thread has a pending exception")]
-    fn with_attached_pending_exception() {
-        let raw_env = jni_mock::raw_jni_env();
-        let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
-        let raw_java_vm = mock::raw_java_vm();
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let mut sequence = Sequence::new();
-        let get_env_mock = mock::get_env_context();
-        get_env_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_EDETACHED)
-            .in_sequence(&mut sequence);
-        let attach_current_thread_mock = mock::attach_current_thread_context();
-        attach_current_thread_mock
-            .expect()
-            .times(1)
-            .withf(move |_java_vm, jni_env, _argument| unsafe {
-                **jni_env = raw_env_ptr_usize as *mut c_void;
-                true
-            })
-            .return_const(jni_sys::JNI_OK)
-            .in_sequence(&mut sequence);
-        let exception_check_mock = jni_mock::exception_check_context();
-        exception_check_mock
-            .expect()
-            .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
-            .return_const(jni_sys::JNI_TRUE)
-            .in_sequence(&mut sequence);
-        let exception_describe_mock = jni_mock::exception_describe_context();
-        exception_describe_mock
-            .expect()
-            .times(1)
-            .return_const(())
-            .in_sequence(&mut sequence);
-        let vm = JavaVM::test(raw_java_vm_ptr);
-        vm.with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
-            ((), token)
-        })
-        .unwrap();
-    }
-
-    #[test]
-    #[serial]
-    fn with_attached_detach_error() {
-        let raw_env = jni_mock::raw_jni_env();
-        let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
-        let raw_java_vm = mock::raw_java_vm();
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let mut sequence = Sequence::new();
-        let get_env_mock = mock::get_env_context();
-        get_env_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_EDETACHED)
-            .in_sequence(&mut sequence);
-        let attach_current_thread_mock = mock::attach_current_thread_context();
-        attach_current_thread_mock
-            .expect()
-            .times(1)
-            .withf(move |_java_vm, jni_env, _argument| unsafe {
-                **jni_env = raw_env_ptr_usize as *mut c_void;
-                true
-            })
-            .return_const(jni_sys::JNI_OK)
-            .in_sequence(&mut sequence);
-        let exception_check_mock = jni_mock::exception_check_context();
-        exception_check_mock
-            .expect()
-            .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
-            .return_const(jni_sys::JNI_FALSE)
-            .in_sequence(&mut sequence);
-        let detach_thread_mock = mock::detach_thread_context();
-        detach_thread_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_ERR)
-            .in_sequence(&mut sequence);
-        let vm = JavaVM::test(raw_java_vm_ptr);
-        let result = vm
-            .with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
-                ((), token)
-            })
-            .unwrap_err();
-        assert_eq!(result, JniError::Unknown(jni_sys::JNI_ERR));
-    }
-
-    #[test]
-    #[serial]
-    fn with_attached_daemon() {
-        let raw_env = jni_mock::raw_jni_env();
-        let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
-        let raw_java_vm = mock::raw_java_vm();
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let mut sequence = Sequence::new();
-        let get_env_mock = mock::get_env_context();
-        get_env_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_EDETACHED)
-            .in_sequence(&mut sequence);
-        let attach_current_thread_mock = mock::attach_current_thread_context();
-        attach_current_thread_mock
-            .expect()
-            .times(1)
-            .withf(move |_java_vm, jni_env, _argument| unsafe {
-                **jni_env = raw_env_ptr_usize as *mut c_void;
-                true
-            })
-            .return_const(jni_sys::JNI_OK)
-            .in_sequence(&mut sequence);
-        let exception_check_mock = jni_mock::exception_check_context();
-        exception_check_mock
-            .expect()
-            .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
-            .return_const(jni_sys::JNI_FALSE)
-            .in_sequence(&mut sequence);
-        let detach_thread_mock = mock::detach_thread_context();
-        detach_thread_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_OK)
-            .in_sequence(&mut sequence);
-        let vm = JavaVM::test(raw_java_vm_ptr);
-        let result = vm
-            .with_attached(&AttachArguments::new(JniVersion::V8), |env, token| {
-                unsafe {
-                    assert_eq!(env.raw_jvm().as_ptr(), raw_java_vm_ptr);
-                    assert_eq!(env.raw_env().as_ptr(), raw_env_ptr);
-                }
-                assert_eq!(env.has_token, RefCell::new(false));
-                (17, token)
-            })
-            .unwrap();
-        assert_eq!(result, 17);
-    }
 }
 
 #[cfg(test)]
@@ -1125,19 +1123,15 @@ mod java_vm_attach_tests {
     fn attach() {
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let raw_java_vm = mock::raw_java_vm();
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        // Need to pass a number to the closure below as pointers are not Send.
-        let raw_java_vm_ptr_usize = raw_java_vm_ptr as usize;
         let mut sequence = Sequence::new();
         let get_env_mock = mock::get_env_context();
         get_env_mock
             .expect()
             .times(1)
-            .withf(move |java_vm, _jni_env, version| {
-                *java_vm == raw_java_vm_ptr_usize as *mut jni_sys::JavaVM
-                    && *version == jni_sys::JNI_VERSION_1_8
+            .withf_st(move |java_vm, _jni_env, version| {
+                *java_vm == raw_java_vm_ptr && *version == jni_sys::JNI_VERSION_1_8
             })
             .return_const(jni_sys::JNI_EDETACHED)
             .in_sequence(&mut sequence);
@@ -1145,16 +1139,16 @@ mod java_vm_attach_tests {
         attach_current_thread_mock
             .expect()
             .times(1)
-            .withf(move |java_vm, jni_env, argument| unsafe {
+            .withf_st(move |java_vm, jni_env, argument| unsafe {
                 let thread_name =
                     CStr::from_ptr((*(*argument as *mut jni_sys::JavaVMAttachArgs)).name)
                         .to_bytes_with_nul();
-                if *java_vm != raw_java_vm_ptr_usize as *mut jni_sys::JavaVM
+                if *java_vm != raw_java_vm_ptr
                     || from_java_string(thread_name).unwrap() != "test-name"
                 {
                     return false;
                 }
-                **jni_env = raw_env_ptr_usize as *mut c_void;
+                **jni_env = raw_env_ptr as *mut c_void;
                 true
             })
             .return_const(jni_sys::JNI_OK)
@@ -1163,7 +1157,7 @@ mod java_vm_attach_tests {
         exception_check_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .return_const(jni_sys::JNI_FALSE)
             .in_sequence(&mut sequence);
         let vm = JavaVM::test(raw_java_vm_ptr);
@@ -1237,31 +1231,6 @@ mod java_vm_attach_tests {
 
     #[test]
     #[serial]
-    // `serial` messes up compiler lints for other attributes.
-    #[allow(unused_attributes)]
-    #[should_panic(expected = "upsupported version")]
-    fn attach_unsupported_version() {
-        let raw_java_vm = mock::raw_java_vm();
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let mut sequence = Sequence::new();
-        let get_env_mock = mock::get_env_context();
-        get_env_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_EDETACHED)
-            .in_sequence(&mut sequence);
-        let attach_current_thread_mock = mock::attach_current_thread_context();
-        attach_current_thread_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_EVERSION)
-            .in_sequence(&mut sequence);
-        let vm = JavaVM::test(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
-    }
-
-    #[test]
-    #[serial]
     fn attach_attach_error() {
         let raw_java_vm = mock::raw_java_vm();
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
@@ -1294,7 +1263,6 @@ mod java_vm_attach_tests {
     fn attach_pending_exception() {
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let raw_java_vm = mock::raw_java_vm();
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let mut sequence = Sequence::new();
@@ -1308,8 +1276,8 @@ mod java_vm_attach_tests {
         attach_current_thread_mock
             .expect()
             .times(1)
-            .withf(move |_java_vm, jni_env, _argument| unsafe {
-                **jni_env = raw_env_ptr_usize as *mut c_void;
+            .withf_st(move |_java_vm, jni_env, _argument| unsafe {
+                **jni_env = raw_env_ptr as *mut c_void;
                 true
             })
             .return_const(jni_sys::JNI_OK)
@@ -1335,7 +1303,6 @@ mod java_vm_attach_tests {
     fn attach_daemon() {
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let raw_java_vm = mock::raw_java_vm();
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
         let mut sequence = Sequence::new();
@@ -1349,8 +1316,8 @@ mod java_vm_attach_tests {
         attach_current_thread_as_daemon_mock
             .expect()
             .times(1)
-            .withf(move |_java_vm, jni_env, _argument| unsafe {
-                **jni_env = raw_env_ptr_usize as *mut c_void;
+            .withf_st(move |_java_vm, jni_env, _argument| unsafe {
+                **jni_env = raw_env_ptr as *mut c_void;
                 true
             })
             .return_const(jni_sys::JNI_OK)
@@ -1372,6 +1339,45 @@ mod java_vm_attach_tests {
         assert_eq!(env.has_token, RefCell::new(true));
         // Don't want to drop a manually created `JniEnv` and `JavaVM`.
         mem::forget(env);
+    }
+}
+
+// Need a separate module for separate mocks.
+// `serial` doesn't seem to serialize `should_panic` tests correctly.
+// See https://github.com/palfrey/serial_test/issues/12.
+#[cfg(test)]
+mod java_vm_attach_tests_1 {
+    use super::*;
+    use crate::version::JniVersion;
+    use mockall::*;
+    use serial_test::serial;
+
+    generate_java_vm_mock!(mock);
+    generate_jni_env_mock!(jni_mock);
+
+    #[test]
+    #[serial]
+    // `serial` messes up compiler lints for other attributes.
+    #[allow(unused_attributes)]
+    #[should_panic(expected = "upsupported version")]
+    fn attach_unsupported_version() {
+        let raw_java_vm = mock::raw_java_vm();
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        let mut sequence = Sequence::new();
+        let get_env_mock = mock::get_env_context();
+        get_env_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EDETACHED)
+            .in_sequence(&mut sequence);
+        let attach_current_thread_mock = mock::attach_current_thread_context();
+        attach_current_thread_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EVERSION)
+            .in_sequence(&mut sequence);
+        let vm = JavaVM::test(raw_java_vm_ptr);
+        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
     }
 }
 

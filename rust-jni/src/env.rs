@@ -438,12 +438,11 @@ mod jni_env_tests {
     fn version() {
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let get_version_mock = jni_mock::get_version_context();
         get_version_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .return_const(jni_sys::JNI_VERSION_1_4);
         let vm = JavaVMRef::test_default();
         let env = JniEnv::test(&vm, raw_env_ptr);
@@ -455,13 +454,11 @@ mod jni_env_tests {
     fn detach() {
         let raw_java_vm = mock::raw_java_vm();
         let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        // Need to pass a number to the closure below as pointers are not Send.
-        let raw_java_vm_ptr_usize = raw_java_vm_ptr as usize;
         let detach_thread_mock = mock::detach_thread_context();
         detach_thread_mock
             .expect()
             .times(1)
-            .withf(move |java_vm| *java_vm == raw_java_vm_ptr_usize as *mut jni_sys::JavaVM)
+            .withf_st(move |java_vm| *java_vm == raw_java_vm_ptr)
             .return_const(jni_sys::JNI_OK);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
         let mut env = JniEnv::test_default(&vm);
@@ -494,12 +491,11 @@ mod jni_env_tests {
         detach_thread_mock.expect().return_const(jni_sys::JNI_ERR);
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let exception_check_mock = jni_mock::exception_check_context();
         exception_check_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .return_const(jni_sys::JNI_FALSE);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
         {
@@ -561,12 +557,11 @@ mod jni_env_tests {
     fn token() {
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let exception_check_mock = jni_mock::exception_check_context();
         exception_check_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .return_const(jni_sys::JNI_FALSE);
         let raw_java_vm_ptr = 0x1234 as *mut jni_sys::JavaVM;
         let vm = JavaVMRef::test(raw_java_vm_ptr);
