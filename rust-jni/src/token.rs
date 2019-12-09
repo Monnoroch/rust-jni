@@ -480,21 +480,20 @@ mod no_exception_tests {
     fn with_owned_err() {
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let mut sequence = Sequence::new();
         let exception_occured_mock = jni_mock::exception_occured_context();
         let raw_throwable = 0x2835 as jni_sys::jthrowable;
         exception_occured_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .returning_st(move |_env| raw_throwable)
             .in_sequence(&mut sequence);
         let exception_clear_mock = jni_mock::exception_clear_context();
         exception_clear_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .return_const(())
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test_default();
@@ -515,21 +514,20 @@ mod no_exception_tests {
     fn with_owned_unknown_exception() {
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let mut sequence = Sequence::new();
         let exception_occured_mock = jni_mock::exception_occured_context();
         let raw_throwable = 0x2835 as jni_sys::jthrowable;
         exception_occured_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .returning_st(move |_env| raw_throwable)
             .in_sequence(&mut sequence);
         let exception_clear_mock = jni_mock::exception_clear_context();
         exception_clear_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .return_const(())
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test_default();
@@ -548,12 +546,11 @@ mod no_exception_tests {
     fn with_owned_unknown_no_exception() {
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let exception_occured_mock = jni_mock::exception_occured_context();
         exception_occured_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .returning_st(|_env| ptr::null_mut());
         let vm = JavaVMRef::test_default();
         let env = JniEnv::test(&vm, raw_env_ptr);
@@ -634,21 +631,20 @@ mod exception_tests {
     fn unwrap() {
         let raw_env = jni_mock::raw_jni_env();
         let raw_env_ptr = &mut (&raw_env as ::jni_sys::JNIEnv) as *mut ::jni_sys::JNIEnv;
-        let raw_env_ptr_usize = raw_env_ptr as usize;
         let mut sequence = Sequence::new();
         let exception_occured_mock = jni_mock::exception_occured_context();
         let raw_throwable = 0x2835 as jni_sys::jthrowable;
         exception_occured_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .returning_st(move |_env| raw_throwable)
             .in_sequence(&mut sequence);
         let exception_clear_mock = jni_mock::exception_clear_context();
         exception_clear_mock
             .expect()
             .times(1)
-            .withf(move |env| *env == raw_env_ptr_usize as *mut ::jni_sys::JNIEnv)
+            .withf_st(move |env| *env == raw_env_ptr)
             .return_const(())
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test_default();

@@ -28,8 +28,8 @@ jni-sys = "0.3.0"
 cfg-if = "0.1.10"
 
 [dev-dependencies]
-mockall = "0.6.0"
-serial_test = { git = "https://github.com/palfrey/serial_test.git", rev = "215213132ced921ae65f90c0cab807de2137375a" }
+mockall = { git = "https://github.com/asomers/mockall.git", rev = "459ed5c541063676be03e942af81d7b2c5435762" }
+serial_test = { git = "https://github.com/palfrey/serial_test.git", rev = "39a7a6c56b6add60bbffdb27b14faba74e3f6b10" }
 
 [build-dependencies]
 walkdir = "2.2.9"

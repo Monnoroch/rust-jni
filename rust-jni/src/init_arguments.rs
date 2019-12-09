@@ -547,7 +547,7 @@ pub(crate) mod init_arguments_creation_tests {
         let mock = jni_mock::JNI_GetDefaultJavaVMInitArgs_context();
         mock.expect()
             .times(1)
-            .withf(move |arguments: &*mut ::std::os::raw::c_void| {
+            .withf_st(move |arguments: &*mut ::std::os::raw::c_void| {
                 let arguments = *arguments as *mut jni_sys::JavaVMInitArgs;
                 // We know that this pointer points to a valid value.
                 match unsafe { arguments.as_mut() } {
@@ -607,7 +607,7 @@ pub(crate) mod init_arguments_creation_tests {
         let mock = jni_mock::JNI_GetDefaultJavaVMInitArgs_context();
         mock.expect()
             .times(1)
-            .withf(move |arguments: &*mut ::std::os::raw::c_void| {
+            .withf_st(move |arguments: &*mut ::std::os::raw::c_void| {
                 let arguments = *arguments as *mut jni_sys::JavaVMInitArgs;
                 // We know that this pointer points to a valid value.
                 match unsafe { arguments.as_mut() } {
@@ -644,7 +644,7 @@ pub(crate) mod init_arguments_creation_tests {
         let mock = jni_mock::JNI_GetDefaultJavaVMInitArgs_context();
         mock.expect()
             .times(1)
-            .withf(move |arguments: &*mut ::std::os::raw::c_void| {
+            .withf_st(move |arguments: &*mut ::std::os::raw::c_void| {
                 let arguments = *arguments as *mut jni_sys::JavaVMInitArgs;
                 // We know that this pointer points to a valid value.
                 match unsafe { arguments.as_mut() } {
@@ -677,11 +677,6 @@ pub(crate) struct RawInitArguments<'a> {
     pub raw_arguments: jni_sys::JavaVMInitArgs,
     _buffer: PhantomData<&'a Vec<CString>>,
 }
-
-/// Test implementation of Send to allow passing
-/// these objects to mock arguments matchers.
-#[cfg(test)]
-unsafe impl<'a> Send for RawInitArguments<'a> {}
 
 impl InitArguments {
     pub(crate) fn to_raw<'a, 'b, 'c: 'a + 'b>(
