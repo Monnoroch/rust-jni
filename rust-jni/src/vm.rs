@@ -550,8 +550,6 @@ mod java_vm_drop_tests {
 
     #[test]
     #[serial]
-    // `serial` messes up compiler lints for other attributes.
-    #[allow(unused_attributes)]
     #[should_panic(expected = "Failed destroying the JavaVm. Status: Unknown(-1)")]
     fn drop_panics() {
         let raw_java_vm = mock::raw_java_vm();
@@ -1357,8 +1355,6 @@ mod java_vm_attach_tests_1 {
 
     #[test]
     #[serial]
-    // `serial` messes up compiler lints for other attributes.
-    #[allow(unused_attributes)]
     #[should_panic(expected = "upsupported version")]
     fn attach_unsupported_version() {
         let raw_java_vm = mock::raw_java_vm();
