@@ -161,8 +161,8 @@ java_argument_type_impls! {
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
 /// #     let _ = vm.with_attached(
 /// #        &AttachArguments::new(init_arguments.version()),
-/// #        |env: &JniEnv, token: NoException| {
-/// #            ((), jni_main(env, token).unwrap())
+/// #        |token: NoException| {
+/// #            ((), jni_main(token).unwrap())
 /// #        },
 /// #     );
 /// # }
@@ -181,17 +181,16 @@ java_argument_type_impls! {
 ///         raw_class,
 ///         (raw_argument,),
 ///         |class, token, (argument,)| {
-///             let env = class.env();
 ///             assert_eq!(
 ///                 class
 ///                     .get_name(&token)
-///                     .or_npe(env, &token)
+///                     .or_npe(&token)
 ///                     .unwrap()
 ///                     .as_string(&token),
 ///                 "java.lang.String",
 ///             );
-///             let result = String::value_of_int(env, &token, *argument)
-///                 .or_npe(env, &token)
+///             let result = String::value_of_int(&token, *argument)
+///                 .or_npe(&token)
 ///                 .unwrap();
 ///             assert_eq!(result.as_string(&token), "17");
 ///             (Ok(Box::new(result)), token)
@@ -199,11 +198,11 @@ java_argument_type_impls! {
 ///     )
 /// }
 ///
-/// # fn jni_main<'a>(env: &'a JniEnv<'a>, token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
+/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
 /// # unsafe {
-/// let string_class = String::empty(env, &token)?.class(&token);
+/// let string_class = String::empty(&token)?.class(&token);
 /// let string = Java_java_lang_String_valueOf__I(
-///     env.raw_env().as_ptr(),
+///     token.env().raw_env().as_ptr(),
 ///     string_class.raw_object().as_ptr(),
 ///     17 as jni_sys::jint,
 /// );
@@ -226,8 +225,8 @@ java_argument_type_impls! {
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
 /// #     let _ = vm.with_attached(
 /// #        &AttachArguments::new(init_arguments.version()),
-/// #        |env: &JniEnv, token: NoException| {
-/// #            ((), jni_main(env, token).unwrap())
+/// #        |token: NoException| {
+/// #            ((), jni_main(token).unwrap())
 /// #        },
 /// #     );
 /// # }
@@ -246,16 +245,15 @@ java_argument_type_impls! {
 ///         raw_class,
 ///         (raw_argument,),
 ///         |class, token, (argument,)| {
-///             let env = class.env();
 ///             assert_eq!(
 ///                 class
 ///                     .get_name(&token)
-///                     .or_npe(env, &token)
+///                     .or_npe(&token)
 ///                     .unwrap()
 ///                     .as_string(&token),
 ///                 "java.lang.String",
 ///             );
-///             let result = String::value_of_int(env, &token, *argument)
+///             let result = String::value_of_int(&token, *argument)
 ///                 .unwrap();
 ///             if result.as_ref().unwrap().as_string(&token) == "17" {
 ///                 (Ok(Box::new(result)), token)
@@ -266,11 +264,11 @@ java_argument_type_impls! {
 ///     )
 /// }
 ///
-/// # fn jni_main<'a>(env: &'a JniEnv<'a>, token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
+/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
 /// # unsafe {
-/// let string_class = String::empty(env, &token)?.class(&token);
+/// let string_class = String::empty(&token)?.class(&token);
 /// let string = Java_java_lang_String_valueOf__I(
-///     env.raw_env().as_ptr(),
+///     token.env().raw_env().as_ptr(),
 ///     string_class.raw_object().as_ptr(),
 ///     17 as jni_sys::jint,
 /// );
@@ -292,8 +290,8 @@ java_argument_type_impls! {
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
 /// #     let _ = vm.with_attached(
 /// #        &AttachArguments::new(init_arguments.version()),
-/// #        |env: &JniEnv, token: NoException| {
-/// #            ((), jni_main(env, token).unwrap())
+/// #        |token: NoException| {
+/// #            ((), jni_main(token).unwrap())
 /// #        },
 /// #     );
 /// # }
@@ -312,7 +310,7 @@ java_argument_type_impls! {
 ///         raw_class,
 ///         (raw_argument,),
 ///         |class, token, (argument,)| {
-///             let exception = Throwable::new(class.env(), &token).unwrap();
+///             let exception = Throwable::new(&token).unwrap();
 ///             let token = exception.throw(token);
 ///             let (exception, token) = token.unwrap();
 ///             (Err(exception), token)
@@ -320,17 +318,17 @@ java_argument_type_impls! {
 ///     )
 /// }
 ///
-/// # fn jni_main<'a>(env: &'a JniEnv<'a>, token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
+/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
 /// # unsafe {
-/// let string_class = String::empty(env, &token)?.class(&token);
+/// let string_class = String::empty(&token)?.class(&token);
 /// let string = Java_java_lang_String_valueOf__I(
-///     env.raw_env().as_ptr(),
+///     token.env().raw_env().as_ptr(),
 ///     string_class.raw_object().as_ptr(),
 ///     17 as jni_sys::jint,
 /// );
 /// assert_eq!(string, ptr::null_mut());
 ///
-/// let raw_env = env.raw_env().as_ptr();
+/// let raw_env = token.env().raw_env().as_ptr();
 /// let jni_fn = ((**raw_env).ExceptionOccurred).unwrap();
 /// let throwable = jni_fn(raw_env);
 /// assert_ne!(throwable, ptr::null_mut());
@@ -365,10 +363,10 @@ where
     generic_native_method_implementation::<R::JniType, A::JniType, _>(
         raw_env,
         raw_arguments,
-        |env, token, arguments| {
+        |token, arguments| {
             // Should not panic if the class pointer is valid.
-            let class = Class::from_raw(env, NonNull::new(raw_class).unwrap());
-            let arguments = <A as ToJavaNativeArgumentTuple>::from_raw(env, arguments);
+            let class = Class::from_raw(token.env(), NonNull::new(raw_class).unwrap());
+            let arguments = <A as ToJavaNativeArgumentTuple>::from_raw(token.env(), arguments);
             let (result, token) = callback(&class, token, &arguments);
             let java_result = to_jni_type::<R>(result, token);
             // We don't own the reference.
@@ -403,8 +401,8 @@ where
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
 /// #     let _ = vm.with_attached(
 /// #        &AttachArguments::new(init_arguments.version()),
-/// #        |env: &JniEnv, token: NoException| {
-/// #            ((), jni_main(env, token).unwrap())
+/// #        |token: NoException| {
+/// #            ((), jni_main(token).unwrap())
 /// #        },
 /// #     );
 /// # }
@@ -423,10 +421,9 @@ where
 ///         raw_object,
 ///         (raw_argument,),
 ///         |object, token, (argument,)| {
-///             let env = object.env();
 ///             let argument = argument
 ///                 .as_ref()
-///                 .or_npe(env, &token)
+///                 .or_npe(&token)
 ///                 .unwrap();
 ///             let result = object.equals(&token, &argument).unwrap();
 ///             (Ok(Box::new(result)), token)
@@ -434,12 +431,12 @@ where
 ///     )
 /// }
 ///
-/// # fn jni_main<'a>(env: &'a JniEnv<'a>, token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
+/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
 /// # unsafe {
-/// let string1 = String::empty(env, &token)?;
-/// let string2 = String::new(env, &token, "")?;
+/// let string1 = String::empty(&token)?;
+/// let string2 = String::new(&token, "")?;
 /// let equals = Java_java_lang_Object_equals__Ljava_lang_Object_2(
-///     env.raw_env().as_ptr(),
+///     token.env().raw_env().as_ptr(),
 ///     string1.raw_object().as_ptr(),
 ///     string2.raw_object().as_ptr(),
 /// );
@@ -462,8 +459,8 @@ where
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
 /// #     let _ = vm.with_attached(
 /// #        &AttachArguments::new(init_arguments.version()),
-/// #        |env: &JniEnv, token: NoException| {
-/// #            ((), jni_main(env, token).unwrap())
+/// #        |token: NoException| {
+/// #            ((), jni_main(token).unwrap())
 /// #        },
 /// #     );
 /// # }
@@ -482,7 +479,7 @@ where
 ///         raw_object,
 ///         (raw_argument,),
 ///         |object, token, (argument,)| {
-///             let exception = Throwable::new(object.env(), &token).unwrap();
+///             let exception = Throwable::new(&token).unwrap();
 ///             let token = exception.throw(token);
 ///             let (exception, token) = token.unwrap();
 ///             (Err(exception), token)
@@ -490,18 +487,18 @@ where
 ///     )
 /// }
 ///
-/// # fn jni_main<'a>(env: &'a JniEnv<'a>, token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
+/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
 /// # unsafe {
-/// let string1 = String::empty(env, &token)?;
-/// let string2 = String::new(env, &token, "")?;
+/// let string1 = String::empty(&token)?;
+/// let string2 = String::new(&token, "")?;
 /// let equals = Java_java_lang_Object_equals__Ljava_lang_Object_2(
-///     env.raw_env().as_ptr(),
+///     token.env().raw_env().as_ptr(),
 ///     string1.raw_object().as_ptr(),
 ///     string2.raw_object().as_ptr(),
 /// );
 /// assert_eq!(equals, jni_sys::JNI_FALSE);
 ///
-/// let raw_env = env.raw_env().as_ptr();
+/// let raw_env = token.env().raw_env().as_ptr();
 /// let jni_fn = ((**raw_env).ExceptionOccurred).unwrap();
 /// let throwable = jni_fn(raw_env);
 /// assert_ne!(throwable, ptr::null_mut());
@@ -536,10 +533,10 @@ where
     generic_native_method_implementation::<R::JniType, A::JniType, _>(
         raw_env,
         raw_arguments,
-        |env, token, arguments| {
+        |token, arguments| {
             // Should not panic if the object pointer is valid.
-            let object = Object::from_raw(env, NonNull::new(raw_object).unwrap());
-            let arguments = <A as ToJavaNativeArgumentTuple>::from_raw(env, arguments);
+            let object = Object::from_raw(token.env(), NonNull::new(raw_object).unwrap());
+            let arguments = <A as ToJavaNativeArgumentTuple>::from_raw(token.env(), arguments);
             let (result, token) = callback(&object, token, &arguments);
             let java_result = to_jni_type::<R>(result, token);
             // We don't own the reference.
@@ -596,7 +593,7 @@ unsafe fn generic_native_method_implementation<R, A, F>(
     callback: F,
 ) -> R
 where
-    for<'a> F: FnOnce(&'a JniEnv<'a>, NoException<'a>, A) -> R + panic::UnwindSafe,
+    for<'a> F: FnOnce(NoException<'a>, A) -> R + panic::UnwindSafe,
     R: JniType,
     A: JniArgumentTypeTuple + panic::UnwindSafe,
 {
@@ -624,7 +621,7 @@ where
         #[allow(unused_unsafe)]
         let env = unsafe { JniEnv::native(&vm, NonNull::new(raw_env).unwrap()) };
         let token = env.token();
-        let result = callback(&env, token, arguments);
+        let result = callback(token, arguments);
         // We don't own the reference.
         mem::forget(env);
         result

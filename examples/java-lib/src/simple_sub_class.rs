@@ -7,12 +7,8 @@ pub struct SimpleSubClass<'a> {
 }
 
 impl<'a> SimpleSubClass<'a> {
-    pub fn new(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        value: i32,
-    ) -> JavaResult<'a, SimpleSubClass<'a>> {
-        unsafe { call_constructor::<Self, _, fn(i32)>(env, token, (value,)) }
+    pub fn new(token: &NoException<'a>, value: i32) -> JavaResult<'a, SimpleSubClass<'a>> {
+        unsafe { call_constructor::<Self, _, fn(i32)>(token, (value,)) }
     }
 }
 

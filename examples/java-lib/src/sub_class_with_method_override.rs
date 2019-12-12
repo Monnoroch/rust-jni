@@ -8,11 +8,10 @@ pub struct SubClassWithMethodOverride<'a> {
 
 impl<'a> SubClassWithMethodOverride<'a> {
     pub fn new(
-        env: &'a JniEnv<'a>,
         token: &NoException<'a>,
         value: i32,
     ) -> JavaResult<'a, SubClassWithMethodOverride<'a>> {
-        unsafe { call_constructor::<Self, _, fn(i32)>(env, token, (value,)) }
+        unsafe { call_constructor::<Self, _, fn(i32)>(token, (value,)) }
     }
 }
 

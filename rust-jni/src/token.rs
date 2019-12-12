@@ -2,7 +2,6 @@ use crate::env::JniEnv;
 use crate::jni_bool;
 use crate::result::JavaResult;
 use crate::throwable::Throwable;
-use core::marker::PhantomData;
 use std::mem;
 use std::ptr::NonNull;
 
@@ -40,7 +39,7 @@ include!("call_jni_method.rs");
 /// let vm = JavaVM::create(&init_arguments).unwrap();
 /// let _ = vm.with_attached(
 ///     &AttachArguments::new(init_arguments.version()),
-///     |_env: &JniEnv, token: NoException| ((), token),
+///     |token: NoException| ((), token),
 /// );
 /// # }
 /// #
@@ -61,8 +60,8 @@ include!("call_jni_method.rs");
 /// let empty_string_length = vm
 ///     .with_attached(
 ///         &AttachArguments::new(init_arguments.version()),
-///         |env, token| {
-///             let string = java::lang::String::empty(env, &token).unwrap();
+///         |token| {
+///             let string = java::lang::String::empty(&token).unwrap();
 ///             (string.len(&token), token)
 ///         },
 ///     )
@@ -131,9 +130,9 @@ include!("call_jni_method.rs");
 /// let _ = vm
 ///     .with_attached(
 ///         &AttachArguments::new(init_arguments.version()),
-///         |env, token| {
-///             let string = java::lang::Class::find(env, &token, "java/lang/String").unwrap();
-///             let exception = java::lang::Class::find(env, &token, "invalid").unwrap_err();
+///         |token| {
+///             let string = java::lang::Class::find(&token, "java/lang/String").unwrap();
+///             let exception = java::lang::Class::find(&token, "invalid").unwrap_err();
 ///             ((), token)
 ///         },
 ///     );
@@ -166,11 +165,11 @@ include!("call_jni_method.rs");
 /// let _ = vm
 ///     .with_attached(
 ///         &AttachArguments::new(init_arguments.version()),
-///         |env, token| {
-///             let exception = java::lang::Class::find(env, &token, "invalid").unwrap_err();
+///         |token| {
+///             let exception = java::lang::Class::find(&token, "invalid").unwrap_err();
 ///             exception.throw(token);
 ///             // Doesn't compile! Can't use the token any more.
-///             let _ = java::lang::String::empty(env, &token);
+///             let _ = java::lang::String::empty(&token);
 ///             ((), token)
 ///         },
 ///     );
@@ -191,11 +190,11 @@ include!("call_jni_method.rs");
 /// let _ = vm
 ///     .with_attached(
 ///         &AttachArguments::new(init_arguments.version()),
-///         |env, token| {
-///             let exception = java::lang::Class::find(env, &token, "invalid").unwrap_err();
+///         |token| {
+///             let exception = java::lang::Class::find(&token, "invalid").unwrap_err();
 ///             let exception_token = exception.throw(token);
 ///             let (exception, token) = exception_token.unwrap();
-///             let _ = java::lang::String::empty(env, &token); // can call Java methods again.
+///             let _ = java::lang::String::empty(&token); // can call Java methods again.
 ///             ((), token)
 ///         },
 ///     );
@@ -215,7 +214,7 @@ include!("call_jni_method.rs");
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
 /// let _ = vm.with_attached(
 ///     &AttachArguments::new(init_arguments.version()),
-///     |env, token| {
+///     |token| {
 ///         let token = thread::spawn(move || {
 ///             token // doesn't compile!
 ///         })
@@ -235,7 +234,7 @@ include!("call_jni_method.rs");
 /// # let vm = JavaVM::create(&init_arguments).unwrap();
 /// let _ = vm.with_attached(
 ///     &AttachArguments::new(init_arguments.version()),
-///     |env, token| {
+///     |token| {
 ///         thread::spawn(|| {
 ///             let _ = &token; // doesn't compile!
 ///         });
@@ -245,7 +244,7 @@ include!("call_jni_method.rs");
 /// ```
 #[derive(Debug)]
 pub struct NoException<'this> {
-    _env: PhantomData<&'this JniEnv<'this>>,
+    env: &'this JniEnv<'this>,
 }
 
 /// A token that like [`NoException`](struct.NoException.html) represents that there is no
@@ -309,10 +308,14 @@ pub(crate) enum CallOutcome<'a, T> {
 impl<'this> NoException<'this> {
     /// Unsafe because it creates a new no-exception token when there might be a pending exception.
     #[inline(always)]
-    pub(crate) unsafe fn new<'env>(_env: &JniEnv<'env>) -> NoException<'env> {
-        NoException {
-            _env: PhantomData::<&JniEnv>,
-        }
+    pub(crate) unsafe fn new<'env>(env: &'env JniEnv<'env>) -> NoException<'env> {
+        NoException { env }
+    }
+
+    /// Get the reference to the underlying [`JniEnv`](struct.JniEnv.html).
+    #[inline(always)]
+    pub fn env(&self) -> &'this JniEnv<'this> {
+        self.env
     }
 
     /// Consume the [`NoException`](struct.NoException.html) token. After the token is consumed
@@ -329,8 +332,8 @@ impl<'this> NoException<'this> {
     /// Unsafe because there might not actually be a pending exception when this method is called.
     #[cold]
     #[inline(always)]
-    pub(crate) unsafe fn exchange(self, env: &'this JniEnv<'this>) -> Exception<'this> {
-        Exception::new(env)
+    pub(crate) unsafe fn exchange(self) -> Exception<'this> {
+        Exception::new(self.env)
     }
 
     /// Execute code that can throw an exception without giving up the ownership of the
@@ -372,7 +375,6 @@ impl<'this> NoException<'this> {
     // TODO(https://github.com/rust-lang/cargo/issues/7606): make documentation visible.
     pub(crate) fn with_owned<Out, F: FnOnce(Self) -> CallOutcome<'this, Out>>(
         &self,
-        env: &'this JniEnv<'this>,
         function: F,
     ) -> JavaResult<'this, Out> {
         // Safe, because we check for a pending exception after the call
@@ -396,15 +398,15 @@ impl<'this> NoException<'this> {
             }
             CallOutcome::Unknown(result) => {
                 // Safe because the argument is ensured to be correct references by construction.
-                match NonNull::new(unsafe { call_jni_method!(env, ExceptionOccurred) }) {
+                match NonNull::new(unsafe { call_jni_method!(self.env, ExceptionOccurred) }) {
                     None => Ok(result),
                     Some(raw_java_throwable) => {
                         // Safe because the argument is ensured to be correct references by construction.
                         unsafe {
-                            call_jni_method!(env, ExceptionClear);
+                            call_jni_method!(self.env, ExceptionClear);
                         }
                         // Safe because the arguments are correct.
-                        Err(unsafe { Throwable::from_raw(env, raw_java_throwable) })
+                        Err(unsafe { Throwable::from_raw(self.env, raw_java_throwable) })
                     }
                 }
             }
@@ -440,16 +442,12 @@ impl<'this> NoException<'this> {
     /// pending exception.
     #[inline(always)]
     unsafe fn clone(&self) -> Self {
-        NoException {
-            _env: PhantomData::<&JniEnv>,
-        }
+        NoException { env: self.env }
     }
 
     #[cfg(test)]
-    pub(crate) fn test<'a>() -> NoException<'a> {
-        NoException {
-            _env: PhantomData::<&JniEnv>,
-        }
+    pub(crate) fn test<'env>(env: &'env JniEnv<'env>) -> NoException<'env> {
+        NoException { env }
     }
 }
 
@@ -464,13 +462,23 @@ mod no_exception_tests {
     generate_jni_env_mock!(jni_mock);
 
     #[test]
+    fn env() {
+        let vm = JavaVMRef::test_default();
+        let env = JniEnv::test_default(&vm);
+        let token = NoException::test(&env);
+        unsafe {
+            assert_eq!(token.env().raw_env(), env.raw_env());
+        }
+    }
+
+    #[test]
     #[serial]
     fn with_owned_ok() {
         let vm = JavaVMRef::test_default();
         let env = JniEnv::test_default(&vm);
-        let token = NoException::test();
+        let token = NoException::test(&env);
         let result = token
-            .with_owned(&env, |token| CallOutcome::Ok((12, token)))
+            .with_owned(|token| CallOutcome::Ok((12, token)))
             .unwrap();
         assert_eq!(result, 12);
     }
@@ -498,11 +506,9 @@ mod no_exception_tests {
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test_default();
         let env = JniEnv::test(&vm, raw_env_ptr);
-        let token = NoException::test();
+        let token = NoException::test(&env);
         let exception = token
-            .with_owned::<(), _>(&env, |token| {
-                CallOutcome::Err(unsafe { token.exchange(&env) })
-            })
+            .with_owned::<(), _>(|token| CallOutcome::Err(unsafe { token.exchange() }))
             .unwrap_err();
         assert_eq!(unsafe { exception.raw_object().as_ptr() }, raw_throwable);
         // Prevent unmocked drop.
@@ -532,9 +538,9 @@ mod no_exception_tests {
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test_default();
         let env = JniEnv::test(&vm, raw_env_ptr);
-        let token = NoException::test();
+        let token = NoException::test(&env);
         let exception = token
-            .with_owned(&env, |_token| CallOutcome::Unknown(12))
+            .with_owned(|_token| CallOutcome::Unknown(12))
             .unwrap_err();
         assert_eq!(unsafe { exception.raw_object().as_ptr() }, raw_throwable);
         // Prevent unmocked drop.
@@ -554,10 +560,8 @@ mod no_exception_tests {
             .returning_st(|_env| ptr::null_mut());
         let vm = JavaVMRef::test_default();
         let env = JniEnv::test(&vm, raw_env_ptr);
-        let token = NoException::test();
-        let result = token
-            .with_owned(&env, |_token| CallOutcome::Unknown(12))
-            .unwrap();
+        let token = NoException::test(&env);
+        let result = token.with_owned(|_token| CallOutcome::Unknown(12)).unwrap();
         assert_eq!(result, 12);
     }
 }

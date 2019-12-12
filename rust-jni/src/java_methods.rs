@@ -1,4 +1,3 @@
-use crate::env::JniEnv;
 use crate::java_class::find_class;
 use crate::java_class::JavaClass;
 use crate::java_class::JavaClassExt;
@@ -253,8 +252,8 @@ java_argument_type_impls! {
 /// # use rust_jni::java::lang::String;
 /// # use std::ptr;
 /// #
-/// # fn jni_main<'a>(env: &'a JniEnv<'a>, token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
-/// let object = String::empty(env, &token)?;
+/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
+/// let object = String::empty(&token)?;
 /// // Safe because correct arguments are passed and correct return type specified.
 /// // See `Object::hashCode` javadoc:
 /// // https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#hashCode()
@@ -271,8 +270,8 @@ java_argument_type_impls! {
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
 /// #     let _ = vm.with_attached(
 /// #        &AttachArguments::new(init_arguments.version()),
-/// #        |env: &JniEnv, token: NoException| {
-/// #            ((), jni_main(env, token).unwrap())
+/// #        |token: NoException| {
+/// #            ((), jni_main(token).unwrap())
 /// #        },
 /// #     );
 /// # }
@@ -318,19 +317,18 @@ where
 /// # use rust_jni::java::lang::String;
 /// # use std::ptr;
 /// #
-/// # fn jni_main<'a>(env: &'a JniEnv<'a>, token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
+/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
 /// // Safe because correct arguments are passed and correct return type specified.
 /// // See `String::valueOf(int)` javadoc:
 /// // https://docs.oracle.com/javase/10/docs/api/java/lang/String.html#valueOf(int)
 /// let string_value = unsafe {
 ///     call_static_method::<String<'a>, _, _, fn(i32) -> String<'a>>(
-///         env,
 ///         &token,
 ///         "valueOf\0",
 ///         (17,),
 ///     )
 /// }
-/// .or_npe(env, &token)?
+/// .or_npe(&token)?
 /// .as_string(&token);
 /// assert_eq!(string_value, "17");
 /// # Ok(token)
@@ -342,8 +340,8 @@ where
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
 /// #     let _ = vm.with_attached(
 /// #        &AttachArguments::new(init_arguments.version()),
-/// #        |env: &JniEnv, token: NoException| {
-/// #            ((), jni_main(env, token).unwrap())
+/// #        |token: NoException| {
+/// #            ((), jni_main(token).unwrap())
 /// #        },
 /// #     );
 /// # }
@@ -359,7 +357,6 @@ where
 ///
 /// This method is unsafe because incorrect parameters can be passed to a method or incorrect return type specified.
 pub unsafe fn call_static_method<'a, T, A, R, F>(
-    env: &'a JniEnv<'a>,
     token: &NoException<'a>,
     name: &str,
     arguments: A,
@@ -370,7 +367,7 @@ where
     R: JavaMethodResult<'a>,
     F: JavaMethodSignature<A, R>,
 {
-    R::call_static_method::<T, A>(env, token, name, &F::method_signature(), arguments)
+    R::call_static_method::<T, A>(token, name, &F::method_signature(), arguments)
 }
 
 /// Call a Java constructor
@@ -388,12 +385,12 @@ where
 /// # use rust_jni::java::lang::String;
 /// # use std::ptr;
 /// #
-/// # fn jni_main<'a>(env: &'a JniEnv<'a>, token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
+/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
 /// // Safe because correct arguments are passed.
 /// // See `String()` javadoc:
 /// // https://docs.oracle.com/javase/10/docs/api/java/lang/String.html#<init>()
 /// let empty_string = unsafe {
-///     call_constructor::<String<'a>, _, fn()>(env, &token, ())
+///     call_constructor::<String<'a>, _, fn()>(&token, ())
 /// }?
 /// .as_string(&token);
 /// assert_eq!(empty_string, "");
@@ -406,8 +403,8 @@ where
 /// #     let vm = JavaVM::create(&init_arguments).unwrap();
 /// #     let _ = vm.with_attached(
 /// #        &AttachArguments::new(init_arguments.version()),
-/// #        |env: &JniEnv, token: NoException| {
-/// #            ((), jni_main(env, token).unwrap())
+/// #        |token: NoException| {
+/// #            ((), jni_main(token).unwrap())
 /// #        },
 /// #     );
 /// # }
@@ -421,7 +418,6 @@ where
 ///
 /// This method is unsafe because incorrect parameters can be passed to a method.
 pub unsafe fn call_constructor<'a, R, A, F>(
-    env: &'a JniEnv<'a>,
     token: &NoException<'a>,
     arguments: A,
 ) -> JavaResult<'a, R>
@@ -430,14 +426,14 @@ where
     R: JavaClass<'a>,
     F: JavaMethodSignature<A, ()>,
 {
-    let class = R::class(env, token)?;
+    let class = R::class(token)?;
     let result = jni_methods::call_constructor(
         &class,
         token,
         &F::method_signature(),
         JavaArgumentTuple::to_jni(&arguments),
     )?;
-    Ok(R::from_object(Object::from_raw(env, result)))
+    Ok(R::from_object(Object::from_raw(token.env(), result)))
 }
 
 pub trait JavaMethodResult<'a> {
@@ -456,7 +452,6 @@ pub trait JavaMethodResult<'a> {
         A: JavaArgumentTuple;
 
     unsafe fn call_static_method<T, A>(
-        env: &'a JniEnv<'a>,
         token: &NoException<'a>,
         name: &str,
         signature: &str,
@@ -501,7 +496,6 @@ where
 
     #[inline(always)]
     unsafe fn call_static_method<T, A>(
-        env: &'a JniEnv<'a>,
         token: &NoException<'a>,
         name: &str,
         signature: &str,
@@ -511,7 +505,7 @@ where
         T: JavaClassRef<'a>,
         A: JavaArgumentTuple,
     {
-        let class = find_class::<T>(env, token)?;
+        let class = find_class::<T>(token)?;
         let result = jni_methods::call_static_object_method(
             &class,
             token,
@@ -521,7 +515,7 @@ where
         )?;
         Ok(result.map(
             #[inline(always)]
-            |result| Self::from_object(Object::from_raw(env, result)),
+            |result| Self::from_object(Object::from_raw(token.env(), result)),
         ))
     }
 }

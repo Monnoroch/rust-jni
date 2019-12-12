@@ -6,12 +6,8 @@ pub struct SimpleClass<'a> {
 }
 
 impl<'a> SimpleClass<'a> {
-    pub fn new(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        value: i32,
-    ) -> JavaResult<'a, SimpleClass<'a>> {
-        unsafe { call_constructor::<Self, _, fn(i32)>(env, token, (value,)) }
+    pub fn new(token: &NoException<'a>, value: i32) -> JavaResult<'a, SimpleClass<'a>> {
+        unsafe { call_constructor::<Self, _, fn(i32)>(token, (value,)) }
     }
 
     pub fn value_with_added(&self, token: &NoException<'a>, to_add: i32) -> JavaResult<'a, i32> {

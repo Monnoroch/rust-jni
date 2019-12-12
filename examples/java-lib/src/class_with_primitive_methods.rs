@@ -6,11 +6,8 @@ pub struct ClassWithPrimitiveMethods<'a> {
 }
 
 impl<'a> ClassWithPrimitiveMethods<'a> {
-    pub fn new(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-    ) -> JavaResult<'a, ClassWithPrimitiveMethods<'a>> {
-        unsafe { call_constructor::<Self, _, fn()>(env, token, ()) }
+    pub fn new(token: &NoException<'a>) -> JavaResult<'a, ClassWithPrimitiveMethods<'a>> {
+        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
     }
 
     pub fn test_function_void(&self, token: &NoException<'a>) -> JavaResult<'a, ()> {
@@ -93,23 +90,18 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         }
     }
 
-    pub fn test_static_function_void(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-    ) -> JavaResult<'a, ()> {
+    pub fn test_static_function_void(token: &NoException<'a>) -> JavaResult<'a, ()> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_static_method::<Self, _, _, fn()>(env, token, "testStaticFunction\0", ()) }
+        unsafe { call_static_method::<Self, _, _, fn()>(token, "testStaticFunction\0", ()) }
     }
 
     pub fn test_static_function_bool(
-        env: &'a JniEnv<'a>,
         token: &NoException<'a>,
         argument: bool,
     ) -> JavaResult<'a, bool> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             call_static_method::<Self, _, _, fn(bool) -> bool>(
-                env,
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -118,14 +110,12 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
     }
 
     pub fn test_static_function_char(
-        env: &'a JniEnv<'a>,
         token: &NoException<'a>,
         argument: char,
     ) -> JavaResult<'a, char> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             call_static_method::<Self, _, _, fn(char) -> char>(
-                env,
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -133,15 +123,10 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         }
     }
 
-    pub fn test_static_function_u8(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        argument: u8,
-    ) -> JavaResult<'a, u8> {
+    pub fn test_static_function_u8(token: &NoException<'a>, argument: u8) -> JavaResult<'a, u8> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             call_static_method::<Self, _, _, fn(u8) -> u8>(
-                env,
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -149,15 +134,10 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         }
     }
 
-    pub fn test_static_function_i16(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        argument: i16,
-    ) -> JavaResult<'a, i16> {
+    pub fn test_static_function_i16(token: &NoException<'a>, argument: i16) -> JavaResult<'a, i16> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             call_static_method::<Self, _, _, fn(i16) -> i16>(
-                env,
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -165,15 +145,10 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         }
     }
 
-    pub fn test_static_function_i32(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        argument: i32,
-    ) -> JavaResult<'a, i32> {
+    pub fn test_static_function_i32(token: &NoException<'a>, argument: i32) -> JavaResult<'a, i32> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             call_static_method::<Self, _, _, fn(i32) -> i32>(
-                env,
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -181,15 +156,10 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         }
     }
 
-    pub fn test_static_function_i64(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        argument: i64,
-    ) -> JavaResult<'a, i64> {
+    pub fn test_static_function_i64(token: &NoException<'a>, argument: i64) -> JavaResult<'a, i64> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             call_static_method::<Self, _, _, fn(i64) -> i64>(
-                env,
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -198,7 +168,6 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
     }
 
     pub fn test_static_function_f32(
-        env: &'a JniEnv<'a>,
         token: &NoException<'a>,
         // TODO(#25): floating point numbers don't work properly.
         argument: f64,
@@ -207,7 +176,6 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         unsafe {
             // TODO(#25): floating point numbers don't work properly.
             call_static_method::<Self, _, _, fn(f64) -> f32>(
-                env,
                 token,
                 "testStaticFloatFunction\0",
                 (argument,),
@@ -215,15 +183,10 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         }
     }
 
-    pub fn test_static_function_f64(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        argument: f64,
-    ) -> JavaResult<'a, f64> {
+    pub fn test_static_function_f64(token: &NoException<'a>, argument: f64) -> JavaResult<'a, f64> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             call_static_method::<Self, _, _, fn(f64) -> f64>(
-                env,
                 token,
                 "testStaticFunction\0",
                 (argument,),

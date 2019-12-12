@@ -1,6 +1,5 @@
 use crate::class::Class;
 use crate::classes::null_pointer_exception::NullPointerException;
-use crate::env::JniEnv;
 use crate::java_methods::FromObject;
 use crate::java_methods::JniSignature;
 use crate::object::Object;
@@ -36,7 +35,7 @@ pub trait JavaClassExt<'a> {
     ///
     /// Calls [`Class::find`](java/lang/struct.Class.html#method.find) with the correct
     /// type signature.
-    fn class(env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, Class<'a>>;
+    fn class(token: &NoException<'a>) -> JavaResult<'a, Class<'a>>;
 
     /// Get the raw object pointer with ownership transfer.
     ///
@@ -60,8 +59,8 @@ where
     }
 
     #[inline(always)]
-    fn class(env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, Class<'a>> {
-        find_class::<Self>(env, token)
+    fn class(token: &NoException<'a>) -> JavaResult<'a, Class<'a>> {
+        find_class::<Self>(token)
     }
 
     #[inline(always)]
@@ -91,14 +90,14 @@ pub trait NullableJavaClassExt<'a, R> {
     /// # use rust_jni::java::lang::Object;
     /// # use std::ptr;
     /// #
-    /// # fn jni_main<'a>(env: &'a JniEnv<'a>, token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
-    /// let object_class = Object::new(env, &token)?
+    /// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
+    /// let object_class = Object::new(&token)?
     ///     .to_string(&token)
-    ///     .or_npe(env, &token)?
+    ///     .or_npe(&token)?
     ///     .class(&token)
     ///     .parent(&token)
     ///     .as_ref()
-    ///     .or_npe(env, &token)?;
+    ///     .or_npe(&token)?;
     /// # Ok(token)
     /// # }
     /// #
@@ -108,8 +107,8 @@ pub trait NullableJavaClassExt<'a, R> {
     /// #     let vm = JavaVM::create(&init_arguments).unwrap();
     /// #     let _ = vm.with_attached(
     /// #        &AttachArguments::new(init_arguments.version()),
-    /// #        |env: &JniEnv, token: NoException| {
-    /// #            ((), jni_main(env, token).unwrap())
+    /// #        |token: NoException| {
+    /// #            ((), jni_main(token).unwrap())
     /// #        },
     /// #     );
     /// # }
@@ -117,7 +116,7 @@ pub trait NullableJavaClassExt<'a, R> {
     /// # #[cfg(not(feature = "libjvm"))]
     /// # fn main() {}
     /// ```
-    fn or_npe(self, env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, R>;
+    fn or_npe(self, token: &NoException<'a>) -> JavaResult<'a, R>;
 }
 
 /// Add nullable object helper methods from [`NullableJavaClassExt`](trait.NullableJavaClassExt.html)
@@ -127,11 +126,11 @@ where
     R: JavaClassRef<'a>,
 {
     #[inline(always)]
-    fn or_npe(self, env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, R> {
+    fn or_npe(self, token: &NoException<'a>) -> JavaResult<'a, R> {
         match self {
             Some(value) => Ok(value),
             None => {
-                let npe = NullPointerException::new(env, token)?;
+                let npe = NullPointerException::new(token)?;
                 Err(npe.into())
             }
         }
@@ -139,12 +138,9 @@ where
 }
 
 #[inline(always)]
-pub fn find_class<'a, T: JavaClassRef<'a>>(
-    env: &'a JniEnv<'a>,
-    token: &NoException<'a>,
-) -> JavaResult<'a, Class<'a>> {
+pub fn find_class<'a, T: JavaClassRef<'a>>(token: &NoException<'a>) -> JavaResult<'a, Class<'a>> {
     let signature = T::signature();
     // Class signatures are of the form "L${CLASS_NAME};", so to get the class name
     // we remove the first and the last character.
-    Class::find(env, token, &signature[1..signature.len() - 1])
+    Class::find(token, &signature[1..signature.len() - 1])
 }

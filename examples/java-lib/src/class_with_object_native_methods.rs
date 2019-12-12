@@ -8,11 +8,8 @@ pub struct ClassWithObjectNativeMethods<'a> {
 }
 
 impl<'a> ClassWithObjectNativeMethods<'a> {
-    pub fn new(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-    ) -> JavaResult<'a, ClassWithObjectNativeMethods<'a>> {
-        unsafe { call_constructor::<Self, _, fn()>(env, token, ()) }
+    pub fn new(token: &NoException<'a>) -> JavaResult<'a, ClassWithObjectNativeMethods<'a>> {
+        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
     }
 
     pub fn test_function_object(
@@ -32,14 +29,12 @@ impl<'a> ClassWithObjectNativeMethods<'a> {
     }
 
     pub fn test_static_function_object(
-        env: &'a JniEnv<'a>,
         token: &NoException<'a>,
         argument: impl JavaObjectArgument<'a, SimpleClass<'a>>,
     ) -> JavaResult<'a, Option<SimpleClass<'a>>> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             call_static_method::<Self, _, _, fn(Option<&SimpleClass<'a>>) -> SimpleClass<'a>>(
-                env,
                 token,
                 "testStaticFunction\0",
                 (argument.as_argument(),),
@@ -58,11 +53,9 @@ unsafe extern "C" fn Java_rustjni_test_ClassWithObjectNativeMethods_testNativeFu
         raw_env,
         raw_object,
         (argument,),
-        |object, token, (argument,)| {
+        |_object, token, (argument,)| {
             (
-                Ok(Box::new(
-                    argument.as_ref().or_npe(object.env(), &token).unwrap(),
-                )),
+                Ok(Box::new(argument.as_ref().or_npe(&token).unwrap())),
                 token,
             )
         },
@@ -79,11 +72,9 @@ unsafe extern "C" fn Java_rustjni_test_ClassWithObjectNativeMethods_testStaticNa
         raw_env,
         raw_class,
         (argument,),
-        |class, token, (argument,)| {
+        |_class, token, (argument,)| {
             (
-                Ok(Box::new(
-                    argument.as_ref().or_npe(class.env(), &token).unwrap(),
-                )),
+                Ok(Box::new(argument.as_ref().or_npe(&token).unwrap())),
                 token,
             )
         },

@@ -1,4 +1,3 @@
-use crate::env::JniEnv;
 use crate::java_class::JavaClassRef;
 use crate::java_class::NullableJavaClassExt;
 use crate::throwable::Throwable;
@@ -17,8 +16,8 @@ where
     R: JavaClassRef<'a>,
 {
     #[inline(always)]
-    fn or_npe(self, env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, R> {
+    fn or_npe(self, token: &NoException<'a>) -> JavaResult<'a, R> {
         let result = self?;
-        result.or_npe(env, token)
+        result.or_npe(token)
     }
 }

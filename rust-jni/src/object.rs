@@ -127,9 +127,8 @@ impl<'env> Object<'env> {
     pub(crate) fn clone_object(&self, token: &NoException<'env>) -> JavaResult<'env, Object<'env>> {
         // Safe because arguments are ensured to be the correct by construction and because
         // `NewLocalRef` throws an exception before returning `null`.
-        let raw_object = unsafe {
-            call_nullable_jni_method!(self.env(), token, NewLocalRef, self.raw_object().as_ptr())?
-        };
+        let raw_object =
+            unsafe { call_nullable_jni_method!(token, NewLocalRef, self.raw_object().as_ptr())? };
         // Safe because the argument is a valid class reference.
         Ok(unsafe { Self::from_raw(self.env, raw_object) })
     }
@@ -172,12 +171,9 @@ impl<'env> Object<'env> {
     /// Create a new [`Object`](struct.Object.html) with a message.
     ///
     /// [`Object()` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#<init>())
-    pub fn new(
-        env: &'env JniEnv<'env>,
-        token: &NoException<'env>,
-    ) -> JavaResult<'env, Object<'env>> {
+    pub fn new(token: &NoException<'env>) -> JavaResult<'env, Object<'env>> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_constructor::<Self, _, fn()>(&env, token, ()) }
+        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
     }
 
     /// Construct from a raw pointer. Unsafe because an invalid pointer may be passed

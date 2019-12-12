@@ -287,10 +287,7 @@ impl JavaVM {
     pub fn with_attached<'vm, T>(
         &'vm self,
         arguments: &AttachArguments,
-        closure: impl for<'token> FnOnce(
-            &'token JniEnv<'token>,
-            NoException<'token>,
-        ) -> (T, NoException<'token>),
+        closure: impl for<'token> FnOnce(NoException<'token>) -> (T, NoException<'token>),
     ) -> Result<T, JniError> {
         let env = self.attach(arguments)?;
         self.with_attached_generic(env, closure)
@@ -307,10 +304,7 @@ impl JavaVM {
     pub fn with_attached_daemon<'vm, T>(
         &'vm self,
         arguments: &AttachArguments,
-        closure: impl for<'token> FnOnce(
-            &'token JniEnv<'token>,
-            NoException<'token>,
-        ) -> (T, NoException<'token>),
+        closure: impl for<'token> FnOnce(NoException<'token>) -> (T, NoException<'token>),
     ) -> Result<T, JniError> {
         let env = self.attach_daemon(arguments)?;
         self.with_attached_generic(env, closure)
@@ -319,14 +313,11 @@ impl JavaVM {
     fn with_attached_generic<'vm, T>(
         &'vm self,
         env: JniEnv<'vm>,
-        closure: impl for<'token> FnOnce(
-            &'token JniEnv<'token>,
-            NoException<'token>,
-        ) -> (T, NoException<'token>),
+        closure: impl for<'token> FnOnce(NoException<'token>) -> (T, NoException<'token>),
     ) -> Result<T, JniError> {
         // Safe because we only get a single token here.
         let token = unsafe { env.token_internal() };
-        let (result, token) = closure(&env, token);
+        let (result, token) = closure(token);
         let token = token.consume();
         match env.detach(token) {
             None => Ok(result),
@@ -822,12 +813,12 @@ mod java_vm_with_attached_tests {
         let result = vm
             .with_attached(
                 &AttachArguments::named(JniVersion::V8, "test-name"),
-                |env, token| {
+                |token| {
                     unsafe {
-                        assert_eq!(env.raw_jvm().as_ptr(), raw_java_vm_ptr);
-                        assert_eq!(env.raw_env().as_ptr(), raw_env_ptr);
+                        assert_eq!(token.env().raw_jvm().as_ptr(), raw_java_vm_ptr);
+                        assert_eq!(token.env().raw_env().as_ptr(), raw_env_ptr);
                     }
-                    assert_eq!(env.has_token, RefCell::new(false));
+                    assert_eq!(token.env().has_token, RefCell::new(false));
                     (17, token)
                 },
             )
@@ -849,10 +840,8 @@ mod java_vm_with_attached_tests {
             .times(1)
             .return_const(jni_sys::JNI_ERR);
         let vm = JavaVM::test(raw_java_vm_ptr);
-        vm.with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
-            ((), token)
-        })
-        .unwrap();
+        vm.with_attached(&AttachArguments::new(JniVersion::V8), |token| ((), token))
+            .unwrap();
     }
 
     #[test]
@@ -877,10 +866,8 @@ mod java_vm_with_attached_tests {
             .return_const(jni_sys::JNI_EDETACHED)
             .in_sequence(&mut sequence);
         let vm = JavaVM::test(raw_java_vm_ptr);
-        vm.with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
-            ((), token)
-        })
-        .unwrap();
+        vm.with_attached(&AttachArguments::new(JniVersion::V8), |token| ((), token))
+            .unwrap();
     }
 
     #[test]
@@ -908,9 +895,7 @@ mod java_vm_with_attached_tests {
             .in_sequence(&mut sequence);
         let vm = JavaVM::test(raw_java_vm_ptr);
         let result = vm
-            .with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
-                ((), token)
-            })
+            .with_attached(&AttachArguments::new(JniVersion::V8), |token| ((), token))
             .unwrap_err();
         assert_eq!(result, JniError::Unknown(jni_sys::JNI_ERR));
     }
@@ -937,10 +922,8 @@ mod java_vm_with_attached_tests {
             .return_const(jni_sys::JNI_EVERSION)
             .in_sequence(&mut sequence);
         let vm = JavaVM::test(raw_java_vm_ptr);
-        vm.with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
-            ((), token)
-        })
-        .unwrap();
+        vm.with_attached(&AttachArguments::new(JniVersion::V8), |token| ((), token))
+            .unwrap();
     }
 
     #[test]
@@ -984,10 +967,8 @@ mod java_vm_with_attached_tests {
             .return_const(())
             .in_sequence(&mut sequence);
         let vm = JavaVM::test(raw_java_vm_ptr);
-        vm.with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
-            ((), token)
-        })
-        .unwrap();
+        vm.with_attached(&AttachArguments::new(JniVersion::V8), |token| ((), token))
+            .unwrap();
     }
 
     #[test]
@@ -1029,9 +1010,7 @@ mod java_vm_with_attached_tests {
             .in_sequence(&mut sequence);
         let vm = JavaVM::test(raw_java_vm_ptr);
         let result = vm
-            .with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
-                ((), token)
-            })
+            .with_attached(&AttachArguments::new(JniVersion::V8), |token| ((), token))
             .unwrap_err();
         assert_eq!(result, JniError::Unknown(jni_sys::JNI_ERR));
     }
@@ -1075,12 +1054,12 @@ mod java_vm_with_attached_tests {
             .in_sequence(&mut sequence);
         let vm = JavaVM::test(raw_java_vm_ptr);
         let result = vm
-            .with_attached(&AttachArguments::new(JniVersion::V8), |env, token| {
+            .with_attached(&AttachArguments::new(JniVersion::V8), |token| {
                 unsafe {
-                    assert_eq!(env.raw_jvm().as_ptr(), raw_java_vm_ptr);
-                    assert_eq!(env.raw_env().as_ptr(), raw_env_ptr);
+                    assert_eq!(token.env().raw_jvm().as_ptr(), raw_java_vm_ptr);
+                    assert_eq!(token.env().raw_env().as_ptr(), raw_env_ptr);
                 }
-                assert_eq!(env.has_token, RefCell::new(false));
+                assert_eq!(token.env().has_token, RefCell::new(false));
                 (17, token)
             })
             .unwrap();

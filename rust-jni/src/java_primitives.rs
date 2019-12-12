@@ -64,7 +64,6 @@ macro_rules! java_method_result_trait {
 
             #[inline(always)]
             unsafe fn call_static_method<T, A>(
-                env: &'a JniEnv<'a>,
                 token: &NoException<'a>,
                 name: &str,
                 signature: &str,
@@ -74,7 +73,7 @@ macro_rules! java_method_result_trait {
                 T: JavaClassRef<'a>,
                 A: JavaArgumentTuple,
             {
-                let class = find_class::<T>(env, token)?;
+                let class = find_class::<T>(token)?;
                 let result = jni_methods::call_static_primitive_method(
                     &class,
                     token,
