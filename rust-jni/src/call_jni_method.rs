@@ -22,11 +22,11 @@ macro_rules! call_jni_method {
 // It's actually used.
 #[allow(unused_macros)]
 macro_rules! call_jni_object_method {
-    ($object:ident, $method:ident) => {
-        call_jni_method!($object.env(), $method, $object.raw_object().as_ptr())
+    ($token:ident, $object:ident, $method:ident) => {
+        call_jni_method!($token.env(), $method, $object.raw_object().as_ptr())
     };
-    ($object:ident, $method:ident, $($argument:expr),*) => {
-        call_jni_method!($object.env(), $method, $object.raw_object().as_ptr(), $($argument),*)
+    ($token:ident, $object:ident, $method:ident, $($argument:expr),*) => {
+        call_jni_method!($token.env(), $method, $object.raw_object().as_ptr(), $($argument),*)
     };
 }
 

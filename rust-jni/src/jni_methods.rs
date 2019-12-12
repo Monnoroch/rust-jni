@@ -71,7 +71,14 @@ pub(crate) unsafe fn call_primitive_method<'a, R: JniPrimitiveType>(
     let method_id = get_method_id(&class, token, name, signature)?;
     token.with_owned(
         #[inline(always)]
-        |_token| CallOutcome::Unknown(R::call_method(object, method_id.as_ptr(), arguments)),
+        |token| {
+            CallOutcome::Unknown(R::call_method(
+                &token,
+                object,
+                method_id.as_ptr(),
+                arguments,
+            ))
+        },
     )
 }
 
@@ -90,7 +97,8 @@ pub(crate) unsafe fn call_object_method<'a>(
     token.with_owned(
         #[inline(always)]
         |token| {
-            let result = jni_sys::jobject::call_method(object, method_id.as_ptr(), arguments);
+            let result =
+                jni_sys::jobject::call_method(&token, object, method_id.as_ptr(), arguments);
             match NonNull::new(result) {
                 None => CallOutcome::Unknown(None),
                 result => CallOutcome::Ok((result, token)),
@@ -112,7 +120,14 @@ pub(crate) unsafe fn call_static_primitive_method<'a, R: JniPrimitiveType>(
     let method_id = get_static_method_id(&class, token, name, signature)?;
     token.with_owned(
         #[inline(always)]
-        |_token| CallOutcome::Unknown(R::call_static_method(class, method_id.as_ptr(), arguments)),
+        |token| {
+            CallOutcome::Unknown(R::call_static_method(
+                &token,
+                class,
+                method_id.as_ptr(),
+                arguments,
+            ))
+        },
     )
 }
 
@@ -130,7 +145,8 @@ pub(crate) unsafe fn call_static_object_method<'a>(
     token.with_owned(
         #[inline(always)]
         |token| {
-            let result = jni_sys::jobject::call_static_method(class, method_id.as_ptr(), arguments);
+            let result =
+                jni_sys::jobject::call_static_method(&token, class, method_id.as_ptr(), arguments);
             match NonNull::new(result) {
                 None => CallOutcome::Unknown(None),
                 result => CallOutcome::Ok((result, token)),
@@ -152,7 +168,7 @@ pub(crate) unsafe fn call_constructor<'a, A: JniArgumentTypeTuple>(
     token.with_owned(
         #[inline(always)]
         |token| {
-            let result = A::call_constructor(class, method_id.as_ptr(), arguments);
+            let result = A::call_constructor(&token, class, method_id.as_ptr(), arguments);
             match NonNull::new(result) {
                 None => CallOutcome::Err(token.exchange()),
                 Some(value) => CallOutcome::Ok((value, token)),

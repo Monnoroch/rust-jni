@@ -56,18 +56,18 @@ impl<'env> String<'env> {
     /// String length (the number of unicode characters).
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getstringlength)
-    pub fn len(&self, _token: &NoException) -> usize {
+    pub fn len(&self, token: &NoException) -> usize {
         // Safe because arguments are ensured to be the correct by construction.
-        let length = unsafe { call_jni_object_method!(self, GetStringLength) };
+        let length = unsafe { call_jni_object_method!(token, self, GetStringLength) };
         length as usize
     }
 
     /// String size (the number of bytes in modified UTF-8).
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getstringutflength)
-    pub fn size(&self, _token: &NoException) -> usize {
+    pub fn size(&self, token: &NoException) -> usize {
         // Safe because arguments are ensured to be the correct by construction.
-        let size = unsafe { call_jni_object_method!(self, GetStringUTFLength) };
+        let size = unsafe { call_jni_object_method!(token, self, GetStringUTFLength) };
         size as usize
     }
 
@@ -88,6 +88,7 @@ impl<'env> String<'env> {
         // Safe because arguments are ensured to be the correct by construction.
         unsafe {
             call_jni_object_method!(
+                token,
                 self,
                 GetStringUTFRegion,
                 0 as jni_sys::jsize,
