@@ -30,7 +30,7 @@ impl<'env> Throwable<'env> {
         'env: 'token,
     {
         // Safe because the argument is ensured to be correct references by construction.
-        let error = JniError::from_raw(unsafe { call_jni_object_method!(self, Throw) });
+        let error = JniError::from_raw(unsafe { call_jni_object_method!(token, self, Throw) });
         // Can't really handle failing throwing an exception.
         if error.is_some() {
             panic!(

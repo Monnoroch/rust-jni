@@ -62,9 +62,9 @@ impl<'env> Object<'env> {
     /// Get the object's class.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getobjectclass)
-    pub fn class(&self, _token: &NoException) -> Class<'env> {
+    pub fn class(&self, token: &NoException) -> Class<'env> {
         // Safe because arguments are ensured to be correct references by construction.
-        let raw_java_class = unsafe { call_jni_object_method!(self, GetObjectClass) };
+        let raw_java_class = unsafe { call_jni_object_method!(token, self, GetObjectClass) };
         NonNull::new(raw_java_class)
             .map(|raw_java_class| {
                 // Safe because arguments are ensured to be correct references by construction.
@@ -78,12 +78,13 @@ impl<'env> Object<'env> {
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#issameobject)
     pub fn is_same_as<'a>(
         &self,
-        _token: &NoException,
+        token: &NoException,
         other: impl JavaObjectArgument<'a, Object<'a>>,
     ) -> bool {
         // Safe because arguments are ensured to be correct references by construction.
         let same = unsafe {
             call_jni_object_method!(
+                token,
                 self,
                 IsSameObject,
                 other
@@ -97,19 +98,24 @@ impl<'env> Object<'env> {
     /// Compare with a `null` reference.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#issameobject)
-    pub fn is_null<'a>(&self, _token: &NoException) -> bool {
+    pub fn is_null<'a>(&self, token: &NoException) -> bool {
         // Safe because arguments are ensured to be correct references by construction.
-        let same = unsafe { call_jni_object_method!(self, IsSameObject, ptr::null_mut()) };
+        let same = unsafe { call_jni_object_method!(token, self, IsSameObject, ptr::null_mut()) };
         jni_bool::to_rust(same)
     }
 
     /// Check if the object is an instance of the class.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#isinstanceof)
-    pub fn is_instance_of<'a>(&self, _token: &NoException, class: impl AsRef<Class<'a>>) -> bool {
+    pub fn is_instance_of<'a>(&self, token: &NoException, class: impl AsRef<Class<'a>>) -> bool {
         // Safe because arguments are ensured to be correct references by construction.
         let is_instance = unsafe {
-            call_jni_object_method!(self, IsInstanceOf, class.as_ref().raw_object().as_ptr())
+            call_jni_object_method!(
+                token,
+                self,
+                IsInstanceOf,
+                class.as_ref().raw_object().as_ptr()
+            )
         };
         jni_bool::to_rust(is_instance)
     }
@@ -198,7 +204,9 @@ impl<'env> Drop for Object<'env> {
         // Safe because the argument is ensured to be correct references by construction.
         // DeleteLocalRef can handle nulls without any issues.
         unsafe {
-            call_jni_object_method!(self, DeleteLocalRef);
+            let raw_env = self.env().raw_env().as_ptr();
+            let jni_fn = ((**raw_env).DeleteLocalRef).unwrap();
+            jni_fn(raw_env, self.raw_object().as_ptr())
         }
     }
 }

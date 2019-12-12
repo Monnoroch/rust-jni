@@ -1,5 +1,6 @@
 use crate::class::Class;
 use crate::object::Object;
+use crate::token::NoException;
 use jni_sys;
 use std::ptr;
 
@@ -15,12 +16,14 @@ pub(crate) mod private {
         fn default() -> Self;
 
         unsafe fn call_method<In: JniArgumentTypeTuple>(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: In,
         ) -> Self;
 
         unsafe fn call_static_method<In: JniArgumentTypeTuple>(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: In,
@@ -42,126 +45,147 @@ pub(crate) mod private {
     // TODO: reimplement once Rust has variadic functions or variadic templates.
     pub trait JniArgumentTypeTuple {
         unsafe fn call_constructor(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jobject;
 
         unsafe fn call_object_method(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jobject;
 
         unsafe fn call_static_object_method(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jobject;
 
         unsafe fn call_void_method(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> ();
 
         unsafe fn call_static_void_method(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> ();
 
         unsafe fn call_boolean_method(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jboolean;
 
         unsafe fn call_static_boolean_method(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jboolean;
 
         unsafe fn call_char_method(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jchar;
 
         unsafe fn call_static_char_method(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jchar;
 
         unsafe fn call_byte_method(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jbyte;
 
         unsafe fn call_static_byte_method(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jbyte;
 
         unsafe fn call_short_method(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jshort;
 
         unsafe fn call_static_short_method(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jshort;
 
         unsafe fn call_int_method(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jint;
 
         unsafe fn call_static_int_method(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jint;
 
         unsafe fn call_long_method(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jlong;
 
         unsafe fn call_static_long_method(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jlong;
 
         unsafe fn call_float_method(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jfloat;
 
         unsafe fn call_static_float_method(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jfloat;
 
         unsafe fn call_double_method(
+            token: &NoException,
             object: &Object,
             method_id: jni_sys::jmethodID,
             arguments: Self,
         ) -> jni_sys::jdouble;
 
         unsafe fn call_static_double_method(
+            token: &NoException,
             class: &Class,
             method_id: jni_sys::jmethodID,
             arguments: Self,
@@ -182,20 +206,22 @@ macro_rules! jni_type_trait {
 
             #[inline(always)]
             unsafe fn call_method<In: JniArgumentTypeTuple>(
+                token: &NoException,
                 object: &Object,
                 method_id: jni_sys::jmethodID,
                 arguments: In,
             ) -> Self {
-                In::$method(object, method_id, arguments)
+                In::$method(token, object, method_id, arguments)
             }
 
             #[inline(always)]
             unsafe fn call_static_method<In: JniArgumentTypeTuple>(
+                token: &NoException,
                 class: &Class,
                 method_id: jni_sys::jmethodID,
                 arguments: In,
             ) -> Self {
-                In::$static_method(class, method_id, arguments)
+                In::$static_method(token, class, method_id, arguments)
             }
         }
     };
@@ -284,6 +310,7 @@ macro_rules! jni_method_call {
     ($name:ident, $type:ty, $method:ident, $return_type:ty, $($argument:ident,)*) => {
         #[inline(always)]
         unsafe fn $name(
+            token: &NoException,
             object: &$type,
             method_id: jni_sys::jmethodID,
             arguments: Self
@@ -291,6 +318,7 @@ macro_rules! jni_method_call {
             #[allow(non_snake_case)]
             let ($($argument,)*) = arguments;
             call_jni_object_method!(
+                token,
                 object,
                 $method,
                 method_id

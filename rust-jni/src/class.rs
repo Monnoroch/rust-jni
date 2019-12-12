@@ -63,9 +63,9 @@ impl<'env> Class<'env> {
     /// [`Object`](struct.Object.html) class or any interface.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#getsuperclass)
-    pub fn parent(&self, _token: &NoException) -> Option<Class<'env>> {
+    pub fn parent(&self, token: &NoException) -> Option<Class<'env>> {
         // Safe because the argument is ensured to be correct references by construction.
-        let raw_java_class = unsafe { call_jni_object_method!(self, GetSuperclass) };
+        let raw_java_class = unsafe { call_jni_object_method!(token, self, GetSuperclass) };
         NonNull::new(raw_java_class).map(|raw_java_class| {
             // Safe because the argument is ensured to be a correct reference.
             unsafe { Self::from_raw(self.env(), raw_java_class) }
@@ -79,10 +79,11 @@ impl<'env> Class<'env> {
     /// implementing.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#isassignablefrom)
-    pub fn is_subtype_of<'a>(&self, _token: &NoException, class: impl AsRef<Class<'a>>) -> bool {
+    pub fn is_subtype_of<'a>(&self, token: &NoException, class: impl AsRef<Class<'a>>) -> bool {
         // Safe because arguments are ensured to be the correct by construction.
         let assignable = unsafe {
             call_jni_object_method!(
+                token,
                 self,
                 IsAssignableFrom,
                 class.as_ref().raw_object().as_ptr() as jni_sys::jclass
