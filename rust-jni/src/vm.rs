@@ -919,6 +919,34 @@ mod java_vm_with_attached_tests {
     #[serial]
     // `serial` messes up compiler lints for other attributes.
     #[allow(unused_attributes)]
+    #[should_panic(expected = "upsupported version")]
+    fn with_attached_unsupported_version() {
+        let raw_java_vm = mock::raw_java_vm();
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        let mut sequence = Sequence::new();
+        let get_env_mock = mock::get_env_context();
+        get_env_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EDETACHED)
+            .in_sequence(&mut sequence);
+        let attach_current_thread_mock = mock::attach_current_thread_context();
+        attach_current_thread_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EVERSION)
+            .in_sequence(&mut sequence);
+        let vm = JavaVM::test(raw_java_vm_ptr);
+        vm.with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
+            ((), token)
+        })
+        .unwrap();
+    }
+
+    #[test]
+    #[serial]
+    // `serial` messes up compiler lints for other attributes.
+    #[allow(unused_attributes)]
     #[should_panic(expected = "Newly attached thread has a pending exception")]
     fn with_attached_pending_exception() {
         let raw_env = jni_mock::raw_jni_env();
@@ -1057,48 +1085,6 @@ mod java_vm_with_attached_tests {
             })
             .unwrap();
         assert_eq!(result, 17);
-    }
-}
-
-// Need a separate module for separate mocks.
-// `serial` doesn't seem to serialize `should_panic` tests correctly.
-// See https://github.com/palfrey/serial_test/issues/12.
-#[cfg(test)]
-mod java_vm_with_attached_tests_1 {
-    use super::*;
-    use crate::version::JniVersion;
-    use mockall::*;
-    use serial_test::serial;
-
-    generate_java_vm_mock!(mock);
-    generate_jni_env_mock!(jni_mock);
-
-    #[test]
-    #[serial]
-    // `serial` messes up compiler lints for other attributes.
-    #[allow(unused_attributes)]
-    #[should_panic(expected = "upsupported version")]
-    fn with_attached_unsupported_version() {
-        let raw_java_vm = mock::raw_java_vm();
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let mut sequence = Sequence::new();
-        let get_env_mock = mock::get_env_context();
-        get_env_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_EDETACHED)
-            .in_sequence(&mut sequence);
-        let attach_current_thread_mock = mock::attach_current_thread_context();
-        attach_current_thread_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_EVERSION)
-            .in_sequence(&mut sequence);
-        let vm = JavaVM::test(raw_java_vm_ptr);
-        vm.with_attached(&AttachArguments::new(JniVersion::V8), |_env, token| {
-            ((), token)
-        })
-        .unwrap();
     }
 }
 
@@ -1255,6 +1241,29 @@ mod java_vm_attach_tests {
 
     #[test]
     #[serial]
+    #[should_panic(expected = "upsupported version")]
+    fn attach_unsupported_version() {
+        let raw_java_vm = mock::raw_java_vm();
+        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
+        let mut sequence = Sequence::new();
+        let get_env_mock = mock::get_env_context();
+        get_env_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EDETACHED)
+            .in_sequence(&mut sequence);
+        let attach_current_thread_mock = mock::attach_current_thread_context();
+        attach_current_thread_mock
+            .expect()
+            .times(1)
+            .return_const(jni_sys::JNI_EVERSION)
+            .in_sequence(&mut sequence);
+        let vm = JavaVM::test(raw_java_vm_ptr);
+        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
+    }
+
+    #[test]
+    #[serial]
     // `serial` messes up compiler lints for other attributes.
     #[allow(unused_attributes)]
     #[should_panic(expected = "Newly attached thread has a pending exception")]
@@ -1337,43 +1346,6 @@ mod java_vm_attach_tests {
         assert_eq!(env.has_token, RefCell::new(true));
         // Don't want to drop a manually created `JniEnv` and `JavaVM`.
         mem::forget(env);
-    }
-}
-
-// Need a separate module for separate mocks.
-// `serial` doesn't seem to serialize `should_panic` tests correctly.
-// See https://github.com/palfrey/serial_test/issues/12.
-#[cfg(test)]
-mod java_vm_attach_tests_1 {
-    use super::*;
-    use crate::version::JniVersion;
-    use mockall::*;
-    use serial_test::serial;
-
-    generate_java_vm_mock!(mock);
-    generate_jni_env_mock!(jni_mock);
-
-    #[test]
-    #[serial]
-    #[should_panic(expected = "upsupported version")]
-    fn attach_unsupported_version() {
-        let raw_java_vm = mock::raw_java_vm();
-        let raw_java_vm_ptr = &mut (&raw_java_vm as jni_sys::JavaVM) as *mut jni_sys::JavaVM;
-        let mut sequence = Sequence::new();
-        let get_env_mock = mock::get_env_context();
-        get_env_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_EDETACHED)
-            .in_sequence(&mut sequence);
-        let attach_current_thread_mock = mock::attach_current_thread_context();
-        attach_current_thread_mock
-            .expect()
-            .times(1)
-            .return_const(jni_sys::JNI_EVERSION)
-            .in_sequence(&mut sequence);
-        let vm = JavaVM::test(raw_java_vm_ptr);
-        vm.attach(&AttachArguments::new(JniVersion::V8)).unwrap();
     }
 }
 

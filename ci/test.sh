@@ -13,4 +13,4 @@ fi
 
 javac $javac_args examples/java-lib/java/rustjni/test/*.java
 
-cargo test $cargo_args
+cargo test $cargo_args -- --test-threads=1
