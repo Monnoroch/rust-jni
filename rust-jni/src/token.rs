@@ -462,6 +462,16 @@ mod no_exception_tests {
     generate_jni_env_mock!(jni_mock);
 
     #[test]
+    fn env() {
+        let vm = JavaVMRef::test_default();
+        let env = JniEnv::test_default(&vm);
+        let token = NoException::test(&env);
+        unsafe {
+            assert_eq!(token.env().raw_env(), env.raw_env());
+        }
+    }
+
+    #[test]
     #[serial]
     fn with_owned_ok() {
         let vm = JavaVMRef::test_default();
