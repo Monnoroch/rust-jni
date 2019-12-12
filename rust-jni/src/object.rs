@@ -94,6 +94,15 @@ impl<'env> Object<'env> {
         jni_bool::to_rust(same)
     }
 
+    /// Compare with a `null` reference.
+    ///
+    /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#issameobject)
+    pub fn is_null<'a>(&self, _token: &NoException) -> bool {
+        // Safe because arguments are ensured to be correct references by construction.
+        let same = unsafe { call_jni_object_method!(self, IsSameObject, ptr::null_mut()) };
+        jni_bool::to_rust(same)
+    }
+
     /// Check if the object is an instance of the class.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#isinstanceof)
