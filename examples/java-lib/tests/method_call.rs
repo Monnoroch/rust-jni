@@ -10,37 +10,33 @@ mod test {
     fn test() {
         let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
         let vm = JavaVM::create(&init_arguments).unwrap();
-        vm.with_attached(
-            &AttachArguments::new(init_arguments.version()),
-            |env, token| {
-                let classes = vec!["SimpleClass", "SimpleSubClass", "SimpleSubSubClass"];
-                for class_name in classes {
-                    Class::define(
-                        env,
-                        &fs::read(format!("./java/rustjni/test/{}.class", class_name)).unwrap(),
-                        &token,
-                    )
-                    .unwrap();
-                }
+        vm.with_attached(&AttachArguments::new(init_arguments.version()), |token| {
+            let classes = vec!["SimpleClass", "SimpleSubClass", "SimpleSubSubClass"];
+            for class_name in classes {
+                Class::define(
+                    &fs::read(format!("./java/rustjni/test/{}.class", class_name)).unwrap(),
+                    &token,
+                )
+                .unwrap();
+            }
 
-                // Can call own methods.
+            // Can call own methods.
 
-                let object = SimpleClass::new(env, &token, 12).unwrap();
-                assert_eq!(object.value_with_added(&token, 5).unwrap(), 12 + 5);
+            let object = SimpleClass::new(&token, 12).unwrap();
+            assert_eq!(object.value_with_added(&token, 5).unwrap(), 12 + 5);
 
-                // Can call super methods.
+            // Can call super methods.
 
-                let object = SimpleSubClass::new(env, &token, 12).unwrap();
-                assert_eq!(object.value_with_added(&token, 5).unwrap(), (12 + 1) + 5);
+            let object = SimpleSubClass::new(&token, 12).unwrap();
+            assert_eq!(object.value_with_added(&token, 5).unwrap(), (12 + 1) + 5);
 
-                // Can call super-super methods.
+            // Can call super-super methods.
 
-                let object = SimpleSubSubClass::new(env, &token, 12).unwrap();
-                assert_eq!(object.value_with_added(&token, 5).unwrap(), (12 + 2) + 5);
+            let object = SimpleSubSubClass::new(&token, 12).unwrap();
+            assert_eq!(object.value_with_added(&token, 5).unwrap(), (12 + 2) + 5);
 
-                ((), token)
-            },
-        )
+            ((), token)
+        })
         .unwrap();
     }
 }

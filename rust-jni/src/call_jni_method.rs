@@ -33,11 +33,11 @@ macro_rules! call_jni_object_method {
 // It's actually used.
 #[allow(unused_macros)]
 macro_rules! call_nullable_jni_method {
-    ($env:expr, $token:expr, $method:ident, $($argument:expr),*) => {
-        $token.with_owned($env, #[inline(always)] |token| {
-            let result = call_jni_method!($env, $method, $($argument),*);
+    ($token:expr, $method:ident, $($argument:expr),*) => {
+        $token.with_owned(#[inline(always)] |token| {
+            let result = call_jni_method!($token.env(), $method, $($argument),*);
             match NonNull::new(result) {
-                None => CallOutcome::Err(token.exchange($env)),
+                None => CallOutcome::Err(token.exchange()),
                 Some(result) => CallOutcome::Ok((result, token)),
             }
         })

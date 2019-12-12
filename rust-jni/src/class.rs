@@ -27,34 +27,25 @@ impl<'env> Class<'env> {
     /// type name.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#findclass)
-    pub fn find<'a>(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        class_name: &str,
-    ) -> JavaResult<'a, Class<'a>> {
+    pub fn find<'a>(token: &NoException<'a>, class_name: &str) -> JavaResult<'a, Class<'a>> {
         let class_name = to_java_string(class_name);
         // Safe because the arguments are correct and because `FindClass` throws an exception
         // before returning `null`.
         let raw_class = unsafe {
-            call_nullable_jni_method!(env, token, FindClass, class_name.as_ptr() as *const c_char)
+            call_nullable_jni_method!(token, FindClass, class_name.as_ptr() as *const c_char)
         }?;
         // Safe because the argument is a valid class reference.
-        Ok(unsafe { Self::from_raw(env, raw_class) })
+        Ok(unsafe { Self::from_raw(token.env(), raw_class) })
     }
 
     /// Define a new Java class from a `.class` file contents.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#defineclass)
-    pub fn define<'a>(
-        env: &'a JniEnv<'a>,
-        bytes: &[u8],
-        token: &NoException<'a>,
-    ) -> JavaResult<'a, Class<'a>> {
+    pub fn define<'a>(bytes: &[u8], token: &NoException<'a>) -> JavaResult<'a, Class<'a>> {
         // Safe because the arguments are correct and because `DefineClass` throws an exception
         // before returning `null`.
         let raw_class = unsafe {
             call_nullable_jni_method!(
-                env,
                 token,
                 DefineClass,
                 ptr::null() as *const c_char,
@@ -64,7 +55,7 @@ impl<'env> Class<'env> {
             )?
         };
         // Safe because the argument is a valid class reference.
-        Ok(unsafe { Self::from_raw(env, raw_class) })
+        Ok(unsafe { Self::from_raw(token.env(), raw_class) })
     }
 
     /// Get the parent class of this class. Will return

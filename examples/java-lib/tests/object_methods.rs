@@ -11,61 +11,53 @@ mod test {
     fn test() {
         let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
         let vm = JavaVM::create(&init_arguments).unwrap();
-        vm.with_attached(
-            &AttachArguments::new(init_arguments.version()),
-            |env, token| {
-                let classes = vec!["ClassWithObjectMethods", "SimpleClass", "SimpleSubClass"];
-                for class_name in classes {
-                    Class::define(
-                        env,
-                        &fs::read(format!("./java/rustjni/test/{}.class", class_name)).unwrap(),
-                        &token,
-                    )
-                    .unwrap();
-                }
-
-                let test_object1 = SimpleClass::new(env, &token, 12).unwrap();
-                let test_object2 = SimpleSubClass::new(env, &token, 12).unwrap();
-
-                // Call object methods.
-
-                let object = ClassWithObjectMethods::new(env, &token).unwrap();
-
-                assert!(object
-                    .test_function_object(&token, &test_object1)
-                    .or_npe(env, &token)
-                    .unwrap()
-                    .is_same_as(&token, &test_object1));
-
-                assert!(object
-                    .test_function_object(&token, &test_object2)
-                    .or_npe(env, &token)
-                    .unwrap()
-                    .is_same_as(&token, &test_object2));
-
-                // Call static methods.
-
-                assert!(ClassWithObjectMethods::test_static_function_object(
-                    env,
+        vm.with_attached(&AttachArguments::new(init_arguments.version()), |token| {
+            let classes = vec!["ClassWithObjectMethods", "SimpleClass", "SimpleSubClass"];
+            for class_name in classes {
+                Class::define(
+                    &fs::read(format!("./java/rustjni/test/{}.class", class_name)).unwrap(),
                     &token,
-                    &test_object1
                 )
-                .or_npe(env, &token)
+                .unwrap();
+            }
+
+            let test_object1 = SimpleClass::new(&token, 12).unwrap();
+            let test_object2 = SimpleSubClass::new(&token, 12).unwrap();
+
+            // Call object methods.
+
+            let object = ClassWithObjectMethods::new(&token).unwrap();
+
+            assert!(object
+                .test_function_object(&token, &test_object1)
+                .or_npe(&token)
                 .unwrap()
                 .is_same_as(&token, &test_object1));
 
-                assert!(ClassWithObjectMethods::test_static_function_object(
-                    env,
-                    &token,
-                    &test_object2
-                )
-                .or_npe(env, &token)
+            assert!(object
+                .test_function_object(&token, &test_object2)
+                .or_npe(&token)
                 .unwrap()
                 .is_same_as(&token, &test_object2));
 
-                ((), token)
-            },
-        )
+            // Call static methods.
+
+            assert!(
+                ClassWithObjectMethods::test_static_function_object(&token, &test_object1)
+                    .or_npe(&token)
+                    .unwrap()
+                    .is_same_as(&token, &test_object1)
+            );
+
+            assert!(
+                ClassWithObjectMethods::test_static_function_object(&token, &test_object2)
+                    .or_npe(&token)
+                    .unwrap()
+                    .is_same_as(&token, &test_object2)
+            );
+
+            ((), token)
+        })
         .unwrap();
     }
 }

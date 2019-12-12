@@ -39,7 +39,7 @@ impl<'env> Throwable<'env> {
             );
         }
         // Safe becuase we just threw the exception.
-        unsafe { token.exchange(self.env()) }
+        unsafe { token.exchange() }
     }
 
     /// Returns a short description of this [`Throwable`](struct.Throwable.html).
@@ -64,27 +64,19 @@ impl<'env> Throwable<'env> {
     /// Create a new [`Throwable`](struct.Throwable.html).
     ///
     /// [`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>())
-    pub fn new(
-        env: &'env JniEnv<'env>,
-        token: &NoException<'env>,
-    ) -> JavaResult<'env, Throwable<'env>> {
-        unsafe { call_constructor::<Self, _, fn()>(env, token, ()) }
+    pub fn new(token: &NoException<'env>) -> JavaResult<'env, Throwable<'env>> {
+        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
     }
 
     /// Create a new [`Throwable`](struct.Throwable.html) with a message.
     ///
     /// [`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.String))
     pub fn new_with_message(
-        env: &'env JniEnv<'env>,
         token: &NoException<'env>,
         message: impl JavaObjectArgument<'env, String<'env>>,
     ) -> JavaResult<'env, Throwable<'env>> {
         unsafe {
-            call_constructor::<Self, _, fn(Option<&String<'env>>)>(
-                env,
-                token,
-                (message.as_argument(),),
-            )
+            call_constructor::<Self, _, fn(Option<&String<'env>>)>(token, (message.as_argument(),))
         }
     }
 
@@ -92,16 +84,11 @@ impl<'env> Throwable<'env> {
     ///
     /// [`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.Throwable))
     pub fn new_with_cause(
-        env: &'env JniEnv<'env>,
         token: &NoException<'env>,
         cause: impl JavaObjectArgument<'env, Throwable<'env>>,
     ) -> JavaResult<'env, Throwable<'env>> {
         unsafe {
-            call_constructor::<Self, _, fn(Option<&Throwable<'env>>)>(
-                env,
-                token,
-                (cause.as_argument(),),
-            )
+            call_constructor::<Self, _, fn(Option<&Throwable<'env>>)>(token, (cause.as_argument(),))
         }
     }
 
@@ -109,14 +96,12 @@ impl<'env> Throwable<'env> {
     ///
     /// [`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.String,java.lang.Throwable))
     pub fn new_with_message_and_cause(
-        env: &'env JniEnv<'env>,
         token: &NoException<'env>,
         message: impl JavaObjectArgument<'env, String<'env>>,
         cause: impl JavaObjectArgument<'env, Throwable<'env>>,
     ) -> JavaResult<'env, Throwable<'env>> {
         unsafe {
             call_constructor::<Self, _, fn(Option<&String<'env>>, Option<&Throwable<'env>>)>(
-                env,
                 token,
                 (message.as_argument(), cause.as_argument()),
             )

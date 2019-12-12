@@ -7,11 +7,8 @@ pub struct ClassWithObjectMethods<'a> {
 }
 
 impl<'a> ClassWithObjectMethods<'a> {
-    pub fn new(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-    ) -> JavaResult<'a, ClassWithObjectMethods<'a>> {
-        unsafe { call_constructor::<Self, _, fn()>(env, token, ()) }
+    pub fn new(token: &NoException<'a>) -> JavaResult<'a, ClassWithObjectMethods<'a>> {
+        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
     }
 
     pub fn test_function_object(
@@ -31,14 +28,12 @@ impl<'a> ClassWithObjectMethods<'a> {
     }
 
     pub fn test_static_function_object(
-        env: &'a JniEnv<'a>,
         token: &NoException<'a>,
         argument: impl JavaObjectArgument<'a, SimpleClass<'a>>,
     ) -> JavaResult<'a, Option<SimpleClass<'a>>> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             call_static_method::<Self, _, _, fn(Option<&SimpleClass<'a>>) -> SimpleClass<'a>>(
-                env,
                 token,
                 "testStaticFunction\0",
                 (argument.as_argument(),),

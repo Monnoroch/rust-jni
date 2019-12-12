@@ -7,12 +7,8 @@ pub struct SubClassWithMethodAlias<'a> {
 }
 
 impl<'a> SubClassWithMethodAlias<'a> {
-    pub fn new(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        value: i32,
-    ) -> JavaResult<'a, SubClassWithMethodAlias<'a>> {
-        unsafe { call_constructor::<Self, _, fn(i32)>(env, token, (value,)) }
+    pub fn new(token: &NoException<'a>, value: i32) -> JavaResult<'a, SubClassWithMethodAlias<'a>> {
+        unsafe { call_constructor::<Self, _, fn(i32)>(token, (value,)) }
     }
 
     pub fn combine(

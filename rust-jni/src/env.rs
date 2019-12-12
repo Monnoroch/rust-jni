@@ -30,8 +30,8 @@ include!("call_jni_method.rs");
 /// let vm = JavaVM::create(&init_arguments).unwrap();
 /// let _ = vm.with_attached(
 ///     &AttachArguments::new(init_arguments.version()),
-///     |env: &JniEnv, token: NoException| {
-///         unsafe { env.raw_env() };
+///     |token: NoException| {
+///         unsafe { token.env().raw_env() };
 ///         ((), token)
 ///     },
 /// );

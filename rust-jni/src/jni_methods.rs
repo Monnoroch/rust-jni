@@ -25,7 +25,6 @@ unsafe fn get_method_id<'a>(
     #[allow(unused_unsafe)]
     unsafe {
         call_nullable_jni_method!(
-            class.env(),
             token,
             GetMethodID,
             class.raw_object().as_ptr(),
@@ -49,7 +48,6 @@ unsafe fn get_static_method_id<'a>(
     #[allow(unused_unsafe)]
     unsafe {
         call_nullable_jni_method!(
-            class.env(),
             token,
             GetStaticMethodID,
             class.raw_object().as_ptr(),
@@ -72,7 +70,6 @@ pub(crate) unsafe fn call_primitive_method<'a, R: JniPrimitiveType>(
     let class = object.class(token);
     let method_id = get_method_id(&class, token, name, signature)?;
     token.with_owned(
-        class.env(),
         #[inline(always)]
         |_token| CallOutcome::Unknown(R::call_method(object, method_id.as_ptr(), arguments)),
     )
@@ -91,7 +88,6 @@ pub(crate) unsafe fn call_object_method<'a>(
     let class = object.class(token);
     let method_id = get_method_id(&class, token, name, signature)?;
     token.with_owned(
-        class.env(),
         #[inline(always)]
         |token| {
             let result = jni_sys::jobject::call_method(object, method_id.as_ptr(), arguments);
@@ -115,7 +111,6 @@ pub(crate) unsafe fn call_static_primitive_method<'a, R: JniPrimitiveType>(
 ) -> JavaResult<'a, R> {
     let method_id = get_static_method_id(&class, token, name, signature)?;
     token.with_owned(
-        class.env(),
         #[inline(always)]
         |_token| CallOutcome::Unknown(R::call_static_method(class, method_id.as_ptr(), arguments)),
     )
@@ -133,7 +128,6 @@ pub(crate) unsafe fn call_static_object_method<'a>(
 ) -> JavaResult<'a, Option<NonNull<jni_sys::_jobject>>> {
     let method_id = get_static_method_id(&class, token, name, signature)?;
     token.with_owned(
-        class.env(),
         #[inline(always)]
         |token| {
             let result = jni_sys::jobject::call_static_method(class, method_id.as_ptr(), arguments);
@@ -156,12 +150,11 @@ pub(crate) unsafe fn call_constructor<'a, A: JniArgumentTypeTuple>(
 ) -> JavaResult<'a, NonNull<jni_sys::_jobject>> {
     let method_id = get_method_id(&class, token, "<init>\0", signature)?;
     token.with_owned(
-        class.env(),
         #[inline(always)]
         |token| {
             let result = A::call_constructor(class, method_id.as_ptr(), arguments);
             match NonNull::new(result) {
-                None => CallOutcome::Err(token.exchange(class.env())),
+                None => CallOutcome::Err(token.exchange()),
                 Some(value) => CallOutcome::Ok((value, token)),
             }
         },

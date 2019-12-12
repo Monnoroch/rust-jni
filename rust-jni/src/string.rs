@@ -25,36 +25,32 @@ impl<'env> String<'env> {
     /// Create a new empty string.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#newstring)
-    pub fn empty<'a>(env: &'a JniEnv<'a>, token: &NoException<'a>) -> JavaResult<'a, String<'a>> {
+    pub fn empty<'a>(token: &NoException<'a>) -> JavaResult<'a, String<'a>> {
         // Safe because arguments are ensured to be the correct by construction and because
         // `NewString` throws an exception before returning `null`.
         let raw_string = unsafe {
-            call_nullable_jni_method!(env, token, NewString, ptr::null(), 0 as jni_sys::jsize)
+            call_nullable_jni_method!(token, NewString, ptr::null(), 0 as jni_sys::jsize)
         }?;
         // Safe because the argument is a valid string reference.
-        Ok(unsafe { Self::from_raw(env, raw_string) })
+        Ok(unsafe { Self::from_raw(token.env(), raw_string) })
     }
 
     /// Create a new Java string from a Rust string.
     ///
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#newstringutf)
-    pub fn new<'a>(
-        env: &'a JniEnv<'a>,
-        token: &NoException<'a>,
-        string: &str,
-    ) -> JavaResult<'a, String<'a>> {
+    pub fn new<'a>(token: &NoException<'a>, string: &str) -> JavaResult<'a, String<'a>> {
         if string.is_empty() {
-            return Self::empty(env, token);
+            return Self::empty(token);
         }
 
         let buffer = to_java_string(string);
         // Safe because arguments are ensured to be the correct by construction and because
         // `NewStringUTF` throws an exception before returning `null`.
         let raw_string = unsafe {
-            call_nullable_jni_method!(env, token, NewStringUTF, buffer.as_ptr() as *const c_char)
+            call_nullable_jni_method!(token, NewStringUTF, buffer.as_ptr() as *const c_char)
         }?;
         // Safe because the argument is a valid string reference.
-        Ok(unsafe { Self::from_raw(env, raw_string) })
+        Ok(unsafe { Self::from_raw(token.env(), raw_string) })
     }
 
     /// String length (the number of unicode characters).
@@ -108,18 +104,12 @@ impl<'env> String<'env> {
     ///
     /// [`String::valueOf(int)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/String.html#valueOf(int)).
     pub fn value_of_int(
-        env: &'env JniEnv<'env>,
         token: &NoException<'env>,
         value: i32,
     ) -> JavaResult<'env, Option<String<'env>>> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(i32) -> String<'env>>(
-                &env,
-                token,
-                "valueOf\0",
-                (value,),
-            )
+            call_static_method::<Self, _, _, fn(i32) -> String<'env>>(token, "valueOf\0", (value,))
         }
     }
 
