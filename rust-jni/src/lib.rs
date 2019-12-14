@@ -28,6 +28,7 @@ mod jni_bool;
 mod jni_methods;
 mod jni_types;
 mod native_method;
+mod nullable;
 mod object;
 mod result;
 mod string;
@@ -40,11 +41,12 @@ pub use attach_arguments::AttachArguments;
 pub use env::JniEnv;
 pub use error::JniError;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
-pub use java_class::{JavaClassExt, NullableJavaClassExt};
+pub use java_class::JavaClassExt;
 pub use java_methods::{
     call_constructor, call_method, call_static_method, FromObject, JavaObjectArgument, JniSignature,
 };
 pub use native_method::{native_method_implementation, static_native_method_implementation};
+pub use nullable::NullableJavaClassExt;
 pub use result::JavaResult;
 pub use token::{ConsumedNoException, Exception, NoException};
 pub use version::JniVersion;
