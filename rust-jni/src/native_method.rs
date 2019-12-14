@@ -67,18 +67,20 @@ impl ToJavaNativeResult for f32 {
 /// [`Option`](https://doc.rust-lang.org/std/option/enum.Option.html)-s of Java class wrappers.
 pub trait ToJavaNativeArgument {
     type JniType: JniArgumentType;
+    type ArgumentType;
 
-    unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self;
+    unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self::ArgumentType;
 }
 
-impl<'b, T> ToJavaNativeArgument for Option<T>
+impl<'b, T> ToJavaNativeArgument for T
 where
     T: JavaClass<'b>,
 {
     type JniType = jni_sys::jobject;
+    type ArgumentType = Option<T>;
 
     #[inline(always)]
-    unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self {
+    unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self::ArgumentType {
         // We use extend_lifetime_object() to satisfy the "T: JavaClass<'b>"
         // condition on the trait impl. This is safe as we then shrink the
         // resutl's lifetime to a proper one before passing the value to user code.
@@ -95,8 +97,9 @@ where
 
 pub trait ToJavaNativeArgumentTuple {
     type JniType: JniArgumentTypeTuple;
+    type ArgumentType;
 
-    unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self;
+    unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self::ArgumentType;
 }
 
 macro_rules! peel_java_argument_type_impls {
@@ -111,10 +114,11 @@ macro_rules! java_argument_type_impls {
             $($type: ToJavaNativeArgument,)*
         {
             type JniType = ($(<$type as ToJavaNativeArgument>::JniType,)*);
+            type ArgumentType = ($(<$type as ToJavaNativeArgument>::ArgumentType,)*);
 
             #[allow(unused)]
             #[inline(always)]
-            unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self {
+            unsafe fn from_raw<'a>(env: &'a JniEnv<'a>, value: Self::JniType) -> Self::ArgumentType {
                 #[allow(non_snake_case)]
                 let ($($type,)*) = value;
                 ($(<$type as ToJavaNativeArgument>::from_raw(env, $type),)*)
@@ -350,7 +354,7 @@ where
     for<'a> F: FnOnce(
         &'a Class<'a>,
         NoException<'a>,
-        &'a A,
+        &'a A::ArgumentType,
     ) -> (
         JavaResult<'a, Box<dyn ToJavaNativeResult<JniType = R::JniType> + 'a>>,
         NoException<'a>,
@@ -417,7 +421,7 @@ where
 ///     raw_object: jni_sys::jobject,
 ///     raw_argument: jni_sys::jobject,
 /// ) -> jni_sys::jboolean {
-///     native_method_implementation::<(Option<Object>,), bool, _>(
+///     native_method_implementation::<(Object,), bool, _>(
 ///         raw_env,
 ///         raw_object,
 ///         (raw_argument,),
@@ -475,7 +479,7 @@ where
 ///     raw_object: jni_sys::jobject,
 ///     raw_argument: jni_sys::jobject,
 /// ) -> jni_sys::jboolean {
-///     native_method_implementation::<(Option<Object>,), bool, _>(
+///     native_method_implementation::<(Object,), bool, _>(
 ///         raw_env,
 ///         raw_object,
 ///         (raw_argument,),
@@ -520,7 +524,7 @@ where
     for<'a> F: FnOnce(
         &'a Object<'a>,
         NoException<'a>,
-        &'a A,
+        &'a A::ArgumentType,
     ) -> (
         JavaResult<'a, Box<dyn ToJavaNativeResult<JniType = R::JniType> + 'a>>,
         NoException<'a>,

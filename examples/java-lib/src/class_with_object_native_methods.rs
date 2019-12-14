@@ -49,7 +49,7 @@ unsafe extern "C" fn Java_rustjni_test_ClassWithObjectNativeMethods_testNativeFu
     raw_object: jni_sys::jobject,
     argument: jni_sys::jobject,
 ) {
-    native_method_implementation::<(Option<SimpleClass>,), SimpleClass, _>(
+    native_method_implementation::<(SimpleClass,), SimpleClass, _>(
         raw_env,
         raw_object,
         (argument,),
@@ -68,7 +68,7 @@ unsafe extern "C" fn Java_rustjni_test_ClassWithObjectNativeMethods_testStaticNa
     raw_class: jni_sys::jclass,
     argument: jni_sys::jobject,
 ) {
-    static_native_method_implementation::<(Option<SimpleClass>,), SimpleClass, _>(
+    static_native_method_implementation::<(SimpleClass,), SimpleClass, _>(
         raw_env,
         raw_class,
         (argument,),
