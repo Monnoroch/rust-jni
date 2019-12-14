@@ -1,8 +1,8 @@
 use crate::class::Class;
 use crate::env::JniEnv;
 use crate::error::JniError;
+use crate::java_class::FromObject;
 use crate::java_class::JavaClass;
-use crate::java_methods::FromObject;
 use crate::java_methods::JavaArgumentType;
 use crate::java_string::to_java_string_null_terminated;
 use crate::jni_types::private::JniArgumentType;

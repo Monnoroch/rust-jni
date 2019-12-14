@@ -1,7 +1,6 @@
 use crate::env::JniEnv;
+use crate::java_class::{FromObject, JniSignature};
 use crate::java_methods::call_method;
-use crate::java_methods::FromObject;
-use crate::java_methods::JniSignature;
 use crate::java_string::*;
 use crate::jni_bool;
 use crate::object::Object;

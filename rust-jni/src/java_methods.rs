@@ -2,6 +2,7 @@ use crate::java_class::find_class;
 use crate::java_class::JavaClass;
 use crate::java_class::JavaClassExt;
 use crate::java_class::JavaClassRef;
+use crate::java_class::JniSignature;
 use crate::jni_methods;
 use crate::jni_types::private::JniArgumentType;
 use crate::jni_types::private::JniArgumentTypeTuple;
@@ -9,40 +10,6 @@ use crate::object::Object;
 use crate::result::JavaResult;
 use crate::token::NoException;
 use core::ptr::{self, NonNull};
-
-/// A trait to be implemented by all types that can be passed or returned from JNI.
-///
-/// To pass a type to Java it needs to:
-///  1. Be convertible into a type implementing the `JniType` trait: implement `JavaArgumentType` trait
-///  2. Provide a JNI signature (see
-///     [JNI documentation](https://docs.oracle.com/en/java/javase/11/docs/specs/jni/types.html#type-signatures)
-///     for more context).
-///
-/// To return a type from Java a type also needs to:
-///  3. Be convertible from a type implementing the `JniType` trait: implement `JavaMethodResult` trait
-///
-/// [`rust-jni`](index.html) implements all three conditions for for primitive types that can be passed to JNI.
-///
-/// Implementing those conditions for Java class wrappers requires cooperation with the wrappers author.
-/// [`Object`](java/lang/struct.Object.html) is convertible to and from [`jobject`](../jni_sys/type.jobject.html)
-/// which implements the `JniType` trait. So for Java class wrappers the conditions above translate into:
-///  1. Be convertible into [`Object`](java/lang/struct.Object.html)
-///  2. Provide a JNI signature. For Java classes the signature is `L${CLASS_PATH};`
-///  3. Be constructable from [`Object`](java/lang/struct.Object.html)
-///
-///  - To make a Java class wrapper convertible to [`Object`](java/lang/struct.Object.html) author of the wrapper
-///    needs to implement [`AsRef<Object>`](https://doc.rust-lang.org/std/convert/trait.AsRef.html) for it
-///  - To make a Java class wrapper constructable from [`Object`](java/lang/struct.Object.html) author of the wrapper
-///    needs to implement [`FromObject`](trait.FromObject.html) for it
-///  - To provide the JNI signature for a Java class wrapper author needs to implement
-///    [`JniSignature`](trait.JniSignature.html)
-pub trait JniSignature {
-    /// Return the JNI signature for `Self`.
-    ///
-    /// This method is not unsafe. Returning an incorrect signature will result in a panic, not any unsafe
-    /// behaviour.
-    fn signature() -> &'static str;
-}
 
 impl<T> JniSignature for &'_ T
 where
@@ -52,17 +19,6 @@ where
     fn signature() -> &'static str {
         T::signature()
     }
-}
-
-/// A trait for making Java class wrappers constructible from an [`Object`](java/lang/struct.Object.html).
-///
-/// See more detailed info for passing values betweed Java and rust in
-/// [`JniSignature`](trait.JniSignature.html) documentation.
-pub trait FromObject<'a> {
-    /// Construct `Self` from an [`Object`](java/lang/struct.Object.html).
-    ///
-    /// Unsafe because it's possible to pass an object of a different type.
-    unsafe fn from_object(object: Object<'a>) -> Self;
 }
 
 /// A trait that needs to be implemented for a type that needs to be passed to Java.

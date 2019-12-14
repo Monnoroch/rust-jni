@@ -1,10 +1,10 @@
 use crate::env::JniEnv;
 use crate::java_class::find_class;
 use crate::java_class::JavaClassRef;
+use crate::java_class::JniSignature;
 use crate::java_methods::JavaArgumentTuple;
 use crate::java_methods::JavaArgumentType;
 use crate::java_methods::JavaMethodResult;
-use crate::java_methods::JniSignature;
 use crate::jni_bool;
 use crate::jni_methods;
 use crate::jni_types::private::JniPrimitiveType;
