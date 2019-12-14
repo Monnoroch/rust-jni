@@ -117,6 +117,7 @@ macro_rules! jni_primitive_argument_traits {
 
         impl ToJavaNativeArgument for $type {
             type JniType = <Self as JavaPrimitiveResultType>::JniType;
+            type ArgumentType = Self;
 
             unsafe fn from_raw<'a>(_env: &'a JniEnv<'a>, value: Self::JniType) -> Self {
                 <Self as JavaPrimitiveResultType>::from_jni(value)
@@ -226,6 +227,7 @@ java_primitive_result_type_trait!(f32, jni_sys::jfloat);
 
 impl ToJavaNativeArgument for f32 {
     type JniType = <Self as JavaPrimitiveResultType>::JniType;
+    type ArgumentType = Self;
 
     unsafe fn from_raw<'a>(_env: &'a JniEnv<'a>, value: Self::JniType) -> Self {
         <Self as JavaPrimitiveResultType>::from_jni(value)
