@@ -260,7 +260,7 @@ where
 /// Make references to Java class wrappers also implement [`JniSignature`](trait.JniSignature.html)
 /// and hence [`JavaClassRef`](trait.JavaClassRef.html).
 ///
-/// This is neede to pass them to Java methods.
+/// This is needed to pass them to Java methods.
 impl<T> JniSignature for &'_ T
 where
     T: JniSignature,
@@ -274,7 +274,7 @@ where
 /// Make nullable [`JavaClassRef`](trait.JavaClassRef.html)-s implement [`JniSignature`](trait.JniSignature.html)
 /// and hence [`JavaClassRef`](trait.JavaClassRef.html).
 ///
-/// This is neede to pass them to Java methods.
+/// This is needed to pass them to Java methods.
 impl<'a, T> JniSignature for Option<T>
 where
     T: JavaClassRef<'a>,
