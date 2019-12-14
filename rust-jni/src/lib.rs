@@ -41,10 +41,8 @@ pub use attach_arguments::AttachArguments;
 pub use env::JniEnv;
 pub use error::JniError;
 pub use init_arguments::{InitArguments, JvmOption, JvmVerboseOption};
-pub use java_class::JavaClassExt;
-pub use java_methods::{
-    call_constructor, call_method, call_static_method, FromObject, JavaObjectArgument, JniSignature,
-};
+pub use java_class::{FromObject, JavaClassExt, JniSignature};
+pub use java_methods::{call_constructor, call_method, call_static_method, JavaObjectArgument};
 pub use native_method::{native_method_implementation, static_native_method_implementation};
 pub use nullable::NullableJavaClassExt;
 pub use result::JavaResult;

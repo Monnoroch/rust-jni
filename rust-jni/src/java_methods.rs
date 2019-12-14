@@ -2,6 +2,7 @@ use crate::java_class::find_class;
 use crate::java_class::JavaClass;
 use crate::java_class::JavaClassExt;
 use crate::java_class::JavaClassRef;
+use crate::java_class::JniSignature;
 use crate::jni_methods;
 use crate::jni_types::private::JniArgumentType;
 use crate::jni_types::private::JniArgumentTypeTuple;
@@ -9,107 +10,6 @@ use crate::object::Object;
 use crate::result::JavaResult;
 use crate::token::NoException;
 use core::ptr::{self, NonNull};
-
-/// A trait to be implemented by all types that can be passed or returned from JNI.
-///
-/// To pass a type to Java it needs to:
-///  1. Be convertible into a type implementing the `JniType` trait: implement `JavaArgumentType` trait
-///  2. Provide a JNI signature (see
-///     [JNI documentation](https://docs.oracle.com/en/java/javase/11/docs/specs/jni/types.html#type-signatures)
-///     for more context).
-///
-/// To return a type from Java a type also needs to:
-///  3. Be convertible from a type implementing the `JniType` trait: implement `JavaMethodResult` trait
-///
-/// [`rust-jni`](index.html) implements all three conditions for for primitive types that can be passed to JNI.
-///
-/// Implementing those conditions for Java class wrappers requires cooperation with the wrappers author.
-/// [`Object`](java/lang/struct.Object.html) is convertible to and from [`jobject`](../jni_sys/type.jobject.html)
-/// which implements the `JniType` trait. So for Java class wrappers the conditions above translate into:
-///  1. Be convertible into [`Object`](java/lang/struct.Object.html)
-///  2. Provide a JNI signature. For Java classes the signature is `L${CLASS_PATH};`
-///  3. Be constructable from [`Object`](java/lang/struct.Object.html)
-///
-///  - To make a Java class wrapper convertible to [`Object`](java/lang/struct.Object.html) author of the wrapper
-///    needs to implement [`AsRef<Object>`](https://doc.rust-lang.org/std/convert/trait.AsRef.html) for it
-///  - To make a Java class wrapper constructable from [`Object`](java/lang/struct.Object.html) author of the wrapper
-///    needs to implement [`FromObject`](trait.FromObject.html) for it
-///  - To provide the JNI signature for a Java class wrapper author needs to implement
-///    [`JniSignature`](trait.JniSignature.html)
-pub trait JniSignature {
-    /// Return the JNI signature for `Self`.
-    ///
-    /// This method is not unsafe. Returning an incorrect signature will result in a panic, not any unsafe
-    /// behaviour.
-    fn signature() -> &'static str;
-}
-
-impl<T> JniSignature for &'_ T
-where
-    T: JniSignature,
-{
-    #[inline(always)]
-    fn signature() -> &'static str {
-        T::signature()
-    }
-}
-
-/// A trait for making Java class wrappers constructible from an [`Object`](java/lang/struct.Object.html).
-///
-/// See more detailed info for passing values betweed Java and rust in
-/// [`JniSignature`](trait.JniSignature.html) documentation.
-pub trait FromObject<'a> {
-    /// Construct `Self` from an [`Object`](java/lang/struct.Object.html).
-    ///
-    /// Unsafe because it's possible to pass an object of a different type.
-    unsafe fn from_object(object: Object<'a>) -> Self;
-}
-
-/// A trait that needs to be implemented for a type that needs to be passed to Java.
-///
-/// See more detailed info for passing values betweed Java and rust in
-/// [`JniSignature`](trait.JniSignature.html) documentation.
-pub trait JavaArgumentType: JniSignature {
-    type JniType: JniArgumentType;
-
-    // Unsafe because it returns raw pointers to Java objects.
-    unsafe fn to_jni(&self) -> Self::JniType;
-}
-
-impl<'a, T> JavaArgumentType for T
-where
-    T: JavaClassRef<'a>,
-{
-    type JniType = jni_sys::jobject;
-
-    #[inline(always)]
-    unsafe fn to_jni(&self) -> Self::JniType {
-        self.as_ref().raw_object().as_ptr()
-    }
-}
-
-impl<'a, T> JniSignature for Option<T>
-where
-    T: JavaClassRef<'a>,
-{
-    #[inline(always)]
-    fn signature() -> &'static str {
-        T::signature()
-    }
-}
-
-impl<'a, T> JavaArgumentType for Option<T>
-where
-    T: JavaClassRef<'a>,
-{
-    type JniType = jni_sys::jobject;
-
-    #[inline(always)]
-    unsafe fn to_jni(&self) -> Self::JniType {
-        self.as_ref()
-            .map_or(ptr::null_mut(), |value| value.to_jni())
-    }
-}
 
 /// A helper trait to allow accepting as many types
 /// as possible as method arguments in place of Java objects.
@@ -154,82 +54,6 @@ where
     {
         self.as_ref().map(|value| value.as_ref())
     }
-}
-
-pub trait JavaArgumentTuple {
-    type JniType: JniArgumentTypeTuple;
-
-    // Unsafe because it returns raw pointers to Java objects.
-    unsafe fn to_jni(&self) -> Self::JniType;
-}
-
-pub trait JavaMethodSignature<In, Out>
-where
-    In: JavaArgumentTuple,
-{
-    fn method_signature() -> std::string::String;
-}
-
-macro_rules! braces {
-    ($name:ident) => {
-        "{}"
-    };
-}
-
-macro_rules! peel_java_argument_type_impls {
-    () => ();
-    ($type:ident, $($other:ident,)*) => (java_argument_type_impls! { $($other,)* });
-}
-
-macro_rules! java_argument_type_impls {
-    ( $($type:ident,)*) => (
-        impl<'a, $($type),*> JavaArgumentTuple for ($($type,)*)
-        where
-            $($type: JavaArgumentType,)*
-        {
-            type JniType = ($($type::JniType,)*);
-
-            #[inline(always)]
-            unsafe fn to_jni(&self) -> Self::JniType {
-                #[allow(non_snake_case)]
-                let ($($type,)*) = self;
-                ($($type.to_jni(),)*)
-            }
-        }
-
-        impl<'a, $($type,)* Out, F> JavaMethodSignature<($($type,)*), Out> for F
-            where
-                $($type: JavaArgumentType,)*
-                Out: JniSignature,
-                F: FnOnce($($type,)*) -> Out + ?Sized,
-        {
-            #[inline(always)]
-            fn method_signature() -> std::string::String {
-                format!(
-                    concat!("(", $(braces!($type), )* "){}\0"),
-                    $(<$type as JniSignature>::signature(),)*
-                    <Out as JniSignature>::signature(),
-                )
-            }
-        }
-
-        peel_java_argument_type_impls! { $($type,)* }
-    );
-}
-
-java_argument_type_impls! {
-    T0,
-    T1,
-    T2,
-    T3,
-    T4,
-    T5,
-    T6,
-    T7,
-    T8,
-    T9,
-    T10,
-    T11,
 }
 
 /// Call a Java method.
@@ -431,6 +255,148 @@ where
         JavaArgumentTuple::to_jni(&arguments),
     )?;
     Ok(R::from_object(Object::from_raw(token.env(), result)))
+}
+
+/// Make references to Java class wrappers also implement [`JniSignature`](trait.JniSignature.html)
+/// and hence [`JavaClassRef`](trait.JavaClassRef.html).
+///
+/// This is needed to pass them to Java methods.
+impl<T> JniSignature for &'_ T
+where
+    T: JniSignature,
+{
+    #[inline(always)]
+    fn signature() -> &'static str {
+        T::signature()
+    }
+}
+
+/// Make nullable [`JavaClassRef`](trait.JavaClassRef.html)-s implement [`JniSignature`](trait.JniSignature.html)
+/// and hence [`JavaClassRef`](trait.JavaClassRef.html).
+///
+/// This is needed to pass them to Java methods.
+impl<'a, T> JniSignature for Option<T>
+where
+    T: JavaClassRef<'a>,
+{
+    #[inline(always)]
+    fn signature() -> &'static str {
+        T::signature()
+    }
+}
+
+/// A trait that needs to be implemented for a type that needs to be passed to Java.
+///
+/// See more detailed info for passing values betweed Java and rust in
+/// [`JniSignature`](trait.JniSignature.html) documentation.
+pub trait JavaArgumentType: JniSignature {
+    type JniType: JniArgumentType;
+
+    // Unsafe because it returns raw pointers to Java objects.
+    unsafe fn to_jni(&self) -> Self::JniType;
+}
+
+/// Make Java class wrappers passable to Java methods as arguments.
+impl<'a, T> JavaArgumentType for T
+where
+    T: JavaClassRef<'a>,
+{
+    type JniType = jni_sys::jobject;
+
+    #[inline(always)]
+    unsafe fn to_jni(&self) -> Self::JniType {
+        self.as_ref().raw_object().as_ptr()
+    }
+}
+
+/// Make nullable Java class wrappers passable to Java methods as arguments.
+impl<'a, T> JavaArgumentType for Option<T>
+where
+    T: JavaClassRef<'a>,
+{
+    type JniType = jni_sys::jobject;
+
+    #[inline(always)]
+    unsafe fn to_jni(&self) -> Self::JniType {
+        self.as_ref()
+            .map_or(ptr::null_mut(), |value| value.to_jni())
+    }
+}
+
+pub trait JavaArgumentTuple {
+    type JniType: JniArgumentTypeTuple;
+
+    // Unsafe because it returns raw pointers to Java objects.
+    unsafe fn to_jni(&self) -> Self::JniType;
+}
+
+pub trait JavaMethodSignature<In, Out>
+where
+    In: JavaArgumentTuple,
+{
+    fn method_signature() -> std::string::String;
+}
+
+macro_rules! braces {
+    ($name:ident) => {
+        "{}"
+    };
+}
+
+macro_rules! peel_java_argument_type_impls {
+    () => ();
+    ($type:ident, $($other:ident,)*) => (java_argument_type_impls! { $($other,)* });
+}
+
+macro_rules! java_argument_type_impls {
+    ( $($type:ident,)*) => (
+        impl<'a, $($type),*> JavaArgumentTuple for ($($type,)*)
+        where
+            $($type: JavaArgumentType,)*
+        {
+            type JniType = ($($type::JniType,)*);
+
+            #[inline(always)]
+            unsafe fn to_jni(&self) -> Self::JniType {
+                #[allow(non_snake_case)]
+                let ($($type,)*) = self;
+                ($($type.to_jni(),)*)
+            }
+        }
+
+        impl<'a, $($type,)* Out, F> JavaMethodSignature<($($type,)*), Out> for F
+            where
+                $($type: JavaArgumentType,)*
+                Out: JniSignature,
+                F: FnOnce($($type,)*) -> Out + ?Sized,
+        {
+            #[inline(always)]
+            fn method_signature() -> std::string::String {
+                format!(
+                    concat!("(", $(braces!($type), )* "){}\0"),
+                    $(<$type as JniSignature>::signature(),)*
+                    <Out as JniSignature>::signature(),
+                )
+            }
+        }
+
+        peel_java_argument_type_impls! { $($type,)* }
+    );
+}
+
+java_argument_type_impls! {
+    T0,
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6,
+    T7,
+    T8,
+    T9,
+    T10,
+    T11,
 }
 
 pub trait JavaMethodResult<'a> {

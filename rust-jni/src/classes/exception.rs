@@ -1,5 +1,4 @@
-use crate::java_methods::FromObject;
-use crate::java_methods::JniSignature;
+use crate::java_class::{FromObject, JniSignature};
 use crate::object::Object;
 use crate::throwable::Throwable;
 

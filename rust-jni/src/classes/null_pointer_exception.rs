@@ -1,7 +1,6 @@
 use crate::classes::exception::Exception;
+use crate::java_class::{FromObject, JniSignature};
 use crate::java_methods::call_constructor;
-use crate::java_methods::FromObject;
-use crate::java_methods::JniSignature;
 use crate::object::Object;
 use crate::result::JavaResult;
 use crate::throwable::Throwable;
