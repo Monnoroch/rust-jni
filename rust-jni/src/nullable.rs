@@ -69,10 +69,10 @@ where
 }
 
 /// Add nullable object helper methods from [`NullableJavaClassExt`](trait.NullableJavaClassExt.html)
-/// to [`JavaResult<Option<T: JavaClassRef>>`](type.JavaResult.html).
-impl<'a, R> NullableJavaClassExt<'a, R> for JavaResult<'a, Option<R>>
+/// to [`JavaResult<T: NullableJavaClassExt>`](type.JavaResult.html).
+impl<'a, R, T> NullableJavaClassExt<'a, R> for JavaResult<'a, T>
 where
-    R: JavaClassRef<'a>,
+    T: NullableJavaClassExt<'a, R>,
 {
     #[inline(always)]
     fn or_npe(self, token: &NoException<'a>) -> JavaResult<'a, R> {
