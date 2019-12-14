@@ -110,7 +110,7 @@ macro_rules! jni_primitive_argument_traits {
             type JniType = $jni_type;
 
             #[inline(always)]
-            fn to_jni(&self) -> Self::JniType {
+            unsafe fn to_jni(&self) -> Self::JniType {
                 *self as Self::JniType
             }
         }

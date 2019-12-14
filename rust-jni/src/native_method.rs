@@ -25,7 +25,8 @@ use std::ptr::{self, NonNull};
 pub trait ToJavaNativeResult {
     type JniType: JniType;
 
-    fn to_java_native_result(&self) -> Self::JniType;
+    // Unsafe because it returns raw pointers to Java objects.
+    unsafe fn to_java_native_result(&self) -> Self::JniType;
 }
 
 impl<T> ToJavaNativeResult for T
@@ -35,7 +36,7 @@ where
     type JniType = <T as JavaArgumentType>::JniType;
 
     #[inline(always)]
-    fn to_java_native_result(&self) -> Self::JniType {
+    unsafe fn to_java_native_result(&self) -> Self::JniType {
         <T as JavaArgumentType>::to_jni(self)
     }
 }
@@ -44,7 +45,7 @@ impl ToJavaNativeResult for () {
     type JniType = ();
 
     #[inline(always)]
-    fn to_java_native_result(&self) -> Self::JniType {
+    unsafe fn to_java_native_result(&self) -> Self::JniType {
         ()
     }
 }
@@ -54,7 +55,7 @@ impl ToJavaNativeResult for f32 {
     type JniType = jni_sys::jfloat;
 
     #[inline(always)]
-    fn to_java_native_result(&self) -> Self::JniType {
+    unsafe fn to_java_native_result(&self) -> Self::JniType {
         *self as Self::JniType
     }
 }
@@ -548,7 +549,7 @@ where
     )
 }
 
-fn to_jni_type<'a, R>(
+unsafe fn to_jni_type<'a, R>(
     result: JavaResult<'a, Box<dyn ToJavaNativeResult<JniType = R::JniType> + 'a>>,
     token: NoException<'a>,
 ) -> R::JniType
@@ -569,7 +570,10 @@ where
             // Thus deallocating crashes for ZSTs (e.g. `()`) and not deallocating this leaks memory.
             if result as *mut u8 as usize != 0x1 {
                 // Safe because we just took ownership of this memory.
-                unsafe { alloc::dealloc(result as *mut u8, alloc::Layout::for_value(&*result)) };
+                #[allow(unused_unsafe)]
+                unsafe {
+                    alloc::dealloc(result as *mut u8, alloc::Layout::for_value(&*result))
+                };
             }
             java_result
         }

@@ -72,7 +72,8 @@ pub trait FromObject<'a> {
 pub trait JavaArgumentType: JniSignature {
     type JniType: JniArgumentType;
 
-    fn to_jni(&self) -> Self::JniType;
+    // Unsafe because it returns raw pointers to Java objects.
+    unsafe fn to_jni(&self) -> Self::JniType;
 }
 
 impl<'a, T> JavaArgumentType for T
@@ -82,9 +83,8 @@ where
     type JniType = jni_sys::jobject;
 
     #[inline(always)]
-    fn to_jni(&self) -> Self::JniType {
-        // Safe because we use the pointer only to pass it to JNI.
-        unsafe { self.as_ref().raw_object().as_ptr() }
+    unsafe fn to_jni(&self) -> Self::JniType {
+        self.as_ref().raw_object().as_ptr()
     }
 }
 
@@ -105,13 +105,9 @@ where
     type JniType = jni_sys::jobject;
 
     #[inline(always)]
-    fn to_jni(&self) -> Self::JniType {
-        // Safe because we use the pointer only to pass it to JNI.
-        unsafe {
-            self.as_ref().map_or(ptr::null_mut(), |value| {
-                value.as_ref().raw_object().as_ptr()
-            })
-        }
+    unsafe fn to_jni(&self) -> Self::JniType {
+        self.as_ref()
+            .map_or(ptr::null_mut(), |value| value.to_jni())
     }
 }
 
@@ -163,7 +159,8 @@ where
 pub trait JavaArgumentTuple {
     type JniType: JniArgumentTypeTuple;
 
-    fn to_jni(&self) -> Self::JniType;
+    // Unsafe because it returns raw pointers to Java objects.
+    unsafe fn to_jni(&self) -> Self::JniType;
 }
 
 pub trait JavaMethodSignature<In, Out>
@@ -193,7 +190,7 @@ macro_rules! java_argument_type_impls {
             type JniType = ($($type::JniType,)*);
 
             #[inline(always)]
-            fn to_jni(&self) -> Self::JniType {
+            unsafe fn to_jni(&self) -> Self::JniType {
                 #[allow(non_snake_case)]
                 let ($($type,)*) = self;
                 ($($type.to_jni(),)*)
