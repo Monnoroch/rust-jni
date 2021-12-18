@@ -265,36 +265,38 @@ macro_rules! generate_jni_functions_mock {
         mod $module {
             use mockall::*;
 
-            #[automock(mod mock_impl;)]
-            extern "C" {
-                pub fn JNI_CreateJavaVM(
-                    java_vm: *mut *mut jni_sys::JavaVM,
-                    jni_env: *mut *mut ::std::os::raw::c_void,
-                    arguments: *mut ::std::os::raw::c_void,
-                ) -> jni_sys::jint;
+            #[automock]
+            pub mod ffi {
+                extern "C" {
+                    pub fn JNI_CreateJavaVM(
+                        java_vm: *mut *mut jni_sys::JavaVM,
+                        jni_env: *mut *mut ::std::os::raw::c_void,
+                        arguments: *mut ::std::os::raw::c_void,
+                    ) -> jni_sys::jint;
 
-                pub fn JNI_GetCreatedJavaVMs(
-                    java_vms: *mut *mut jni_sys::JavaVM,
-                    buffer_size: jni_sys::jsize,
-                    vms_count: *mut jni_sys::jsize,
-                ) -> jni_sys::jint;
+                    pub fn JNI_GetCreatedJavaVMs(
+                        java_vms: *mut *mut jni_sys::JavaVM,
+                        buffer_size: jni_sys::jsize,
+                        vms_count: *mut jni_sys::jsize,
+                    ) -> jni_sys::jint;
 
-                pub fn JNI_GetDefaultJavaVMInitArgs(
-                    arguments: *mut ::std::os::raw::c_void,
-                ) -> jni_sys::jint;
+                    pub fn JNI_GetDefaultJavaVMInitArgs(
+                        arguments: *mut ::std::os::raw::c_void,
+                    ) -> jni_sys::jint;
+                }
             }
 
-            pub use mock_impl::*;
+            pub use mock_ffi::*;
         }
 
         // Re-import to use in production code.
 
         #[allow(unused_imports)]
-        use self::$module::mock_impl::JNI_CreateJavaVM;
+        use self::$module::mock_ffi::JNI_CreateJavaVM;
         #[allow(unused_imports)]
-        use self::$module::mock_impl::JNI_GetCreatedJavaVMs;
+        use self::$module::mock_ffi::JNI_GetCreatedJavaVMs;
         #[allow(unused_imports)]
-        use self::$module::mock_impl::JNI_GetDefaultJavaVMInitArgs;
+        use self::$module::mock_ffi::JNI_GetDefaultJavaVMInitArgs;
     };
 }
 
@@ -310,29 +312,31 @@ macro_rules! generate_java_vm_mock {
             use std;
             use std::ffi::c_void;
 
-            #[automock(mod mock_impl;)]
-            extern "Rust" {
-                pub fn destroy_vm(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint;
+            #[automock]
+            pub mod ffi {
+                extern "Rust" {
+                    pub fn destroy_vm(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint;
 
-                pub fn detach_thread(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint;
+                    pub fn detach_thread(java_vm: *mut jni_sys::JavaVM) -> jni_sys::jint;
 
-                pub fn get_env(
-                    java_vm: *mut jni_sys::JavaVM,
-                    jni_env: *mut *mut std::ffi::c_void,
-                    version: jni_sys::jint,
-                ) -> jni_sys::jint;
+                    pub fn get_env(
+                        java_vm: *mut jni_sys::JavaVM,
+                        jni_env: *mut *mut std::ffi::c_void,
+                        version: jni_sys::jint,
+                    ) -> jni_sys::jint;
 
-                pub fn attach_current_thread(
-                    java_vm: *mut jni_sys::JavaVM,
-                    jni_env: *mut *mut std::ffi::c_void,
-                    argument: *mut std::ffi::c_void,
-                ) -> jni_sys::jint;
+                    pub fn attach_current_thread(
+                        java_vm: *mut jni_sys::JavaVM,
+                        jni_env: *mut *mut std::ffi::c_void,
+                        argument: *mut std::ffi::c_void,
+                    ) -> jni_sys::jint;
 
-                pub fn attach_current_thread_as_daemon(
-                    java_vm: *mut jni_sys::JavaVM,
-                    jni_env: *mut *mut std::ffi::c_void,
-                    argument: *mut std::ffi::c_void,
-                ) -> jni_sys::jint;
+                    pub fn attach_current_thread_as_daemon(
+                        java_vm: *mut jni_sys::JavaVM,
+                        jni_env: *mut *mut std::ffi::c_void,
+                        argument: *mut std::ffi::c_void,
+                    ) -> jni_sys::jint;
+                }
             }
 
             /// Create a mock Java VM interface control structure for testing purposes.
@@ -340,13 +344,13 @@ macro_rules! generate_java_vm_mock {
                 unsafe extern "system" fn destroy_vm_impl(
                     java_vm: *mut jni_sys::JavaVM,
                 ) -> jni_sys::jint {
-                    mock_impl::destroy_vm(java_vm)
+                    mock_ffi::destroy_vm(java_vm)
                 }
 
                 unsafe extern "system" fn detach_thread_impl(
                     java_vm: *mut jni_sys::JavaVM,
                 ) -> jni_sys::jint {
-                    mock_impl::detach_thread(java_vm)
+                    mock_ffi::detach_thread(java_vm)
                 }
 
                 unsafe extern "system" fn get_env_impl(
@@ -354,7 +358,7 @@ macro_rules! generate_java_vm_mock {
                     jni_env: *mut *mut c_void,
                     version: jni_sys::jint,
                 ) -> jni_sys::jint {
-                    mock_impl::get_env(java_vm, jni_env, version)
+                    mock_ffi::get_env(java_vm, jni_env, version)
                 }
 
                 unsafe extern "system" fn attach_current_thread_impl(
@@ -362,7 +366,7 @@ macro_rules! generate_java_vm_mock {
                     jni_env: *mut *mut c_void,
                     argument: *mut c_void,
                 ) -> jni_sys::jint {
-                    mock_impl::attach_current_thread(java_vm, jni_env, argument)
+                    mock_ffi::attach_current_thread(java_vm, jni_env, argument)
                 }
 
                 unsafe extern "system" fn attach_current_thread_as_daemon_impl(
@@ -370,7 +374,7 @@ macro_rules! generate_java_vm_mock {
                     jni_env: *mut *mut c_void,
                     argument: *mut c_void,
                 ) -> jni_sys::jint {
-                    mock_impl::attach_current_thread_as_daemon(java_vm, jni_env, argument)
+                    mock_ffi::attach_current_thread_as_daemon(java_vm, jni_env, argument)
                 }
 
                 jni_sys::JNIInvokeInterface_ {
@@ -383,7 +387,7 @@ macro_rules! generate_java_vm_mock {
                 }
             }
 
-            pub use self::mock_impl::*;
+            pub use self::mock_ffi::*;
         }
     };
 }
@@ -398,19 +402,21 @@ macro_rules! generate_jni_env_mock {
         mod $module {
             use mockall::*;
 
-            #[automock(mod mock_impl;)]
-            extern "Rust" {
-                pub fn delete_local_ref(java_vm: *mut jni_sys::JNIEnv, object: jni_sys::jobject);
+            #[automock]
+            pub mod ffi {
+                extern "Rust" {
+                    pub fn delete_local_ref(java_vm: *mut jni_sys::JNIEnv, object: jni_sys::jobject);
 
-                pub fn get_version(env: *mut jni_sys::JNIEnv) -> jni_sys::jint;
+                    pub fn get_version(env: *mut jni_sys::JNIEnv) -> jni_sys::jint;
 
-                pub fn exception_check(env: *mut jni_sys::JNIEnv) -> jni_sys::jboolean;
+                    pub fn exception_check(env: *mut jni_sys::JNIEnv) -> jni_sys::jboolean;
 
-                pub fn exception_describe(env: *mut jni_sys::JNIEnv);
+                    pub fn exception_describe(env: *mut jni_sys::JNIEnv);
 
-                pub fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject;
+                    pub fn exception_occured(env: *mut jni_sys::JNIEnv) -> jni_sys::jobject;
 
-                pub fn exception_clear(env: *mut jni_sys::JNIEnv);
+                    pub fn exception_clear(env: *mut jni_sys::JNIEnv);
+                }
             }
 
             /// Create a mock JNI interface control structure for testing purposes.
@@ -419,33 +425,33 @@ macro_rules! generate_jni_env_mock {
                     java_vm: *mut jni_sys::JNIEnv,
                     object: jni_sys::jobject,
                 ) {
-                    mock_impl::delete_local_ref(java_vm, object)
+                    mock_ffi::delete_local_ref(java_vm, object)
                 }
 
                 unsafe extern "system" fn get_version_impl(
                     env: *mut jni_sys::JNIEnv,
                 ) -> jni_sys::jint {
-                    mock_impl::get_version(env)
+                    mock_ffi::get_version(env)
                 }
 
                 unsafe extern "system" fn exception_check_impl(
                     env: *mut ::jni_sys::JNIEnv,
                 ) -> jni_sys::jboolean {
-                    mock_impl::exception_check(env)
+                    mock_ffi::exception_check(env)
                 }
 
                 unsafe extern "system" fn exception_describe_impl(env: *mut ::jni_sys::JNIEnv) {
-                    mock_impl::exception_describe(env)
+                    mock_ffi::exception_describe(env)
                 }
 
                 unsafe extern "system" fn exception_occured_impl(
                     env: *mut jni_sys::JNIEnv,
                 ) -> jni_sys::jobject {
-                    mock_impl::exception_occured(env)
+                    mock_ffi::exception_occured(env)
                 }
 
                 unsafe extern "system" fn exception_clear_impl(env: *mut jni_sys::JNIEnv) {
-                    mock_impl::exception_clear(env)
+                    mock_ffi::exception_clear(env)
                 }
 
                 jni_sys::JNINativeInterface_ {
@@ -459,7 +465,7 @@ macro_rules! generate_jni_env_mock {
                 }
             }
 
-            pub use self::mock_impl::*;
+            pub use self::mock_ffi::*;
         }
     };
 }
