@@ -405,7 +405,10 @@ macro_rules! generate_jni_env_mock {
             #[automock]
             pub mod ffi {
                 extern "Rust" {
-                    pub fn delete_local_ref(java_vm: *mut jni_sys::JNIEnv, object: jni_sys::jobject);
+                    pub fn delete_local_ref(
+                        java_vm: *mut jni_sys::JNIEnv,
+                        object: jni_sys::jobject,
+                    );
 
                     pub fn get_version(env: *mut jni_sys::JNIEnv) -> jni_sys::jint;
 
