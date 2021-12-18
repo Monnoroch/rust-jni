@@ -389,7 +389,6 @@ impl<'this> NoException<'this> {
                 mem::drop(token);
                 Ok(result)
             }
-            #[cold]
             CallOutcome::Err(token) => {
                 let (throwable, token) = token.unwrap();
                 // Drop the additional token so there's only one live token (borrowed by this method).

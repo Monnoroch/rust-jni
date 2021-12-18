@@ -581,7 +581,6 @@ where
             }
             java_result
         }
-        #[cold]
         Err(exception) => {
             let _ = exception.throw(token);
             R::JniType::default()
@@ -613,7 +612,6 @@ where
             (&mut java_vm) as *mut *mut jni_sys::JavaVM,
         ));
         if error.is_some() {
-            #[cold]
             panic!(format!(
                 "Could not get Java VM. Status: {:?}",
                 error.unwrap()
@@ -636,7 +634,6 @@ where
     });
     match result {
         Ok(result) => result,
-        #[cold]
         Err(error) => {
             if let Some(string) = error.downcast_ref::<std::string::String>() {
                 // Safe because we pass a correct `raw_env` pointer.
@@ -669,7 +666,6 @@ unsafe fn throw_new_runtime_exception(raw_env: *mut jni_sys::JNIEnv, message: im
     let find_class = (**raw_env).FindClass.unwrap();
     let class = find_class(raw_env, class_name.as_ptr() as *const i8);
     if class == ptr::null_mut() {
-        #[cold]
         panic!(
             "Could not find the java.lang.RuntimeException class on panic, aborting the program."
         );
