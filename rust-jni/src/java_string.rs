@@ -56,13 +56,13 @@ mod to_java_string_tests {
     }
 
     #[test]
-    #[should_panic = "string.ends_with(\"\\0\")"]
+    #[should_panic = "string.ends_with"]
     fn to_null_terminated_empty() {
         to_java_string_null_terminated("");
     }
 
     #[test]
-    #[should_panic = "string.ends_with(\"\\0\")"]
+    #[should_panic = "string.ends_with"]
     fn to_null_terminated_not_null_terminated() {
         to_java_string_null_terminated("test");
     }
