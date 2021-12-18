@@ -29,7 +29,7 @@ cfg-if = "1.0.0"
 
 [dev-dependencies]
 mockall = { git = "https://github.com/asomers/mockall.git", rev = "459ed5c541063676be03e942af81d7b2c5435762" }
-serial_test = { git = "https://github.com/palfrey/serial_test.git", rev = "39a7a6c56b6add60bbffdb27b14faba74e3f6b10" }
+serial_test = "0.5.1"
 
 [build-dependencies]
 walkdir = "2.3.2"
