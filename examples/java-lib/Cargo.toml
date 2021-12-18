@@ -11,5 +11,3 @@ jni-sys = "0.3.0"
 [dev-dependencies]
 rust-jni-java-dylib = { path = "./dylib" }
 
-[build-dependencies]
-walkdir = "2.2.9"
