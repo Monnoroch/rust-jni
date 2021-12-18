@@ -25,7 +25,7 @@ travis-ci = { repository = "Monnoroch/rust-jni", branch = "master" }
 [dependencies]
 cesu8 = "1.1.0"
 jni-sys = "0.3.0"
-cfg-if = "0.1.10"
+cfg-if = "1.0.0"
 
 [dev-dependencies]
 mockall = { git = "https://github.com/asomers/mockall.git", rev = "459ed5c541063676be03e942af81d7b2c5435762" }
