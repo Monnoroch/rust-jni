@@ -12,7 +12,7 @@ include = [
 	"src/**/*.rs",
 	"tests/**/*.rs",
 ]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 rust-jni = { path = "../rust-jni" }
