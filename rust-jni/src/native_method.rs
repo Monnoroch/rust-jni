@@ -612,10 +612,7 @@ where
             (&mut java_vm) as *mut *mut jni_sys::JavaVM,
         ));
         if error.is_some() {
-            panic!(format!(
-                "Could not get Java VM. Status: {:?}",
-                error.unwrap()
-            ));
+            panic!("Could not get Java VM. Status: {:?}", error.unwrap());
         }
 
         // Safe because we pass a valid `java_vm` pointer.

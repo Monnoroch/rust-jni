@@ -280,7 +280,7 @@ impl<'this> JniEnv<'this> {
         // Describe and clear the exception to not cause panic in drop during panicking situation.
         // Safe because the argument is ensured to be the correct by construction.
         unsafe { call_jni_method!(self, ExceptionDescribe) };
-        panic!(message);
+        panic!("{}", message);
     }
 
     /// Get JNI versoin.
