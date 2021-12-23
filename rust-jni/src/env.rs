@@ -1,7 +1,7 @@
 use crate::error::JniError;
 use crate::token::{ConsumedNoException, NoException};
 use crate::version::JniVersion;
-use crate::vm::{JavaVM, JavaVMRef};
+use crate::vm::JavaVMRef;
 use core::ptr::NonNull;
 use jni_sys;
 use std;
@@ -301,7 +301,7 @@ impl<'this> JniEnv<'this> {
     /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#detachcurrentthread)
     pub fn detach(self, _token: ConsumedNoException) -> Option<JniError> {
         // Safe because all JNI arguments are correct by construction.
-        let result = unsafe { JavaVM::detach(self.raw_jvm()) };
+        let result = unsafe { self.vm.detach() };
         mem::forget(self);
         result
     }
@@ -392,7 +392,7 @@ impl<'vm> Drop for JniEnv<'vm> {
         }
         // Safe because the current thread is guaranteed to be attached and the argument is correct.
         unsafe {
-            let error = JavaVM::detach(self.raw_jvm());
+            let error = self.vm.detach();
             if error.is_some() {
                 // No meaningful way to handle the error except for logging it.
                 println!(
