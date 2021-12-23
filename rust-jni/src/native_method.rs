@@ -15,6 +15,7 @@ use crate::vm::JavaVMRef;
 use jni_sys;
 use std::alloc;
 use std::mem;
+use std::mem::ManuallyDrop;
 use std::panic;
 use std::ptr::{self, NonNull};
 
@@ -370,15 +371,16 @@ where
         raw_arguments,
         |token, arguments| {
             // Should not panic if the class pointer is valid.
-            let class = Class::from_raw(token.env(), NonNull::new(raw_class).unwrap());
-            let arguments = <A as ToJavaNativeArgumentTuple>::from_raw(token.env(), arguments);
+            let class = ManuallyDrop::new(Class::from_raw(
+                token.env(),
+                NonNull::new(raw_class).unwrap(),
+            ));
+            let arguments = ManuallyDrop::new(<A as ToJavaNativeArgumentTuple>::from_raw(
+                token.env(),
+                arguments,
+            ));
             let (result, token) = callback(&class, token, &arguments);
-            let java_result = to_jni_type::<R>(result, token);
-            // We don't own the reference.
-            mem::forget(arguments);
-            // We don't own the reference.
-            mem::forget(class);
-            java_result
+            to_jni_type::<R>(result, token)
         },
     )
 }
@@ -540,15 +542,16 @@ where
         raw_arguments,
         |token, arguments| {
             // Should not panic if the object pointer is valid.
-            let object = Object::from_raw(token.env(), NonNull::new(raw_object).unwrap());
-            let arguments = <A as ToJavaNativeArgumentTuple>::from_raw(token.env(), arguments);
+            let object = ManuallyDrop::new(Object::from_raw(
+                token.env(),
+                NonNull::new(raw_object).unwrap(),
+            ));
+            let arguments = ManuallyDrop::new(<A as ToJavaNativeArgumentTuple>::from_raw(
+                token.env(),
+                arguments,
+            ));
             let (result, token) = callback(&object, token, &arguments);
-            let java_result = to_jni_type::<R>(result, token);
-            // We don't own the reference.
-            mem::forget(arguments);
-            // We don't own the reference.
-            mem::forget(object);
-            java_result
+            to_jni_type::<R>(result, token)
         },
     )
 }
@@ -622,12 +625,9 @@ where
         // Safe because we pass a valid `raw_env` pointer.
         // Will not panic because JNI guarantees that pointers are not null.
         #[allow(unused_unsafe)]
-        let env = unsafe { JniEnv::native(&vm, NonNull::new(raw_env).unwrap()) };
+        let env = ManuallyDrop::new(unsafe { JniEnv::native(&vm, NonNull::new(raw_env).unwrap()) });
         let token = env.token();
-        let result = callback(token, arguments);
-        // We don't own the reference.
-        mem::forget(env);
-        result
+        callback(token, arguments)
     });
     match result {
         Ok(result) => result,
