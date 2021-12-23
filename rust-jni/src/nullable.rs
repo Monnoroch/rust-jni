@@ -52,14 +52,26 @@ pub trait NullableJavaClassExt<'a, R> {
 
 /// Add nullable object helper methods from [`NullableJavaClassExt`](trait.NullableJavaClassExt.html)
 /// to `Option<T: JavaClass>`.
-impl<'a, R> NullableJavaClassExt<'a, R> for Option<R>
+impl<'a, R> NullableJavaClassExt<'a, R> for R
 where
     R: JavaClassRef<'a>,
 {
     #[inline(always)]
+    fn or_npe(self, _token: &NoException<'a>) -> JavaResult<'a, R> {
+        Ok(self)
+    }
+}
+
+/// Add nullable object helper methods from [`NullableJavaClassExt`](trait.NullableJavaClassExt.html)
+/// to `Option<T: NullableJavaClassExt>`.
+impl<'a, R, T> NullableJavaClassExt<'a, R> for Option<T>
+where
+    T: NullableJavaClassExt<'a, R>,
+{
+    #[inline(always)]
     fn or_npe(self, token: &NoException<'a>) -> JavaResult<'a, R> {
         match self {
-            Some(value) => Ok(value),
+            Some(value) => value.or_npe(&token),
             None => {
                 let npe = NullPointerException::new(token)?;
                 Err(npe.into())
