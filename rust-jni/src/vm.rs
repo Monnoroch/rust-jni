@@ -204,14 +204,6 @@ impl JavaVMRef {
         }
     }
 
-    pub unsafe fn native_env<'a>(&'a self, raw_env: *mut jni_sys::JNIEnv) -> JniEnv<'a> {
-        // Safe because we pass a valid `raw_env` pointer.
-        // Will not panic because JNI guarantees that pointers are not null.
-        #[allow(unused_unsafe)]
-        let env = unsafe { JniEnv::native(self, NonNull::new(raw_env).unwrap()) };
-        env
-    }
-
     /// Unsafe because:
     /// 1. A user might pass an incorrect pointer.
     /// 2. The current thread might not be attached.

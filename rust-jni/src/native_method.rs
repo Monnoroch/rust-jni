@@ -625,7 +625,7 @@ where
         // Safe because we pass a valid `raw_env` pointer.
         // Will not panic because JNI guarantees that pointers are not null.
         #[allow(unused_unsafe)]
-        let env = ManuallyDrop::new(unsafe { JniEnv::native(&vm, NonNull::new(raw_env).unwrap()) });
+        let env = ManuallyDrop::new(unsafe { JniEnv::new(&vm, NonNull::new(raw_env).unwrap()) });
         let token = env.token();
         callback(token, arguments)
     });

@@ -7,6 +7,7 @@ use jni_sys;
 use std;
 use std::cell::RefCell;
 use std::mem;
+use std::panic;
 
 include!("call_jni_method.rs");
 
@@ -193,10 +194,6 @@ pub struct JniEnv<'this> {
     vm: &'this JavaVMRef,
     jni_env: NonNull<jni_sys::JNIEnv>,
     pub(crate) has_token: RefCell<bool>,
-    // This is just a hack for unit tests that don't actually call JNI.
-    // Setting it to `false` allows to not `mem::forget` the value every time.
-    #[cfg(test)]
-    need_drop: bool,
 }
 
 // [`JniEnv`](struct.JniEnv.html) can't be passed between threads.
@@ -306,7 +303,7 @@ impl<'this> JniEnv<'this> {
         result
     }
 
-    pub(crate) unsafe fn native<'vm: 'env, 'env>(
+    pub(crate) unsafe fn new<'vm: 'env, 'env>(
         vm: &'vm JavaVMRef,
         jni_env: NonNull<jni_sys::JNIEnv>,
     ) -> JniEnv<'env> {
@@ -314,8 +311,6 @@ impl<'this> JniEnv<'this> {
             vm,
             jni_env,
             has_token: RefCell::new(true),
-            #[cfg(test)]
-            need_drop: false,
         }
     }
 
@@ -323,13 +318,7 @@ impl<'this> JniEnv<'this> {
         vm: &'vm JavaVMRef,
         jni_env: NonNull<jni_sys::JNIEnv>,
     ) -> JniEnv<'env> {
-        let env = JniEnv {
-            vm,
-            jni_env,
-            has_token: RefCell::new(true),
-            #[cfg(test)]
-            need_drop: true,
-        };
+        let env = JniEnv::new(vm, jni_env);
         // Safe because we are not leaking the tokens anywhere.
         #[allow(unused_unsafe)]
         let exception_pending = unsafe { NoException::check_pending_exception(&env).is_err() };
@@ -353,13 +342,12 @@ impl<'this> JniEnv<'this> {
             // It's fine if the env is null in unit tests as they don't call the actual JNI API.
             jni_env: unsafe { NonNull::new_unchecked(ptr) },
             has_token: RefCell::new(true),
-            need_drop: false,
         }
     }
 
     #[cfg(test)]
     pub(crate) fn test_default<'vm>(vm: &'vm JavaVMRef) -> JniEnv<'vm> {
-        JniEnv::test(vm, 0x1 as *mut jni_sys::JNIEnv)
+        JniEnv::test(vm, 0x2 as *mut jni_sys::JNIEnv)
     }
 }
 
@@ -373,13 +361,6 @@ impl<'this> JniEnv<'this> {
 /// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/invocation.html#detachcurrentthread)
 impl<'vm> Drop for JniEnv<'vm> {
     fn drop(&mut self) {
-        #[cfg(test)]
-        {
-            if !self.need_drop {
-                return;
-            }
-        }
-
         // Safe because we are not leaking the tokens anywhere.
         if unsafe { NoException::check_pending_exception(self).is_err() } {
             // We are fine aborting the program here, as this panic means a bug in the code using
@@ -410,6 +391,7 @@ mod jni_env_tests {
     use super::*;
     use mockall::*;
     use serial_test::serial;
+    use std::mem::ManuallyDrop;
 
     generate_java_vm_mock!(mock);
     generate_jni_env_mock!(jni_mock);
@@ -417,7 +399,7 @@ mod jni_env_tests {
     #[test]
     fn raw_jvm() {
         let vm = JavaVMRef::test(0x1234 as *mut jni_sys::JavaVM);
-        let env = JniEnv::test_default(&vm);
+        let env = ManuallyDrop::new(JniEnv::test_default(&vm));
         unsafe {
             assert_eq!(env.raw_jvm(), vm.raw_jvm());
         }
@@ -427,7 +409,7 @@ mod jni_env_tests {
     fn raw_env() {
         let vm = JavaVMRef::test_default();
         let jni_env = 0x5678 as *mut jni_sys::JNIEnv;
-        let env = JniEnv::test(&vm, jni_env);
+        let env = ManuallyDrop::new(JniEnv::test(&vm, jni_env));
         unsafe {
             assert_eq!(env.raw_env().as_ptr(), jni_env);
         }
@@ -445,7 +427,7 @@ mod jni_env_tests {
             .withf_st(move |env| *env == raw_env_ptr)
             .return_const(jni_sys::JNI_VERSION_1_4);
         let vm = JavaVMRef::test_default();
-        let env = JniEnv::test(&vm, raw_env_ptr);
+        let env = ManuallyDrop::new(JniEnv::test(&vm, raw_env_ptr));
         assert_eq!(env.version(), JniVersion::V4);
     }
 
@@ -461,8 +443,7 @@ mod jni_env_tests {
             .withf_st(move |java_vm| *java_vm == raw_java_vm_ptr)
             .return_const(jni_sys::JNI_OK);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
-        let mut env = JniEnv::test_default(&vm);
-        env.need_drop = true; // need to test that drop wasn't called.
+        let env = JniEnv::test_default(&vm);
         assert_eq!(env.detach(ConsumedNoException), None);
     }
 
@@ -474,8 +455,7 @@ mod jni_env_tests {
         let detach_thread_mock = mock::detach_thread_context();
         detach_thread_mock.expect().return_const(jni_sys::JNI_ERR);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
-        let mut env = JniEnv::test_default(&vm);
-        env.need_drop = true; // need to test that drop wasn't called.
+        let env = JniEnv::test_default(&vm);
         assert_eq!(
             env.detach(ConsumedNoException),
             Some(JniError::Unknown(jni_sys::JNI_ERR))
@@ -499,8 +479,7 @@ mod jni_env_tests {
             .return_const(jni_sys::JNI_FALSE);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
         {
-            let mut env = JniEnv::test(&vm, raw_env_ptr);
-            env.need_drop = true;
+            let _env = JniEnv::test(&vm, raw_env_ptr);
         }
     }
 
@@ -530,8 +509,7 @@ mod jni_env_tests {
             .return_const(())
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
-        let mut env = JniEnv::test(&vm, raw_env_ptr);
-        env.need_drop = true;
+        let _env = JniEnv::test(&vm, raw_env_ptr);
     }
 
     #[test]
@@ -548,8 +526,7 @@ mod jni_env_tests {
             .expect()
             .return_const(jni_sys::JNI_FALSE);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
-        let mut env = JniEnv::test(&vm, raw_env_ptr);
-        env.need_drop = true;
+        let _env = JniEnv::test(&vm, raw_env_ptr);
     }
 
     #[test]
@@ -565,7 +542,7 @@ mod jni_env_tests {
             .return_const(jni_sys::JNI_FALSE);
         let raw_java_vm_ptr = 0x1234 as *mut jni_sys::JavaVM;
         let vm = JavaVMRef::test(raw_java_vm_ptr);
-        let env = JniEnv::test(&vm, raw_env_ptr);
+        let env = ManuallyDrop::new(JniEnv::test(&vm, raw_env_ptr));
         env.token();
         assert_eq!(env.has_token, RefCell::new(false));
     }
@@ -596,10 +573,8 @@ mod jni_env_tests {
             .return_const(())
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
-        let env = JniEnv {
-            has_token: RefCell::new(true),
-            ..JniEnv::test(&vm, raw_env_ptr)
-        };
+        let env = ManuallyDrop::new(JniEnv::test(&vm, raw_env_ptr));
+        env.has_token.replace(true);
         env.token();
         env.token();
     }
@@ -632,7 +607,7 @@ mod jni_env_tests {
             .return_const(())
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test(raw_java_vm_ptr);
-        let env = JniEnv::test(&vm, raw_env_ptr);
+        let env = ManuallyDrop::new(JniEnv::test(&vm, raw_env_ptr));
         env.token();
     }
 }

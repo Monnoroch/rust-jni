@@ -456,6 +456,7 @@ mod no_exception_tests {
     use crate::vm::JavaVMRef;
     use mockall::*;
     use serial_test::serial;
+    use std::mem::ManuallyDrop;
     use std::ptr;
 
     generate_jni_env_mock!(jni_mock);
@@ -463,7 +464,7 @@ mod no_exception_tests {
     #[test]
     fn env() {
         let vm = JavaVMRef::test_default();
-        let env = JniEnv::test_default(&vm);
+        let env = ManuallyDrop::new(JniEnv::test_default(&vm));
         let token = NoException::test(&env);
         unsafe {
             assert_eq!(token.env().raw_env(), env.raw_env());
@@ -474,7 +475,7 @@ mod no_exception_tests {
     #[serial]
     fn with_owned_ok() {
         let vm = JavaVMRef::test_default();
-        let env = JniEnv::test_default(&vm);
+        let env = ManuallyDrop::new(JniEnv::test_default(&vm));
         let token = NoException::test(&env);
         let result = token
             .with_owned(|token| CallOutcome::Ok((12, token)))
@@ -504,7 +505,7 @@ mod no_exception_tests {
             .return_const(())
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test_default();
-        let env = JniEnv::test(&vm, raw_env_ptr);
+        let env = ManuallyDrop::new(JniEnv::test(&vm, raw_env_ptr));
         let token = NoException::test(&env);
         let exception = token
             .with_owned::<(), _>(|token| CallOutcome::Err(unsafe { token.exchange() }))
@@ -536,7 +537,7 @@ mod no_exception_tests {
             .return_const(())
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test_default();
-        let env = JniEnv::test(&vm, raw_env_ptr);
+        let env = ManuallyDrop::new(JniEnv::test(&vm, raw_env_ptr));
         let token = NoException::test(&env);
         let exception = token
             .with_owned(|_token| CallOutcome::Unknown(12))
@@ -558,7 +559,7 @@ mod no_exception_tests {
             .withf_st(move |env| *env == raw_env_ptr)
             .returning_st(|_env| ptr::null_mut());
         let vm = JavaVMRef::test_default();
-        let env = JniEnv::test(&vm, raw_env_ptr);
+        let env = ManuallyDrop::new(JniEnv::test(&vm, raw_env_ptr));
         let token = NoException::test(&env);
         let result = token.with_owned(|_token| CallOutcome::Unknown(12)).unwrap();
         assert_eq!(result, 12);
@@ -626,6 +627,7 @@ mod exception_tests {
     use crate::vm::JavaVMRef;
     use mockall::*;
     use serial_test::serial;
+    use std::mem::ManuallyDrop;
 
     generate_jni_env_mock!(jni_mock);
 
@@ -651,7 +653,7 @@ mod exception_tests {
             .return_const(())
             .in_sequence(&mut sequence);
         let vm = JavaVMRef::test_default();
-        let env = JniEnv::test(&vm, raw_env_ptr);
+        let env = ManuallyDrop::new(JniEnv::test(&vm, raw_env_ptr));
         let token = Exception::test(&env);
         let (exception, _) = token.unwrap();
         assert_eq!(unsafe { exception.raw_object().as_ptr() }, raw_throwable);
