@@ -51,7 +51,7 @@ pub trait NullableJavaClassExt<'a, R> {
 }
 
 /// Add nullable object helper methods from [`NullableJavaClassExt`](trait.NullableJavaClassExt.html)
-/// to [`Option<T: JavaClass>`](type.JavaResult.html).
+/// to `Option<T: JavaClass>`.
 impl<'a, R> NullableJavaClassExt<'a, R> for Option<R>
 where
     R: JavaClassRef<'a>,

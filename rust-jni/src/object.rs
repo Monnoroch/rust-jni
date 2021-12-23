@@ -307,13 +307,15 @@ impl<'env> fmt::Debug for Object<'env> {
     }
 }
 
-/// Allow displaying Java objects for debug purposes.
+/// Clone the object. This is not a deep clone of the Java object,
+/// but a Rust-like clone of the value. Since Java objects are reference counted, this will
+/// increment the reference count.
 ///
-/// [`Object::toString`](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#toString())
+/// [JNI documentation](https://docs.oracle.com/javase/10/docs/specs/jni/functions.html#newlocalref)
 ///
 /// This is mostly a convenience for debugging. Always prefer using
-/// [`to_string`](struct.Object.html#methods.to_string) to printing the object as is, because
-/// the former checks for a pending exception in compile-time rather than the run-time.
+/// [`clone_object`](struct.Object.html#methods.clone_object) to clone the object, because
+/// it checks for a pending exception in compile-time rather than the run-time.
 impl<'a> Clone for Object<'a> {
     fn clone(&self) -> Self {
         // Safe because we are not leaking the tokens anywhere.
