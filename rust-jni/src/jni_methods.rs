@@ -100,7 +100,9 @@ pub(crate) unsafe fn call_object_method<'a>(
             let result =
                 jni_sys::jobject::call_method(&token, object, method_id.as_ptr(), arguments);
             match NonNull::new(result) {
+                // The method could have just returned null, but also could have thrown an Exception.
                 None => CallOutcome::Unknown(None),
+                // We know that there is no exception because a non-null was returned.
                 result => CallOutcome::Ok((result, token)),
             }
         },
@@ -170,6 +172,7 @@ pub(crate) unsafe fn call_constructor<'a, A: JniArgumentTypeTuple>(
         |token| {
             let result = A::call_constructor(&token, class, method_id.as_ptr(), arguments);
             match NonNull::new(result) {
+                // A constructor can only return null when an exception was thrown.
                 None => CallOutcome::Err(token.exchange()),
                 Some(value) => CallOutcome::Ok((value, token)),
             }
