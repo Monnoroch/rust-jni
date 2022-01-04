@@ -8,7 +8,7 @@ pub struct SimpleSubClass<'a> {
 
 impl<'a> SimpleSubClass<'a> {
     pub fn new(token: &NoException<'a>, value: i32) -> JavaResult<'a, SimpleSubClass<'a>> {
-        unsafe { call_constructor::<Self, _, fn(i32)>(token, (value,)) }
+        unsafe { Self::call_constructor::<_, fn(i32)>(token, (value,)) }
     }
 }
 
@@ -57,7 +57,7 @@ impl<'a> FromObject<'a> for SimpleSubClass<'a> {
     }
 }
 
-impl JniSignature for SimpleSubClass<'_> {
+impl JavaClassSignature for SimpleSubClass<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Lrustjni/test/SimpleSubClass;"

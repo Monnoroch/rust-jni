@@ -8,7 +8,7 @@ mod test {
     use std::fs;
 
     #[test]
-    fn test() {
+    fn test_tatatatat() {
         let init_arguments = InitArguments::get_default(JniVersion::V8).unwrap();
         let vm = JavaVM::create(&init_arguments).unwrap();
         vm.with_attached(&AttachArguments::new(init_arguments.version()), |token| {
@@ -28,6 +28,15 @@ mod test {
             let test_object1 = SimpleClass::new(&token, 12).unwrap();
             let test_object2 = SimpleSubClass::new(&token, 12).unwrap();
 
+            assert!(test_object1
+                .clone_object(&token)
+                .unwrap()
+                .is_same_as(&token, &test_object1));
+            assert!(!test_object1
+                .clone_object(&token)
+                .unwrap()
+                .is_same_as(&token, &test_object2));
+
             // Call object methods.
 
             let object = ClassWithObjectNativeMethods::new(&token).unwrap();
@@ -40,6 +49,12 @@ mod test {
 
             assert!(object
                 .test_function_object(&token, &test_object2)
+                .or_npe(&token)
+                .unwrap()
+                .is_same_as(&token, &test_object2));
+
+            assert!(!object
+                .test_function_object(&token, &test_object1)
                 .or_npe(&token)
                 .unwrap()
                 .is_same_as(&token, &test_object2));
@@ -57,6 +72,14 @@ mod test {
             assert!(ClassWithObjectNativeMethods::test_static_function_object(
                 &token,
                 &test_object2
+            )
+            .or_npe(&token)
+            .unwrap()
+            .is_same_as(&token, &test_object2));
+
+            assert!(!ClassWithObjectNativeMethods::test_static_function_object(
+                &token,
+                &test_object1
             )
             .or_npe(&token)
             .unwrap()

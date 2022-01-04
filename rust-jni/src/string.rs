@@ -1,6 +1,6 @@
 use crate::env::JniEnv;
-use crate::java_class::{FromObject, JniSignature};
-use crate::java_methods::call_static_method;
+use crate::java_class::JavaClassExt;
+use crate::java_class::{FromObject, JavaClassSignature};
 use crate::java_string::{from_java_string, to_java_string};
 use crate::object::Object;
 use crate::result::JavaResult;
@@ -110,7 +110,7 @@ impl<'env> String<'env> {
     ) -> JavaResult<'env, Option<String<'env>>> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(i32) -> String<'env>>(token, "valueOf\0", (value,))
+            Self::call_static_method::<_, fn(i32) -> String<'env>>(token, "valueOf\0", (value,))
         }
     }
 
@@ -163,7 +163,7 @@ impl<'env> FromObject<'env> for String<'env> {
     }
 }
 
-impl JniSignature for String<'_> {
+impl JavaClassSignature for String<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Ljava/lang/String;"

@@ -1,8 +1,9 @@
 use crate::class::Class;
 use crate::env::JniEnv;
-use crate::java_class::{FromObject, JniSignature};
+use crate::java_class::JavaClass;
+use crate::java_class::JavaClassExt;
+use crate::java_class::{FromObject, JavaClassSignature};
 use crate::java_methods::JavaObjectArgument;
-use crate::java_methods::{call_constructor, call_method};
 use crate::jni_bool;
 use crate::result::JavaResult;
 use crate::string::String;
@@ -45,7 +46,7 @@ impl<'env> Object<'env> {
     ///
     /// This function provides low-level access to the Java object and thus is unsafe.
     #[inline(always)]
-    pub unsafe fn take_raw_object(value: impl Into<Object<'env>>) -> NonNull<jni_sys::_jobject> {
+    pub unsafe fn take_raw_object(value: impl JavaClass<'env>) -> NonNull<jni_sys::_jobject> {
         let value = value.into();
         let result = value.raw_object();
         mem::forget(value);
@@ -78,7 +79,7 @@ impl<'env> Object<'env> {
     pub fn is_same_as<'a>(
         &self,
         token: &NoException,
-        other: impl JavaObjectArgument<'a, Object<'a>>,
+        other: impl JavaObjectArgument<Object<'a>>,
     ) -> bool {
         // Safe because arguments are ensured to be correct references by construction.
         let same = unsafe {
@@ -134,7 +135,7 @@ impl<'env> Object<'env> {
     /// [`Object::toString` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#toString())
     pub fn to_string(&self, token: &NoException<'env>) -> JavaResult<'env, Option<String<'env>>> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_method::<Self, _, _, fn() -> String<'env>>(self, token, "toString\0", ()) }
+        unsafe { self.call_method::<_, fn() -> String<'env>>(token, "toString\0", ()) }
     }
 
     /// Compare to another Java object.
@@ -143,16 +144,11 @@ impl<'env> Object<'env> {
     pub fn equals(
         &self,
         token: &NoException<'env>,
-        other: impl JavaObjectArgument<'env, Object<'env>>,
+        other: impl JavaObjectArgument<Object<'env>>,
     ) -> JavaResult<'env, bool> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_method::<Self, _, _, fn(Option<&Object<'env>>) -> bool>(
-                self,
-                token,
-                "equals\0",
-                (other.as_argument(),),
-            )
+            self.call_method::<_, fn(&Object) -> bool>(token, "equals\0", (other.as_argument(),))
         }
     }
 
@@ -161,7 +157,7 @@ impl<'env> Object<'env> {
     /// [`Object::hashCode` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#hashCode())
     pub fn hash_code(&self, token: &NoException<'env>) -> JavaResult<'env, i32> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_method::<Self, _, _, fn() -> i32>(self, token, "hashCode\0", ()) }
+        unsafe { self.call_method::<_, fn() -> i32>(token, "hashCode\0", ()) }
     }
 
     /// Create a new [`Object`](struct.Object.html) with a message.
@@ -169,7 +165,7 @@ impl<'env> Object<'env> {
     /// [`Object()` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#<init>())
     pub fn new(token: &NoException<'env>) -> JavaResult<'env, Object<'env>> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
+        unsafe { Self::call_constructor::<_, fn()>(token, ()) }
     }
 
     /// Construct from a raw pointer. Unsafe because an invalid pointer may be passed
@@ -216,7 +212,7 @@ impl<'env> FromObject<'env> for Object<'env> {
     }
 }
 
-impl JniSignature for Object<'_> {
+impl JavaClassSignature for Object<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Ljava/lang/Object;"

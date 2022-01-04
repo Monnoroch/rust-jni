@@ -1,8 +1,8 @@
 use crate::env::JniEnv;
 use crate::error::JniError;
-use crate::java_class::{FromObject, JniSignature};
+use crate::java_class::JavaClassExt;
+use crate::java_class::{FromObject, JavaClassSignature};
 use crate::java_methods::JavaObjectArgument;
-use crate::java_methods::{call_constructor, call_method};
 use crate::object::Object;
 use crate::result::JavaResult;
 use crate::string::String;
@@ -47,7 +47,7 @@ impl<'env> Throwable<'env> {
     /// [`Throwable::getMessage` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#getMessage())
     pub fn get_message(&self, token: &NoException<'env>) -> JavaResult<'env, Option<String<'env>>> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_method::<Self, _, _, fn() -> String<'env>>(self, token, "getMessage\0", ()) }
+        unsafe { self.call_method::<_, fn() -> String<'env>>(token, "getMessage\0", ()) }
     }
 
     /// Returns a short description of this [`Throwable`](struct.Throwable.html).
@@ -58,14 +58,14 @@ impl<'env> Throwable<'env> {
         token: &NoException<'env>,
     ) -> JavaResult<'env, Option<Throwable<'env>>> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_method::<Self, _, _, fn() -> Throwable<'env>>(self, token, "getCause\0", ()) }
+        unsafe { self.call_method::<_, fn() -> Throwable<'env>>(token, "getCause\0", ()) }
     }
 
     /// Create a new [`Throwable`](struct.Throwable.html).
     ///
     /// [`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>())
     pub fn new(token: &NoException<'env>) -> JavaResult<'env, Throwable<'env>> {
-        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
+        unsafe { Self::call_constructor::<_, fn()>(token, ()) }
     }
 
     /// Create a new [`Throwable`](struct.Throwable.html) with a message.
@@ -73,11 +73,9 @@ impl<'env> Throwable<'env> {
     /// [`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.String))
     pub fn new_with_message(
         token: &NoException<'env>,
-        message: impl JavaObjectArgument<'env, String<'env>>,
+        message: impl JavaObjectArgument<String<'env>>,
     ) -> JavaResult<'env, Throwable<'env>> {
-        unsafe {
-            call_constructor::<Self, _, fn(Option<&String<'env>>)>(token, (message.as_argument(),))
-        }
+        unsafe { Self::call_constructor::<_, fn(&String)>(token, (message.as_argument(),)) }
     }
 
     /// Create a new [`Throwable`](struct.Throwable.html) with a cause.
@@ -85,11 +83,9 @@ impl<'env> Throwable<'env> {
     /// [`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.Throwable))
     pub fn new_with_cause(
         token: &NoException<'env>,
-        cause: impl JavaObjectArgument<'env, Throwable<'env>>,
+        cause: impl JavaObjectArgument<Throwable<'env>>,
     ) -> JavaResult<'env, Throwable<'env>> {
-        unsafe {
-            call_constructor::<Self, _, fn(Option<&Throwable<'env>>)>(token, (cause.as_argument(),))
-        }
+        unsafe { Self::call_constructor::<_, fn(&Throwable)>(token, (cause.as_argument(),)) }
     }
 
     /// Create a new [`Throwable`](struct.Throwable.html) with a message and a cause.
@@ -97,11 +93,11 @@ impl<'env> Throwable<'env> {
     /// [`Throwable(String)` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/Throwable.html#<init>(java.lang.String,java.lang.Throwable))
     pub fn new_with_message_and_cause(
         token: &NoException<'env>,
-        message: impl JavaObjectArgument<'env, String<'env>>,
-        cause: impl JavaObjectArgument<'env, Throwable<'env>>,
+        message: impl JavaObjectArgument<String<'env>>,
+        cause: impl JavaObjectArgument<Throwable<'env>>,
     ) -> JavaResult<'env, Throwable<'env>> {
         unsafe {
-            call_constructor::<Self, _, fn(Option<&String<'env>>, Option<&Throwable<'env>>)>(
+            Self::call_constructor::<_, fn(&String, &Throwable)>(
                 token,
                 (message.as_argument(), cause.as_argument()),
             )
@@ -157,7 +153,7 @@ impl<'env> FromObject<'env> for Throwable<'env> {
     }
 }
 
-impl JniSignature for Throwable<'_> {
+impl JavaClassSignature for Throwable<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Ljava/lang/Throwable;"

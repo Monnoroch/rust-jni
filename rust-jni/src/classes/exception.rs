@@ -1,4 +1,4 @@
-use crate::java_class::{FromObject, JniSignature};
+use crate::java_class::{FromObject, JavaClassSignature};
 use crate::object::Object;
 use crate::throwable::Throwable;
 
@@ -61,7 +61,7 @@ impl<'env> FromObject<'env> for Exception<'env> {
     }
 }
 
-impl JniSignature for Exception<'_> {
+impl JavaClassSignature for Exception<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Ljava/lang/Exception;"

@@ -1,43 +1,65 @@
 use crate::env::JniEnv;
 use crate::java_class::find_class;
-use crate::java_class::JavaClassRef;
+use crate::java_class::JavaClass;
 use crate::java_class::JniSignature;
-use crate::java_methods::JavaArgumentTuple;
 use crate::java_methods::JavaArgumentType;
 use crate::java_methods::JavaMethodResult;
+use crate::java_methods::ToJniType;
 use crate::jni_bool;
 use crate::jni_methods;
+use crate::jni_types::private::JniArgumentTypeTuple;
 use crate::jni_types::private::JniPrimitiveType;
 use crate::native_method::ToJavaNativeArgument;
+use crate::native_method::ToJavaNativeResult;
 use crate::result::JavaResult;
 use crate::token::NoException;
 use std::char;
 use std::iter;
 
-pub trait JavaPrimitiveResultType: JniSignature {
+pub trait JavaPrimitiveType: JniSignature {
     type JniType: JniPrimitiveType;
 
     fn from_jni(value: Self::JniType) -> Self;
+    fn to_jni(self) -> Self::JniType;
 }
 
-macro_rules! jni_signature_trait {
-    ($type:ty, $jni_type:ty, $typedoc:expr) => {
+macro_rules! java_signature_trait {
+    ($type:ty, $typedoc:expr) => {
         /// Make
         #[doc = $typedoc]
         /// passable to and from Java calls.
         impl JniSignature for $type {
             #[inline(always)]
             fn signature() -> &'static str {
-                <$jni_type as JniPrimitiveType>::signature()
+                <<Self as JavaPrimitiveType>::JniType as JniPrimitiveType>::signature()
             }
         }
     };
 }
 
-macro_rules! java_method_result_trait {
-    ($type:ty, $jni_type:ty) => {
-        impl<'a> JavaMethodResult<'a> for $type {
+macro_rules! java_primitive_type_trait {
+    ($type:ty, $jni_type:ty, $typedoc:expr) => {
+        impl JavaPrimitiveType for $type {
             type JniType = $jni_type;
+
+            #[inline(always)]
+            fn from_jni(value: Self::JniType) -> Self {
+                value as Self
+            }
+
+            #[inline(always)]
+            fn to_jni(self) -> Self::JniType {
+                self as Self::JniType
+            }
+        }
+
+        java_signature_trait!($type, $typedoc);
+    };
+}
+
+macro_rules! java_method_result_trait {
+    ($type:ty) => {
+        impl<'a> JavaMethodResult<'a> for $type {
             type ResultType = Self;
 
             #[inline(always)]
@@ -49,17 +71,18 @@ macro_rules! java_method_result_trait {
                 arguments: A,
             ) -> JavaResult<'a, Self::ResultType>
             where
-                T: JavaClassRef<'a>,
-                A: JavaArgumentTuple,
+                T: JavaClass<'a>,
+                A: JniArgumentTypeTuple,
             {
-                let result: Self::JniType = jni_methods::call_primitive_method(
-                    object.as_ref(),
-                    token,
-                    name,
-                    signature,
-                    JavaArgumentTuple::to_jni(&arguments),
-                )?;
-                Ok(Self::from_jni(result))
+                let result: <Self as JavaPrimitiveType>::JniType =
+                    jni_methods::call_primitive_method(
+                        object.as_ref(),
+                        token,
+                        name,
+                        signature,
+                        arguments,
+                    )?;
+                Ok(JavaPrimitiveType::from_jni(result))
             }
 
             #[inline(always)]
@@ -70,57 +93,55 @@ macro_rules! java_method_result_trait {
                 arguments: A,
             ) -> JavaResult<'a, Self::ResultType>
             where
-                T: JavaClassRef<'a>,
-                A: JavaArgumentTuple,
+                T: JavaClass<'a>,
+                A: JniArgumentTypeTuple,
             {
                 let class = find_class::<T>(token)?;
-                let result = jni_methods::call_static_primitive_method(
-                    &class,
-                    token,
-                    name,
-                    signature,
-                    JavaArgumentTuple::to_jni(&arguments),
-                )?;
-                Ok(Self::from_jni(result))
+                let result: <Self as JavaPrimitiveType>::JniType =
+                    jni_methods::call_static_primitive_method(
+                        &class, token, name, signature, arguments,
+                    )?;
+                Ok(JavaPrimitiveType::from_jni(result))
             }
         }
-    };
-}
 
-macro_rules! java_primitive_result_type_trait {
-    ($type:ty, $jni_type:ty) => {
-        impl JavaPrimitiveResultType for $type {
-            type JniType = $jni_type;
+        impl ToJavaNativeResult for $type {
+            type JniType = <Self as JavaPrimitiveType>::JniType;
 
             #[inline(always)]
-            fn from_jni(value: Self::JniType) -> Self {
-                value as Self
+            unsafe fn into_java_native_result(self) -> Self::JniType {
+                JavaPrimitiveType::to_jni(self)
             }
         }
-
-        java_method_result_trait!($type, $jni_type);
     };
 }
 
-macro_rules! jni_primitive_argument_traits {
-    ($type:ty, $jni_type:ty, $typedoc:expr) => {
-        jni_signature_trait!($type, $jni_type, $typedoc);
+macro_rules! java_primitive_argument_trait {
+    ($type:ty) => {
+        impl<'a, 'this: 'a> JavaArgumentType<'a, 'this> for $type {
+            type ActualType = Self;
+        }
 
-        impl JavaArgumentType for $type {
-            type JniType = $jni_type;
+        impl ToJniType for $type {
+            type JniType = <Self as JavaPrimitiveType>::JniType;
 
             #[inline(always)]
             unsafe fn to_jni(&self) -> Self::JniType {
-                *self as Self::JniType
+                JavaPrimitiveType::to_jni(*self)
             }
         }
+    };
+}
 
-        impl ToJavaNativeArgument for $type {
-            type JniType = <Self as JavaPrimitiveResultType>::JniType;
+macro_rules! java_primitive_native_argument_trait {
+    ($type:ty) => {
+        impl<'this> ToJavaNativeArgument<'this> for $type {
+            type JniType = <Self as JavaPrimitiveType>::JniType;
             type ArgumentType = Self;
 
-            unsafe fn from_raw<'a>(_env: &'a JniEnv<'a>, value: Self::JniType) -> Self {
-                <Self as JavaPrimitiveResultType>::from_jni(value)
+            #[inline(always)]
+            unsafe fn from_raw(_env: &'this JniEnv<'this>, value: Self::JniType) -> Self {
+                <Self as JavaPrimitiveType>::from_jni(value)
             }
         }
     };
@@ -128,42 +149,42 @@ macro_rules! jni_primitive_argument_traits {
 
 macro_rules! java_primitive_traits {
     ($type:ty, $jni_type:ty, $typedoc:expr) => {
-        jni_primitive_argument_traits!($type, $jni_type, $typedoc);
-        java_primitive_result_type_trait!($type, $jni_type);
+        java_primitive_type_trait!($type, $jni_type, $typedoc);
+        java_primitive_argument_trait!($type);
+        java_primitive_native_argument_trait!($type);
+        java_method_result_trait!($type);
     };
 }
 
-jni_signature_trait!(
+java_primitive_type_trait!(
     (),
     (),
     "[`()`](https://doc.rust-lang.org/std/primitive.unit.html)"
 );
-java_primitive_result_type_trait!((), ());
+java_method_result_trait!(());
 
-jni_primitive_argument_traits!(
-    bool,
-    jni_sys::jboolean,
-    "[`bool`](https://doc.rust-lang.org/std/primitive.bool.html)"
-);
-
-impl JavaPrimitiveResultType for bool {
+impl JavaPrimitiveType for bool {
     type JniType = jni_sys::jboolean;
 
     #[inline(always)]
     fn from_jni(value: Self::JniType) -> Self {
         jni_bool::to_rust(value)
     }
+
+    #[inline(always)]
+    fn to_jni(self) -> Self::JniType {
+        jni_bool::to_jni(self)
+    }
 }
-
-java_method_result_trait!(bool, jni_sys::jboolean);
-
-jni_primitive_argument_traits!(
-    char,
-    jni_sys::jchar,
-    "[`char`](https://doc.rust-lang.org/std/primitive.char.html)"
+java_signature_trait!(
+    bool,
+    "[`bool`](https://doc.rust-lang.org/std/primitive.bool.html)"
 );
+java_primitive_argument_trait!(bool);
+java_primitive_native_argument_trait!(bool);
+java_method_result_trait!(bool);
 
-impl JavaPrimitiveResultType for char {
+impl JavaPrimitiveType for char {
     type JniType = jni_sys::jchar;
 
     #[inline(always)]
@@ -183,9 +204,20 @@ impl JavaPrimitiveResultType for char {
         }
         character
     }
-}
 
-java_method_result_trait!(char, jni_sys::jchar);
+    #[inline(always)]
+    fn to_jni(self) -> Self::JniType {
+        // TODO: find out if this is correct.
+        self as Self::JniType
+    }
+}
+java_signature_trait!(
+    char,
+    "[`char`](https://doc.rust-lang.org/std/primitive.char.html)"
+);
+java_primitive_argument_trait!(char);
+java_primitive_native_argument_trait!(char);
+java_method_result_trait!(char);
 
 java_primitive_traits!(
     u8,
@@ -208,31 +240,15 @@ java_primitive_traits!(
     "[`i64`](https://doc.rust-lang.org/std/primitive.i64.html)"
 );
 
-jni_signature_trait!(
+java_primitive_type_trait!(
     f32,
     jni_sys::jfloat,
     "[`f32`](https://doc.rust-lang.org/std/primitive.f32.html)"
 );
-java_primitive_result_type_trait!(f32, jni_sys::jfloat);
-
 // TODO(#25): floating point numbers don't work properly.
-// impl JavaArgumentType for $type {
-//     type JniType = $jni_type;
-
-//     #[inline(always)]
-//     fn to_jni(&self) -> Self::JniType {
-//         *self as Self::JniType
-//     }
-// }
-
-impl ToJavaNativeArgument for f32 {
-    type JniType = <Self as JavaPrimitiveResultType>::JniType;
-    type ArgumentType = Self;
-
-    unsafe fn from_raw<'a>(_env: &'a JniEnv<'a>, value: Self::JniType) -> Self {
-        <Self as JavaPrimitiveResultType>::from_jni(value)
-    }
-}
+// java_primitive_argument_trait!(f32);
+java_primitive_native_argument_trait!(f32);
+java_method_result_trait!(f32);
 
 java_primitive_traits!(
     f64,

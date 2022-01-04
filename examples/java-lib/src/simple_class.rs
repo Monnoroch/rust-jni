@@ -7,25 +7,22 @@ pub struct SimpleClass<'a> {
 
 impl<'a> SimpleClass<'a> {
     pub fn new(token: &NoException<'a>, value: i32) -> JavaResult<'a, SimpleClass<'a>> {
-        unsafe { call_constructor::<Self, _, fn(i32)>(token, (value,)) }
+        unsafe { Self::call_constructor::<_, fn(i32)>(token, (value,)) }
     }
 
     pub fn value_with_added(&self, token: &NoException<'a>, to_add: i32) -> JavaResult<'a, i32> {
         // Safe because we ensure correct arguments and return type.
-        unsafe {
-            call_method::<Self, _, _, fn(i32) -> i32>(self, token, "valueWithAdded\0", (to_add,))
-        }
+        unsafe { self.call_method::<_, fn(i32) -> i32>(token, "valueWithAdded\0", (to_add,)) }
     }
 
     pub fn combine(
         &self,
         token: &NoException<'a>,
-        other: impl JavaObjectArgument<'a, SimpleClass<'a>>,
+        other: impl JavaObjectArgument<SimpleClass<'a>>,
     ) -> JavaResult<'a, Option<SimpleClass<'a>>> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_method::<Self, _, _, fn(Option<&SimpleClass<'a>>) -> SimpleClass<'a>>(
-                self,
+            self.call_method::<_, fn(Option<&SimpleClass>) -> SimpleClass<'a>>(
                 token,
                 "combine\0",
                 (other.as_argument(),),
@@ -70,7 +67,7 @@ impl<'a> FromObject<'a> for SimpleClass<'a> {
     }
 }
 
-impl JniSignature for SimpleClass<'_> {
+impl JavaClassSignature for SimpleClass<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Lrustjni/test/SimpleClass;"

@@ -7,12 +7,12 @@ pub struct ClassWithPrimitiveMethods<'a> {
 
 impl<'a> ClassWithPrimitiveMethods<'a> {
     pub fn new(token: &NoException<'a>) -> JavaResult<'a, ClassWithPrimitiveMethods<'a>> {
-        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
+        unsafe { Self::call_constructor::<_, fn()>(token, ()) }
     }
 
     pub fn test_function_void(&self, token: &NoException<'a>) -> JavaResult<'a, ()> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_method::<Self, _, _, fn()>(self, token, "testFunction\0", ()) }
+        unsafe { self.call_method::<_, fn()>(token, "testFunction\0", ()) }
     }
 
     pub fn test_function_bool(
@@ -21,9 +21,7 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         argument: bool,
     ) -> JavaResult<'a, bool> {
         // Safe because we ensure correct arguments and return type.
-        unsafe {
-            call_method::<Self, _, _, fn(bool) -> bool>(self, token, "testFunction\0", (argument,))
-        }
+        unsafe { self.call_method::<_, fn(bool) -> bool>(token, "testFunction\0", (argument,)) }
     }
 
     pub fn test_function_char(
@@ -32,37 +30,27 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         argument: char,
     ) -> JavaResult<'a, char> {
         // Safe because we ensure correct arguments and return type.
-        unsafe {
-            call_method::<Self, _, _, fn(char) -> char>(self, token, "testFunction\0", (argument,))
-        }
+        unsafe { self.call_method::<_, fn(char) -> char>(token, "testFunction\0", (argument,)) }
     }
 
     pub fn test_function_u8(&self, token: &NoException<'a>, argument: u8) -> JavaResult<'a, u8> {
         // Safe because we ensure correct arguments and return type.
-        unsafe {
-            call_method::<Self, _, _, fn(u8) -> u8>(self, token, "testFunction\0", (argument,))
-        }
+        unsafe { self.call_method::<_, fn(u8) -> u8>(token, "testFunction\0", (argument,)) }
     }
 
     pub fn test_function_i16(&self, token: &NoException<'a>, argument: i16) -> JavaResult<'a, i16> {
         // Safe because we ensure correct arguments and return type.
-        unsafe {
-            call_method::<Self, _, _, fn(i16) -> i16>(self, token, "testFunction\0", (argument,))
-        }
+        unsafe { self.call_method::<_, fn(i16) -> i16>(token, "testFunction\0", (argument,)) }
     }
 
     pub fn test_function_i32(&self, token: &NoException<'a>, argument: i32) -> JavaResult<'a, i32> {
         // Safe because we ensure correct arguments and return type.
-        unsafe {
-            call_method::<Self, _, _, fn(i32) -> i32>(self, token, "testFunction\0", (argument,))
-        }
+        unsafe { self.call_method::<_, fn(i32) -> i32>(token, "testFunction\0", (argument,)) }
     }
 
     pub fn test_function_i64(&self, token: &NoException<'a>, argument: i64) -> JavaResult<'a, i64> {
         // Safe because we ensure correct arguments and return type.
-        unsafe {
-            call_method::<Self, _, _, fn(i64) -> i64>(self, token, "testFunction\0", (argument,))
-        }
+        unsafe { self.call_method::<_, fn(i64) -> i64>(token, "testFunction\0", (argument,)) }
     }
 
     pub fn test_function_f32(
@@ -74,25 +62,18 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             // TODO(#25): floating point numbers don't work properly.
-            call_method::<Self, _, _, fn(f64) -> f32>(
-                self,
-                token,
-                "testFloatFunction\0",
-                (argument,),
-            )
+            self.call_method::<_, fn(f64) -> f32>(token, "testFloatFunction\0", (argument,))
         }
     }
 
     pub fn test_function_f64(&self, token: &NoException<'a>, argument: f64) -> JavaResult<'a, f64> {
         // Safe because we ensure correct arguments and return type.
-        unsafe {
-            call_method::<Self, _, _, fn(f64) -> f64>(self, token, "testFunction\0", (argument,))
-        }
+        unsafe { self.call_method::<_, fn(f64) -> f64>(token, "testFunction\0", (argument,)) }
     }
 
     pub fn test_static_function_void(token: &NoException<'a>) -> JavaResult<'a, ()> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_static_method::<Self, _, _, fn()>(token, "testStaticFunction\0", ()) }
+        unsafe { Self::call_static_method::<_, fn()>(token, "testStaticFunction\0", ()) }
     }
 
     pub fn test_static_function_bool(
@@ -101,7 +82,7 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
     ) -> JavaResult<'a, bool> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(bool) -> bool>(
+            Self::call_static_method::<_, fn(bool) -> bool>(
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -115,7 +96,7 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
     ) -> JavaResult<'a, char> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(char) -> char>(
+            Self::call_static_method::<_, fn(char) -> char>(
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -126,18 +107,14 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
     pub fn test_static_function_u8(token: &NoException<'a>, argument: u8) -> JavaResult<'a, u8> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(u8) -> u8>(
-                token,
-                "testStaticFunction\0",
-                (argument,),
-            )
+            Self::call_static_method::<_, fn(u8) -> u8>(token, "testStaticFunction\0", (argument,))
         }
     }
 
     pub fn test_static_function_i16(token: &NoException<'a>, argument: i16) -> JavaResult<'a, i16> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(i16) -> i16>(
+            Self::call_static_method::<_, fn(i16) -> i16>(
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -148,7 +125,7 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
     pub fn test_static_function_i32(token: &NoException<'a>, argument: i32) -> JavaResult<'a, i32> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(i32) -> i32>(
+            Self::call_static_method::<_, fn(i32) -> i32>(
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -159,7 +136,7 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
     pub fn test_static_function_i64(token: &NoException<'a>, argument: i64) -> JavaResult<'a, i64> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(i64) -> i64>(
+            Self::call_static_method::<_, fn(i64) -> i64>(
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -175,7 +152,7 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
             // TODO(#25): floating point numbers don't work properly.
-            call_static_method::<Self, _, _, fn(f64) -> f32>(
+            Self::call_static_method::<_, fn(f64) -> f32>(
                 token,
                 "testStaticFloatFunction\0",
                 (argument,),
@@ -186,7 +163,7 @@ impl<'a> ClassWithPrimitiveMethods<'a> {
     pub fn test_static_function_f64(token: &NoException<'a>, argument: f64) -> JavaResult<'a, f64> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(f64) -> f64>(
+            Self::call_static_method::<_, fn(f64) -> f64>(
                 token,
                 "testStaticFunction\0",
                 (argument,),
@@ -231,7 +208,7 @@ impl<'a> FromObject<'a> for ClassWithPrimitiveMethods<'a> {
     }
 }
 
-impl JniSignature for ClassWithPrimitiveMethods<'_> {
+impl JavaClassSignature for ClassWithPrimitiveMethods<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Lrustjni/test/ClassWithPrimitiveMethods;"

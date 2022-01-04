@@ -1,6 +1,6 @@
 use crate::classes::exception::Exception;
-use crate::java_class::{FromObject, JniSignature};
-use crate::java_methods::call_constructor;
+use crate::java_class::JavaClassExt;
+use crate::java_class::{FromObject, JavaClassSignature};
 use crate::object::Object;
 use crate::result::JavaResult;
 use crate::throwable::Throwable;
@@ -19,7 +19,7 @@ impl<'this> NullPointerException<'this> {
     /// [`NullPointerException()` javadoc](https://docs.oracle.com/javase/10/docs/api/java/lang/NullPointerException.html#<init>())
     pub fn new(token: &NoException<'this>) -> JavaResult<'this, NullPointerException<'this>> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
+        unsafe { Self::call_constructor::<_, fn()>(token, ()) }
     }
 }
 
@@ -89,7 +89,7 @@ impl<'env> FromObject<'env> for NullPointerException<'env> {
     }
 }
 
-impl JniSignature for NullPointerException<'_> {
+impl JavaClassSignature for NullPointerException<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Ljava/lang/NullPointerException;"

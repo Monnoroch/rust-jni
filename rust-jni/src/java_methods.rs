@@ -1,6 +1,5 @@
 use crate::java_class::find_class;
 use crate::java_class::JavaClass;
-use crate::java_class::JavaClassExt;
 use crate::java_class::JavaClassRef;
 use crate::java_class::JniSignature;
 use crate::jni_methods;
@@ -9,7 +8,7 @@ use crate::jni_types::private::JniArgumentTypeTuple;
 use crate::object::Object;
 use crate::result::JavaResult;
 use crate::token::NoException;
-use core::ptr::{self, NonNull};
+use core::ptr;
 
 /// A helper trait to allow accepting as many types
 /// as possible as method arguments in place of Java objects.
@@ -19,321 +18,93 @@ use core::ptr::{self, NonNull};
 ///  - `Option<T: JavaClassRef>`
 ///
 /// Supporting both `T` and `Option<T>` essentially allow passing nullable class references.
-pub trait JavaObjectArgument<'a, AT>
-where
-    AT: JavaClassRef<'a>,
-{
-    fn as_argument<'r>(&'r self) -> Option<&'r AT>
-    where
-        'a: 'r;
+pub trait JavaObjectArgument<AT> {
+    fn as_argument<'b>(&'b self) -> Option<&'b AT>;
 }
 
-impl<'a, AT, T> JavaObjectArgument<'a, AT> for T
+impl<'a, AT, T> JavaObjectArgument<AT> for T
 where
     T: JavaClassRef<'a> + AsRef<AT>,
-    AT: JavaClassRef<'a>,
+    AT: JavaClass<'a>,
 {
     #[inline(always)]
-    fn as_argument<'r>(&'r self) -> Option<&'r AT>
-    where
-        'a: 'r,
-    {
+    fn as_argument<'b>(&'b self) -> Option<&'b AT> {
         Some(self.as_ref())
     }
 }
 
-impl<'a, AT, T> JavaObjectArgument<'a, AT> for Option<T>
+impl<'a, AT, T> JavaObjectArgument<AT> for Option<T>
 where
-    T: JavaClassRef<'a> + AsRef<AT>,
-    AT: JavaClassRef<'a>,
+    T: JavaObjectArgument<AT>,
 {
     #[inline(always)]
-    fn as_argument<'r>(&'r self) -> Option<&'r AT>
-    where
-        'a: 'r,
-    {
-        self.as_ref().map(|value| value.as_ref())
+    fn as_argument<'b>(&'b self) -> Option<&'b AT> {
+        self.as_ref().and_then(|value| value.as_argument())
     }
 }
 
-/// Call a Java method.
-///
-/// The method has four generic parameters:
-///  - The first one is the class of the object. It doesn't have to be the exact class,
-///    a subclass can be passed as well. Can be inferred
-///  - The second one is the type of the arguments tuple. Can be inferred
-///  - The third one is the Java result type. Can be inferred
-///  - The fourth one is the signature of the Java method. Must be specified
-///
-/// As a result, only one generic parameter needs to be specified -- the last one.
-///
-/// Example:
-/// ```
-/// # use rust_jni::*;
-/// # use rust_jni::java::lang::String;
-/// # use std::ptr;
-/// #
-/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
-/// let object = String::empty(&token)?;
-/// // Safe because correct arguments are passed and correct return type specified.
-/// // See `Object::hashCode` javadoc:
-/// // https://docs.oracle.com/javase/10/docs/api/java/lang/Object.html#hashCode()
-/// let hash_code = unsafe {
-///     call_method::<_, _, _, fn() -> i32>(&object, &token, "hashCode\0", ())
-/// }?;
-/// assert_eq!(hash_code, 0);
-/// # Ok(token)
-/// # }
-/// #
-/// # #[cfg(feature = "libjvm")]
-/// # fn main() {
-/// #     let init_arguments = InitArguments::default();
-/// #     let vm = JavaVM::create(&init_arguments).unwrap();
-/// #     let _ = vm.with_attached(
-/// #        &AttachArguments::new(init_arguments.version()),
-/// #        |token: NoException| {
-/// #            ((), jni_main(token).unwrap())
-/// #        },
-/// #     );
-/// # }
-/// #
-/// # #[cfg(not(feature = "libjvm"))]
-/// # fn main() {}
-/// ```
-///
-/// Note that method name string *must* be null-terminating.
-///
-/// See more info about how to pass or return types from Java calls in [`JniSignature`](trait.JniSignature.html)
-/// documentation
-///
-/// This method is unsafe because incorrect parameters can be passed to a method or incorrect return type specified.
-pub unsafe fn call_method<'a, T, A, R, F>(
-    object: &T,
-    token: &NoException<'a>,
-    name: &str,
-    arguments: A,
-) -> JavaResult<'a, R::ResultType>
-where
-    T: JavaClassRef<'a>,
-    A: JavaArgumentTuple,
-    R: JavaMethodResult<'a>,
-    F: JavaMethodSignature<A, R>,
-{
-    R::call_method::<T, A>(object, token, name, &F::method_signature(), arguments)
-}
-
-/// Call a static Java method.
-///
-/// The method has four generic parameters:
-///  - The first one is the class of the object. Can be inferred
-///  - The second one is the type of the arguments tuple. Can be inferred
-///  - The third one is the Java result type. Can be inferred
-///  - The fourth one is the signature of the Java method. Must be specified
-///
-/// As a result, only one generic parameter needs to be specified -- the last one.
-///
-/// Example:
-/// ```
-/// # use rust_jni::*;
-/// # use rust_jni::java::lang::String;
-/// # use std::ptr;
-/// #
-/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
-/// // Safe because correct arguments are passed and correct return type specified.
-/// // See `String::valueOf(int)` javadoc:
-/// // https://docs.oracle.com/javase/10/docs/api/java/lang/String.html#valueOf(int)
-/// let string_value = unsafe {
-///     call_static_method::<String<'a>, _, _, fn(i32) -> String<'a>>(
-///         &token,
-///         "valueOf\0",
-///         (17,),
-///     )
-/// }
-/// .or_npe(&token)?
-/// .as_string(&token);
-/// assert_eq!(string_value, "17");
-/// # Ok(token)
-/// # }
-/// #
-/// # #[cfg(feature = "libjvm")]
-/// # fn main() {
-/// #     let init_arguments = InitArguments::default();
-/// #     let vm = JavaVM::create(&init_arguments).unwrap();
-/// #     let _ = vm.with_attached(
-/// #        &AttachArguments::new(init_arguments.version()),
-/// #        |token: NoException| {
-/// #            ((), jni_main(token).unwrap())
-/// #        },
-/// #     );
-/// # }
-/// #
-/// # #[cfg(not(feature = "libjvm"))]
-/// # fn main() {}
-/// ```
-///
-/// Note that method name string must be null-terminating.
-///
-/// See more info about how to pass or return types from Java calls in [`JniSignature`](trait.JniSignature.html)
-/// documentation
-///
-/// This method is unsafe because incorrect parameters can be passed to a method or incorrect return type specified.
-pub unsafe fn call_static_method<'a, T, A, R, F>(
-    token: &NoException<'a>,
-    name: &str,
-    arguments: A,
-) -> JavaResult<'a, R::ResultType>
-where
-    T: JavaClassRef<'a>,
-    A: JavaArgumentTuple,
-    R: JavaMethodResult<'a>,
-    F: JavaMethodSignature<A, R>,
-{
-    R::call_static_method::<T, A>(token, name, &F::method_signature(), arguments)
-}
-
-/// Call a Java constructor
-///
-/// The method has three generic parameters:
-///  - The first one is the class of the object
-///  - The second one is the type of the arguments tuple. Can be inferred
-///  - The third one is the signature of the Java method. Can be inferred
-///
-/// As a result, only one generic parameter needs to be specified -- the class type.
-///
-/// Example:
-/// ```
-/// # use rust_jni::*;
-/// # use rust_jni::java::lang::String;
-/// # use std::ptr;
-/// #
-/// # fn jni_main<'a>(token: NoException<'a>) -> JavaResult<'a, NoException<'a>> {
-/// // Safe because correct arguments are passed.
-/// // See `String()` javadoc:
-/// // https://docs.oracle.com/javase/10/docs/api/java/lang/String.html#<init>()
-/// let empty_string = unsafe {
-///     call_constructor::<String<'a>, _, fn()>(&token, ())
-/// }?
-/// .as_string(&token);
-/// assert_eq!(empty_string, "");
-/// # Ok(token)
-/// # }
-/// #
-/// # #[cfg(feature = "libjvm")]
-/// # fn main() {
-/// #     let init_arguments = InitArguments::default();
-/// #     let vm = JavaVM::create(&init_arguments).unwrap();
-/// #     let _ = vm.with_attached(
-/// #        &AttachArguments::new(init_arguments.version()),
-/// #        |token: NoException| {
-/// #            ((), jni_main(token).unwrap())
-/// #        },
-/// #     );
-/// # }
-/// #
-/// # #[cfg(not(feature = "libjvm"))]
-/// # fn main() {}
-/// ```
-///
-/// See more info about how to pass or return types from Java calls in [`JniSignature`](trait.JniSignature.html)
-/// documentation
-///
-/// This method is unsafe because incorrect parameters can be passed to a method.
-pub unsafe fn call_constructor<'a, R, A, F>(
-    token: &NoException<'a>,
-    arguments: A,
-) -> JavaResult<'a, R>
-where
-    A: JavaArgumentTuple,
-    R: JavaClass<'a>,
-    F: JavaMethodSignature<A, ()>,
-{
-    let class = R::class(token)?;
-    let result = jni_methods::call_constructor(
-        &class,
-        token,
-        &F::method_signature(),
-        JavaArgumentTuple::to_jni(&arguments),
-    )?;
-    Ok(R::from_object(Object::from_raw(token.env(), result)))
-}
-
-/// Make references to Java class wrappers also implement [`JniSignature`](trait.JniSignature.html)
-/// and hence [`JavaClassRef`](trait.JavaClassRef.html).
-///
-/// This is needed to pass them to Java methods.
-impl<T> JniSignature for &'_ T
-where
-    T: JniSignature,
-{
-    #[inline(always)]
-    fn signature() -> &'static str {
-        T::signature()
-    }
-}
-
-/// Make nullable [`JavaClassRef`](trait.JavaClassRef.html)-s implement [`JniSignature`](trait.JniSignature.html)
-/// and hence [`JavaClassRef`](trait.JavaClassRef.html).
-///
-/// This is needed to pass them to Java methods.
-impl<'a, T> JniSignature for Option<T>
-where
-    T: JavaClassRef<'a>,
-{
-    #[inline(always)]
-    fn signature() -> &'static str {
-        T::signature()
-    }
-}
-
-/// A trait that needs to be implemented for a type that needs to be passed to Java.
-///
-/// See more detailed info for passing values betweed Java and rust in
-/// [`JniSignature`](trait.JniSignature.html) documentation.
-pub trait JavaArgumentType: JniSignature {
+pub trait ToJniType {
     type JniType: JniArgumentType;
 
     // Unsafe because it returns raw pointers to Java objects.
     unsafe fn to_jni(&self) -> Self::JniType;
 }
 
-/// Make Java class wrappers passable to Java methods as arguments.
-impl<'a, T> JavaArgumentType for T
+impl<'a, 'this: 'a, T> ToJniType for Option<&'a T>
 where
-    T: JavaClassRef<'a>,
+    T: JavaClass<'this> + 'a,
 {
     type JniType = jni_sys::jobject;
 
     #[inline(always)]
     unsafe fn to_jni(&self) -> Self::JniType {
-        self.as_ref().raw_object().as_ptr()
+        self.map_or(ptr::null_mut(), |value| {
+            value.as_ref().raw_object().as_ptr()
+        })
     }
 }
 
-/// Make nullable Java class wrappers passable to Java methods as arguments.
-impl<'a, T> JavaArgumentType for Option<T>
-where
-    T: JavaClassRef<'a>,
-{
-    type JniType = jni_sys::jobject;
-
-    #[inline(always)]
-    unsafe fn to_jni(&self) -> Self::JniType {
-        self.as_ref()
-            .map_or(ptr::null_mut(), |value| value.to_jni())
-    }
-}
-
-pub trait JavaArgumentTuple {
+pub trait ToJniTypeTuple {
     type JniType: JniArgumentTypeTuple;
 
     // Unsafe because it returns raw pointers to Java objects.
     unsafe fn to_jni(&self) -> Self::JniType;
 }
 
-pub trait JavaMethodSignature<In, Out>
+/// A trait that needs to be implemented for a type that needs to be passed to Java.
+///
+/// See more detailed info for passing values betweed Java and rust in
+/// [`JavaClassSignature`](trait.JavaClassSignature.html) documentation.
+pub trait JavaArgumentType<'a, 'this: 'a>: JniSignature {
+    type ActualType: ToJniType;
+}
+
+/// Make Java class wrappers passable to Java methods as arguments.
+impl<'a, 'this: 'a, T> JavaArgumentType<'a, 'this> for &'a T
 where
-    In: JavaArgumentTuple,
+    T: JavaClass<'this> + 'a,
 {
+    type ActualType = Option<&'a T>;
+}
+
+/// Make nullable Java class wrappers passable to Java methods as arguments.
+impl<'a, 'this: 'a, T> JavaArgumentType<'a, 'this> for Option<&'a T>
+where
+    T: JavaClass<'this> + 'a,
+{
+    type ActualType = Option<&'a T>;
+}
+
+pub trait JavaArgumentTuple<'a, 'this: 'a> {
+    type ActualType: ToJniTypeTuple;
+}
+
+pub trait JavaMethodSignature<'a, 'this: 'a, In>
+where
+    In: JavaArgumentTuple<'a, 'this>,
+{
+    type Out: JavaMethodResult<'this>;
+
     fn method_signature() -> std::string::String;
 }
 
@@ -350,9 +121,9 @@ macro_rules! peel_java_argument_type_impls {
 
 macro_rules! java_argument_type_impls {
     ( $($type:ident,)*) => (
-        impl<'a, $($type),*> JavaArgumentTuple for ($($type,)*)
+        impl<$($type),*> ToJniTypeTuple for ($($type,)*)
         where
-            $($type: JavaArgumentType,)*
+            $($type: ToJniType,)*
         {
             type JniType = ($($type::JniType,)*);
 
@@ -364,12 +135,21 @@ macro_rules! java_argument_type_impls {
             }
         }
 
-        impl<'a, $($type,)* Out, F> JavaMethodSignature<($($type,)*), Out> for F
+        impl<'a, 'this: 'a, $($type),*> JavaArgumentTuple<'a, 'this> for ($($type,)*)
+        where
+            $($type: JavaArgumentType<'a, 'this>,)*
+        {
+            type ActualType = ($($type::ActualType,)*);
+        }
+
+        impl<'a, 'this: 'a, $($type,)* Out, F> JavaMethodSignature<'a, 'this, ($($type,)*)> for F
             where
-                $($type: JavaArgumentType,)*
-                Out: JniSignature,
+                $($type: JavaArgumentType<'a, 'this>,)*
+                Out: JavaMethodResult<'this>,
                 F: FnOnce($($type,)*) -> Out + ?Sized,
         {
+            type Out = Out;
+
             #[inline(always)]
             fn method_signature() -> std::string::String {
                 format!(
@@ -399,9 +179,8 @@ java_argument_type_impls! {
     T11,
 }
 
-pub trait JavaMethodResult<'a> {
-    type JniType;
-    type ResultType: 'a;
+pub trait JavaMethodResult<'a>: JniSignature {
+    type ResultType;
 
     unsafe fn call_method<T, A>(
         object: &T,
@@ -411,8 +190,8 @@ pub trait JavaMethodResult<'a> {
         arguments: A,
     ) -> JavaResult<'a, Self::ResultType>
     where
-        T: JavaClassRef<'a>,
-        A: JavaArgumentTuple;
+        T: JavaClass<'a>,
+        A: JniArgumentTypeTuple;
 
     unsafe fn call_static_method<T, A>(
         token: &NoException<'a>,
@@ -421,15 +200,14 @@ pub trait JavaMethodResult<'a> {
         arguments: A,
     ) -> JavaResult<'a, Self::ResultType>
     where
-        T: JavaClassRef<'a>,
-        A: JavaArgumentTuple;
+        T: JavaClass<'a>,
+        A: JniArgumentTypeTuple;
 }
 
 impl<'a, S> JavaMethodResult<'a> for S
 where
-    S: JavaClass<'a> + 'a,
+    S: JavaClass<'a>,
 {
-    type JniType = Option<NonNull<jni_sys::_jobject>>;
     type ResultType = Option<Self>;
 
     #[inline(always)]
@@ -441,16 +219,11 @@ where
         arguments: A,
     ) -> JavaResult<'a, Self::ResultType>
     where
-        T: JavaClassRef<'a>,
-        A: JavaArgumentTuple,
+        T: JavaClass<'a>,
+        A: JniArgumentTypeTuple,
     {
-        let result = jni_methods::call_object_method(
-            object.as_ref(),
-            token,
-            name,
-            signature,
-            JavaArgumentTuple::to_jni(&arguments),
-        )?;
+        let result =
+            jni_methods::call_object_method(object.as_ref(), token, name, signature, arguments)?;
         Ok(result.map(
             #[inline(always)]
             |result| Self::from_object(Object::from_raw(object.as_ref().env(), result)),
@@ -465,17 +238,12 @@ where
         arguments: A,
     ) -> JavaResult<'a, Self::ResultType>
     where
-        T: JavaClassRef<'a>,
-        A: JavaArgumentTuple,
+        T: JavaClass<'a>,
+        A: JniArgumentTypeTuple,
     {
         let class = find_class::<T>(token)?;
-        let result = jni_methods::call_static_object_method(
-            &class,
-            token,
-            name,
-            signature,
-            JavaArgumentTuple::to_jni(&arguments),
-        )?;
+        let result =
+            jni_methods::call_static_object_method(&class, token, name, signature, arguments)?;
         Ok(result.map(
             #[inline(always)]
             |result| Self::from_object(Object::from_raw(token.env(), result)),
