@@ -12,7 +12,7 @@ impl<'a> SubSubClassWithMethodOverride<'a> {
         token: &NoException<'a>,
         value: i32,
     ) -> JavaResult<'a, SubSubClassWithMethodOverride<'a>> {
-        unsafe { call_constructor::<Self, _, fn(i32)>(token, (value,)) }
+        unsafe { Self::call_constructor::<_, fn(i32)>(token, (value,)) }
     }
 }
 
@@ -68,7 +68,7 @@ impl<'a> FromObject<'a> for SubSubClassWithMethodOverride<'a> {
     }
 }
 
-impl JniSignature for SubSubClassWithMethodOverride<'_> {
+impl JavaClassSignature for SubSubClassWithMethodOverride<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Lrustjni/test/SubSubClassWithMethodOverride;"

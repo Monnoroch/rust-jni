@@ -9,18 +9,17 @@ pub struct ClassWithObjectNativeMethods<'a> {
 
 impl<'a> ClassWithObjectNativeMethods<'a> {
     pub fn new(token: &NoException<'a>) -> JavaResult<'a, ClassWithObjectNativeMethods<'a>> {
-        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
+        unsafe { Self::call_constructor::<_, fn()>(token, ()) }
     }
 
     pub fn test_function_object(
         &self,
         token: &NoException<'a>,
-        argument: impl JavaObjectArgument<'a, SimpleClass<'a>>,
+        argument: impl JavaObjectArgument<SimpleClass<'a>>,
     ) -> JavaResult<'a, Option<SimpleClass<'a>>> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_method::<Self, _, _, fn(Option<&SimpleClass<'a>>) -> SimpleClass<'a>>(
-                self,
+            self.call_method::<_, fn(&SimpleClass) -> SimpleClass<'a>>(
                 token,
                 "testFunction\0",
                 (argument.as_argument(),),
@@ -30,11 +29,11 @@ impl<'a> ClassWithObjectNativeMethods<'a> {
 
     pub fn test_static_function_object(
         token: &NoException<'a>,
-        argument: impl JavaObjectArgument<'a, SimpleClass<'a>>,
+        argument: impl JavaObjectArgument<SimpleClass<'a>>,
     ) -> JavaResult<'a, Option<SimpleClass<'a>>> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(Option<&SimpleClass<'a>>) -> SimpleClass<'a>>(
+            Self::call_static_method::<_, fn(&SimpleClass) -> SimpleClass<'a>>(
                 token,
                 "testStaticFunction\0",
                 (argument.as_argument(),),
@@ -48,18 +47,21 @@ unsafe extern "C" fn Java_rustjni_test_ClassWithObjectNativeMethods_testNativeFu
     raw_env: *mut jni_sys::JNIEnv,
     raw_object: jni_sys::jobject,
     argument: jni_sys::jobject,
-) {
-    native_method_implementation::<(SimpleClass,), SimpleClass, _>(
+) -> jni_sys::jobject {
+    native_method_implementation_new::<ClassWithObjectNativeMethods, (SimpleClass,), SimpleClass, _>(
         raw_env,
         raw_object,
         (argument,),
         |_object, token, (argument,)| {
             (
-                Ok(Box::new(argument.as_ref().or_npe(&token).unwrap())),
+                argument
+                    .as_ref()
+                    .map(|o| o.clone_object(&token))
+                    .or_npe(&token),
                 token,
             )
         },
-    );
+    )
 }
 
 #[no_mangle]
@@ -67,18 +69,21 @@ unsafe extern "C" fn Java_rustjni_test_ClassWithObjectNativeMethods_testStaticNa
     raw_env: *mut jni_sys::JNIEnv,
     raw_class: jni_sys::jclass,
     argument: jni_sys::jobject,
-) {
+) -> jni_sys::jobject {
     static_native_method_implementation::<(SimpleClass,), SimpleClass, _>(
         raw_env,
         raw_class,
         (argument,),
-        |_class, token, (argument,)| {
+        |_object, token, (argument,)| {
             (
-                Ok(Box::new(argument.as_ref().or_npe(&token).unwrap())),
+                argument
+                    .as_ref()
+                    .map(|o| o.clone_object(&token))
+                    .or_npe(&token),
                 token,
             )
         },
-    );
+    )
 }
 
 impl<'a> ::std::ops::Deref for ClassWithObjectNativeMethods<'a> {
@@ -117,7 +122,7 @@ impl<'a> FromObject<'a> for ClassWithObjectNativeMethods<'a> {
     }
 }
 
-impl JniSignature for ClassWithObjectNativeMethods<'_> {
+impl JavaClassSignature for ClassWithObjectNativeMethods<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Lrustjni/test/ClassWithObjectNativeMethods;"

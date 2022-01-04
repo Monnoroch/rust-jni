@@ -37,7 +37,15 @@ pub(crate) mod private {
 
     /// A trait that represents JNI types that can be passed as arguments to JNI functions.
     /// Implemented for all JNI types except for [`()`](https://doc.rust-lang.org/stable/std/primitive.unit.html).
+    ///
+    /// Temporarily [not implemented](https://github.com/Monnoroch/rust-jni/issues/25) for
+    /// [`jfloat`](https://docs.rs/jni-sys/0.3.0/jni_sys/type.jfloat.html).
     pub trait JniArgumentType: JniType {}
+
+    /// A trait that represents JNI types that can be passed as arguments to native Java functions.
+    /// Implemented for all JNI types except for [`()`](https://doc.rust-lang.org/stable/std/primitive.unit.html).
+    // TODO(#25): remove this trait and replace with JniArgumentType when the float issue is fixed.
+    pub trait JniNativeArgumentType: JniType {}
 
     /// A trait that implements calling JNI variadic functions using a macro to generate
     /// it's instances for tuples of different sizes.
@@ -386,9 +394,13 @@ impl JniArgumentType for jni_sys::jbyte {}
 impl JniArgumentType for jni_sys::jshort {}
 impl JniArgumentType for jni_sys::jint {}
 impl JniArgumentType for jni_sys::jlong {}
-impl JniArgumentType for jni_sys::jfloat {}
+// TODO(#25): floating point numbers don't work properly.
+// impl JniArgumentType for jni_sys::jfloat {}
 impl JniArgumentType for jni_sys::jdouble {}
 impl JniArgumentType for jni_sys::jobject {}
+
+impl<T> JniNativeArgumentType for T where T: JniArgumentType {}
+impl JniNativeArgumentType for jni_sys::jfloat {}
 
 // [`()`](https://doc.rust-lang.org/stable/std/primitive.unit.html)
 // can't be passed as an argument to a function.

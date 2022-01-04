@@ -8,18 +8,17 @@ pub struct ClassWithObjectMethods<'a> {
 
 impl<'a> ClassWithObjectMethods<'a> {
     pub fn new(token: &NoException<'a>) -> JavaResult<'a, ClassWithObjectMethods<'a>> {
-        unsafe { call_constructor::<Self, _, fn()>(token, ()) }
+        unsafe { Self::call_constructor::<_, fn()>(token, ()) }
     }
 
     pub fn test_function_object(
         &self,
         token: &NoException<'a>,
-        argument: impl JavaObjectArgument<'a, SimpleClass<'a>>,
+        argument: impl JavaObjectArgument<SimpleClass<'a>>,
     ) -> JavaResult<'a, Option<SimpleClass<'a>>> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_method::<Self, _, _, fn(Option<&SimpleClass<'a>>) -> SimpleClass<'a>>(
-                self,
+            self.call_method::<_, fn(&SimpleClass) -> SimpleClass<'a>>(
                 token,
                 "testFunction\0",
                 (argument.as_argument(),),
@@ -29,11 +28,11 @@ impl<'a> ClassWithObjectMethods<'a> {
 
     pub fn test_static_function_object(
         token: &NoException<'a>,
-        argument: impl JavaObjectArgument<'a, SimpleClass<'a>>,
+        argument: impl JavaObjectArgument<SimpleClass<'a>>,
     ) -> JavaResult<'a, Option<SimpleClass<'a>>> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_static_method::<Self, _, _, fn(Option<&SimpleClass<'a>>) -> SimpleClass<'a>>(
+            Self::call_static_method::<_, fn(&SimpleClass) -> SimpleClass<'a>>(
                 token,
                 "testStaticFunction\0",
                 (argument.as_argument(),),
@@ -78,7 +77,7 @@ impl<'a> FromObject<'a> for ClassWithObjectMethods<'a> {
     }
 }
 
-impl JniSignature for ClassWithObjectMethods<'_> {
+impl JavaClassSignature for ClassWithObjectMethods<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Lrustjni/test/ClassWithObjectMethods;"

@@ -1,6 +1,6 @@
 use crate::env::JniEnv;
-use crate::java_class::{FromObject, JniSignature};
-use crate::java_methods::call_method;
+use crate::java_class::JavaClassExt;
+use crate::java_class::{FromObject, JavaClassSignature};
 use crate::java_string::*;
 use crate::jni_bool;
 use crate::object::Object;
@@ -96,7 +96,7 @@ impl<'env> Class<'env> {
     /// [`Class::getName` javadoc](https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Class.html#getName())
     pub fn get_name(&self, token: &NoException<'env>) -> JavaResult<'env, Option<String<'env>>> {
         // Safe because we ensure correct arguments and return type.
-        unsafe { call_method::<Self, _, _, fn() -> String<'env>>(self, token, "getName\0", ()) }
+        unsafe { self.call_method::<_, fn() -> String<'env>>(token, "getName\0", ()) }
     }
 
     /// Unsafe because the argument mught not be a valid class reference.
@@ -148,7 +148,7 @@ impl<'env> FromObject<'env> for Class<'env> {
     }
 }
 
-impl JniSignature for Class<'_> {
+impl JavaClassSignature for Class<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Ljava/lang/Class;"

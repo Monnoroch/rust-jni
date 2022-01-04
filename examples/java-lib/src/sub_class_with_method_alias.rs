@@ -8,22 +8,21 @@ pub struct SubClassWithMethodAlias<'a> {
 
 impl<'a> SubClassWithMethodAlias<'a> {
     pub fn new(token: &NoException<'a>, value: i32) -> JavaResult<'a, SubClassWithMethodAlias<'a>> {
-        unsafe { call_constructor::<Self, _, fn(i32)>(token, (value,)) }
+        unsafe { Self::call_constructor::<_, fn(i32)>(token, (value,)) }
     }
 
     pub fn combine(
         &self,
         token: &NoException<'a>,
-        other: impl JavaObjectArgument<'a, SubClassWithMethodAlias<'a>>,
+        other: impl JavaObjectArgument<SubClassWithMethodAlias<'a>>,
     ) -> JavaResult<'a, Option<SubClassWithMethodAlias<'a>>> {
         // Safe because we ensure correct arguments and return type.
         unsafe {
-            call_method::<
-                Self,
-                _,
-                _,
-                fn(Option<&SubClassWithMethodAlias<'a>>) -> SubClassWithMethodAlias<'a>,
-            >(self, token, "combine\0", (other.as_argument(),))
+            self.call_method::<_, fn(&SubClassWithMethodAlias) -> SubClassWithMethodAlias<'a>>(
+                token,
+                "combine\0",
+                (other.as_argument(),),
+            )
         }
     }
 }
@@ -73,7 +72,7 @@ impl<'a> FromObject<'a> for SubClassWithMethodAlias<'a> {
     }
 }
 
-impl JniSignature for SubClassWithMethodAlias<'_> {
+impl JavaClassSignature for SubClassWithMethodAlias<'_> {
     #[inline(always)]
     fn signature() -> &'static str {
         "Lrustjni/test/SubClassWithMethodAlias;"
