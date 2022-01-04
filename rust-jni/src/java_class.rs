@@ -93,6 +93,10 @@ where
 ///
 /// See more detailed info for passing values betweed Java and rust in
 /// [`JavaClassSignature`](trait.JavaClassSignature.html) documentation.
+///
+/// This trait is used instead of [`From<Object>`](https://doc.rust-lang.org/std/convert/trait.From.html)
+/// because the construction must be unsafe, since it is possible to call it with an
+/// [`Object`](java/lang/struct.Object.html) of a wrong runtime type.
 pub trait FromObject<'a> {
     /// Construct `Self` from an [`Object`](java/lang/struct.Object.html).
     ///
